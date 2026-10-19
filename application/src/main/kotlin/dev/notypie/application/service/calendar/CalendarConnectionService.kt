@@ -127,7 +127,7 @@ class CalendarConnectionService(
             if (!active) oauthClient.revoke(token = grant.refreshToken)
             return CalendarConnectionOutcome.SCOPE_DENIED
         }
-        val encrypted = tokenCipher.encrypt(plaintext = grant.refreshToken)
+        val encrypted = tokenCipher.encrypt(plaintext = grant.refreshToken, userId = userId)
         try {
             storeConnection(userId = userId, grant = grant, encrypted = encrypted)
         } catch (conflict: DataAccessException) {
@@ -164,14 +164,7 @@ class CalendarConnectionService(
                 )
             saved.replaced
                 ?.takeIf { replaced -> replaced.isDifferentAccountFrom(subject = grant.subject, email = grant.email) }
-                ?.let { replaced ->
-                    requestRevocation(
-                        userId = userId,
-                        googleSubject = replaced.googleSubject,
-                        encryptedRefreshToken = replaced.encryptedRefreshToken,
-                        reason = RECONNECT_REASON,
-                    )
-                }
+                ?.let { replaced -> requestRevocation(connection = replaced, reason = RECONNECT_REASON) }
             queueUpcomingMeetings(userId = userId, now = now)
             outboundStager.stageCalendarDirectMessage(
                 userId = userId,
@@ -245,14 +238,12 @@ class CalendarConnectionService(
             )
             return
         }
-        connectionRepository.delete(userId = payload.userId)
-        queue.failPendingForUser(userId = payload.userId, lastError = DISCONNECTED_ERROR, now = clock.instant())
-        requestRevocation(
+        connectionRepository.delete(
             userId = payload.userId,
-            googleSubject = connection.googleSubject,
-            encryptedRefreshToken = connection.encryptedRefreshToken,
-            reason = DISCONNECT_REASON,
+            observedEncryptedRefreshToken = connection.encryptedRefreshToken,
         )
+        queue.failPendingForUser(userId = payload.userId, lastError = DISCONNECTED_ERROR, now = clock.instant())
+        requestRevocation(connection = connection, reason = DISCONNECT_REASON)
         outboundStager.stageCalendarEphemeral(
             text = "Google Calendar disconnected. CodeCompanion's access at Google is being revoked.",
             basicInfo = basicInfo,
@@ -285,17 +276,12 @@ class CalendarConnectionService(
         )
     }
 
-    private fun requestRevocation(
-        userId: String,
-        googleSubject: String?,
-        encryptedRefreshToken: String,
-        reason: String,
-    ) {
+    private fun requestRevocation(connection: CalendarConnection, reason: String) {
         applicationEventPublisher.publishEvent(
             GoogleTokenRevocationRequested(
-                userId = userId,
-                googleSubject = googleSubject,
-                encryptedRefreshToken = encryptedRefreshToken,
+                userId = connection.slackUserId,
+                googleSubject = connection.googleSubject,
+                encryptedRefreshToken = connection.encryptedRefreshToken,
                 reason = reason,
             ),
         )

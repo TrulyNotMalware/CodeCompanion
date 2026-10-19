@@ -19,7 +19,7 @@ interface GoogleCalendarConnectionRepository {
         now: Instant,
     ): ConnectionSaved
 
-    fun delete(userId: String): Boolean
+    fun delete(userId: String, observedEncryptedRefreshToken: String)
 
     fun hasActiveConnection(userId: String): Boolean
 

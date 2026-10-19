@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository
 
@@ -28,6 +28,6 @@ abandon / purge statement of `MessageOutboxRepository` on H2.
 | `meeting/` | `JpaMeetingRepositoryTest`, `MeetingRepositoryImplTest`, and the Spring-booting `MeetingRepositoryWriteTest` (see `meeting/AGENTS.md`) |
 | `outbox/` | `MessageOutboxRepositoryTest` (H2 native statements), `OutboundMessageCodecTest`; `schema/` holds `OutboxMessageTest` (see `outbox/AGENTS.md`) |
 | `standup/` | `JpaStandupSessionRepositoryTest` (both collections map each answer once) and `StandupDispatchSweepTest` (clock-bound stuck sweep) (see `standup/AGENTS.md`) |
-| `calendar/` | `JpaGoogleOAuthStateRepositoryTest` (single-use consume CAS, per-user delete, purge), `GoogleCalendarConnectionRepositoryImplTest` (upsert in place, delete, active-connection check, `markRevoked`) and `JpaMeetingCalendarEventRepositoryTest` (mirror queue on its own `MODE=MariaDB` H2 database: enqueue upsert/touch, claim snapshot, generation CAS on success and failure, delete/release, retry/fail, stuck sweep, per-user fail and the id-bounded revive (`touchForUser`), worker transaction guard, sync view) (see `calendar/AGENTS.md`) |
+| `calendar/` | `JpaGoogleOAuthStateRepositoryTest` (single-use consume CAS, per-user delete, purge), `GoogleCalendarConnectionRepositoryImplTest` (upsert in place, delete, active-connection check, `markRevoked`, the `@Version` races of reconnect and disconnect) and `JpaMeetingCalendarEventRepositoryTest` (mirror queue on its own `MODE=MariaDB` H2 database: enqueue upsert/touch, claim snapshot, generation CAS on success and failure, delete/release, retry/fail, stuck sweep, per-user fail and the id-bounded revive (`touchForUser`), worker transaction guard, sync view) (see `calendar/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

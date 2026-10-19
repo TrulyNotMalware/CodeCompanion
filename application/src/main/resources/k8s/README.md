@@ -175,12 +175,15 @@ this list by hand (`../db/migration/AGENTS.md` keeps the same order):
    unchanged.
 
 **Afterwards:** once every Pod runs a V20+ binary and a rollback to a pre-V20 revision is no longer wanted, delete
-the `strategy` block from `deployment.yaml` in a follow-up PR. `kubectl apply` removes the field, because it is in
+the `strategy` block from `deployment.yaml` in a follow-up PR. The 2026-10-15 calendar-token release (decision #46) adds
+the same condition: a Pod from before it cannot read `v2` tokens, so a rolling overlap or a rollback to it marks every
+connection stored by the new Pods `REVOKED` with a reconnect DM. `kubectl apply` removes the field, because it is in
 the last-applied configuration, and the API server defaults it back to `RollingUpdate` (25% / 25%). Do not restore
 the rolling update while a pre-V20 revision is still serving (for example after the workflow rolled back).
 
-The Google Calendar release adds V24 and V25, and V27 (2026-10-15) indexes one of their tables. They only create
-tables and an index and are independent of this procedure; see Google Calendar Mirror below.
+The Google Calendar release adds V24 and V25, V27 (2026-10-15) indexes one of their tables and V28 adds a defaulted
+`version` column to another. They only create tables, an index and a column and are independent of this procedure;
+see Google Calendar Mirror below.
 
 The `/ask` turn ledger release adds V26: one new table, `agent_ask_turn` (`CREATE TABLE IF NOT EXISTS`, no foreign
 key), also independent of this procedure. Production runs `ddl-auto: none`, so apply it by hand before deploying the
@@ -260,19 +263,22 @@ Because both containers share the Pod network namespace, no Service or NetworkPo
 host or approve into it (see the root `README.md`). The feature is off unless `GOOGLE_CALENDAR_ENABLED` is `true`:
 until then `/calendar` only answers that it is not enabled and `/oauth/google/callback` returns `404`.
 
-1. **Migrations: V24, then V25, then V27, by hand.** Production runs `ddl-auto: none`. V24 and V25 only create new
-   tables (`CREATE TABLE IF NOT EXISTS`; V25's foreign key references `meetings`) and V27 only adds
-   `idx_google_oauth_state_slack_user_id` to V24's `google_oauth_state` (the file runs the online form with a 5 s
-   lock wait itself; re-run it if it times out), so apply
-   them while the previous release still serves, before the deploy that ships them. Then confirm:
+1. **Migrations: V24, then V25, then V27 and V28, by hand.** Production runs `ddl-auto: none`. V24 and V25 only create new
+   tables (`CREATE TABLE IF NOT EXISTS`; V25's foreign key references `meetings`), V27 only adds
+   `idx_google_oauth_state_slack_user_id` to V24's `google_oauth_state` and V28 only adds
+   `google_calendar_connection.version BIGINT NOT NULL DEFAULT 0` (both files run the online form with a 5 s
+   lock wait themselves; re-run one if it times out), so apply
+   them while the previous release still serves, before the deploy that ships them. V28 cannot wait: the release maps
+   the column, so without it every connection read fails. Then confirm:
    ```sql
    SHOW TABLES LIKE 'google_%';
    SHOW TABLES LIKE 'meeting_calendar_event';
    SHOW INDEX FROM google_oauth_state WHERE Key_name = 'idx_google_oauth_state_slack_user_id';
+   SHOW COLUMNS FROM google_calendar_connection LIKE 'version';
    SHOW INDEX FROM meetings WHERE Column_name = 'idempotency_key';
    ```
-   The first query lists `google_calendar_connection` and `google_oauth_state`, the third shows V27's index. The last
-   should show a unique index:
+   The first query lists `google_calendar_connection` and `google_oauth_state`, the third shows V27's index and the
+   fourth V28's column. The last should show a unique index:
    the entity declares one, but `meetings` predates V1 (Hibernate created it), and the mirror hooks look a meeting up
    by that key. If it is missing, look for duplicates first
    (`SELECT idempotency_key, COUNT(*) FROM meetings GROUP BY idempotency_key HAVING COUNT(*) > 1;`), resolve any, then
@@ -291,7 +297,10 @@ until then `/calendar` only answers that it is not enabled and `/oauth/google/ca
    rejects the consent with `redirect_uri_mismatch`) and `GOOGLE_CALENDAR_ENABLED`, which must be `'true'` or
    `'false'`: an empty value fails startup. Secret: `GOOGLE_OAUTH_CLIENT_SECRET` and `GOOGLE_TOKEN_ENCRYPTION_KEY`
    (`openssl rand -base64 32`, a base64 32-byte AES key). Changing the key later makes every stored token
-   unreadable; each user then gets one reconnect DM at their next sync. With the feature enabled, a blank client id, client secret or key,
+   unreadable; each user then gets one reconnect DM at their next sync. Tokens are stored as `v2` (bound to the
+   Slack user's row) since 2026-10-15; a binary from before that change reads only `v1`, so rolling back past it
+   (for example the workflow's `rollout undo`) has the same effect on every user who connected under the newer
+   release. With the feature enabled, a blank client id, client secret or key,
    or a redirect URI that is not an absolute `http(s)://` URL, fails startup.
 4. **Routing.** Both samples in `route/` forward the exact path `/oauth/google/callback` (a browser `GET` with no
    Slack signature). The production host is fronted by a bearer-authenticating layer outside this repository (see
@@ -481,11 +490,12 @@ slack-live 프로파일의 base path), `/mcp`는 애플리케이션 포트에서
    기다립니다. 이전 릴리스는 V18~V23 스키마에서 그대로 돕니다.
 
 **그 다음:** 모든 파드가 V20 이상 바이너리로 돌고 pre-V20 리비전으로의 롤백이 더는 필요 없으면, 후속 PR에서 `deployment.yaml`의
-`strategy` 블록을 지웁니다. 필드가 last-applied 설정에 있으므로 `kubectl apply`가 지우고, API 서버가 `RollingUpdate`(25% / 25%)로
+`strategy` 블록을 지웁니다. 2026-10-15 캘린더 토큰 릴리스(결정 #46)도 같은 조건을 더합니다: 그 이전 파드는 `v2` 토큰을 읽지 못하므로
+롤링 중 겹치거나 그 리비전으로 롤백하면 새 파드가 저장한 연결이 모두 `REVOKED` + 재연결 DM이 됩니다. 필드가 last-applied 설정에 있으므로 `kubectl apply`가 지우고, API 서버가 `RollingUpdate`(25% / 25%)로
 되돌립니다. pre-V20 리비전이 아직 서비스 중이면(예: 워크플로가 롤백한 뒤) 롤링 업데이트로 되돌리지 마세요.
 
-Google Calendar 릴리스는 V24와 V25를 추가하고, V27(2026-10-15)이 그중 한 테이블에 인덱스를 더합니다. 테이블과 인덱스만 만들며 이
-절차와 무관합니다. 아래 Google Calendar 미러를 참고하세요.
+Google Calendar 릴리스는 V24와 V25를 추가하고, V27(2026-10-15)이 그중 한 테이블에 인덱스를, V28이 다른 테이블에 기본값 있는
+`version` 컬럼을 더합니다. 테이블·인덱스·컬럼만 만들며 이 절차와 무관합니다. 아래 Google Calendar 미러를 참고하세요.
 
 `/ask` 턴 레저 릴리스는 V26을 추가합니다. 새 테이블 `agent_ask_turn` 하나이고(`CREATE TABLE IF NOT EXISTS`, 외래 키 없음) 역시 이
 절차와 무관합니다. 운영은 `ddl-auto: none`이므로 이 테이블에 쓰는 코드를 배포하기 전에 직접 적용하세요. 이전 릴리스가 서비스하는
@@ -561,18 +571,20 @@ AI 어시스턴트 기능(`@bot ask`)을 사용하려면 [agent-sidecar](https:/
 캘린더에 미러합니다(루트 `README.md` 참고). `GOOGLE_CALENDAR_ENABLED`가 `true`가 아니면 꺼져 있고, 그동안 `/calendar`는
 꺼져 있다는 안내만 하며 `/oauth/google/callback`은 `404`를 돌려줍니다.
 
-1. **마이그레이션: V24, V25, 이어서 V27을 직접 적용.** 운영은 `ddl-auto: none`입니다. V24와 V25는 새 테이블만 만들고
+1. **마이그레이션: V24, V25, 이어서 V27과 V28을 직접 적용.** 운영은 `ddl-auto: none`입니다. V24와 V25는 새 테이블만 만들고
    (`CREATE TABLE IF NOT EXISTS`, V25의 외래 키가 `meetings`를 참조) V27은 V24의 `google_oauth_state`에
-   `idx_google_oauth_state_slack_user_id`만 더하므로(스크립트가 5초 락 대기의 온라인 형식을 직접 실행하며, 시간 초과면 다시 실행)
+   `idx_google_oauth_state_slack_user_id`만, V28은 `google_calendar_connection.version BIGINT NOT NULL DEFAULT 0`만 더하므로(두
+   스크립트 모두 5초 락 대기의 온라인 형식을 직접 실행하며, 시간 초과면 다시 실행)
    이전 릴리스가 서비스하는 동안, 이 스크립트를
-   싣는 배포 전에 적용합니다. 그다음 확인합니다:
+   싣는 배포 전에 적용합니다. V28은 미룰 수 없습니다: 릴리스가 이 컬럼을 매핑하므로 없으면 연결 조회가 모두 실패합니다. 그다음 확인합니다:
    ```sql
    SHOW TABLES LIKE 'google_%';
    SHOW TABLES LIKE 'meeting_calendar_event';
    SHOW INDEX FROM google_oauth_state WHERE Key_name = 'idx_google_oauth_state_slack_user_id';
+   SHOW COLUMNS FROM google_calendar_connection LIKE 'version';
    SHOW INDEX FROM meetings WHERE Column_name = 'idempotency_key';
    ```
-   첫 쿼리는 `google_calendar_connection`과 `google_oauth_state`를, 세 번째 쿼리는 V27의 인덱스를 보여야 합니다. 마지막 쿼리는
+   첫 쿼리는 `google_calendar_connection`과 `google_oauth_state`를, 세 번째 쿼리는 V27의 인덱스를, 네 번째 쿼리는 V28의 컬럼을 보여야 합니다. 마지막 쿼리는
    유니크 인덱스를 보여야 합니다:
    엔티티는 유니크로 선언하지만 `meetings`는 V1 이전에 Hibernate가 만든 테이블이고, 미러 훅이 이 키로 미팅을 찾습니다. 인덱스가
    없으면 먼저 중복을 찾아(`SELECT idempotency_key, COUNT(*) FROM meetings GROUP BY idempotency_key HAVING COUNT(*) > 1;`)

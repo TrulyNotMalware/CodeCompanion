@@ -6,6 +6,9 @@ import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
 import java.time.Instant
 import java.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 fun createCalendarConnection(
     slackUserId: String = TEST_USER_ID,
@@ -29,4 +32,18 @@ fun createCalendarConnection(
     )
 
 fun createTestTokenCipher(seed: Int = 7): TokenCipher =
-    TokenCipher(keyBase64 = Base64.getEncoder().encodeToString(ByteArray(32) { seed.toByte() }))
+    TokenCipher(keyBase64 = Base64.getEncoder().encodeToString(testTokenKey(seed = seed)))
+
+fun createLegacyEncryptedToken(plaintext: String, seed: Int = 7): String {
+    val iv = ByteArray(12) { (it + 1).toByte() }
+    val cipher: Cipher =
+        Cipher.getInstance("AES/GCM/NoPadding").apply {
+            init(Cipher.ENCRYPT_MODE, SecretKeySpec(testTokenKey(seed = seed), "AES"), GCMParameterSpec(128, iv))
+        }
+    val encoder: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
+    return "v1.${encoder.encodeToString(
+        iv,
+    )}.${encoder.encodeToString(cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8)))}"
+}
+
+private fun testTokenKey(seed: Int): ByteArray = ByteArray(32) { seed.toByte() }

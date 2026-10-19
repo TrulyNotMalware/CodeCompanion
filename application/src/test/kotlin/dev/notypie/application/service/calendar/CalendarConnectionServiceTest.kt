@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.service.meeting.createH2DataSource
+import dev.notypie.application.service.meeting.createH2MeetingJpaStore
 import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.application.service.meeting.createSnapshotIsolationConflict
 import dev.notypie.domain.TEST_APP_ID
@@ -28,6 +29,7 @@ import dev.notypie.impl.calendar.GoogleOAuthException
 import dev.notypie.impl.calendar.GoogleTokenGrant
 import dev.notypie.impl.calendar.TokenCipher
 import dev.notypie.logging.captureLogs
+import dev.notypie.logging.eventsAt
 import dev.notypie.logging.messagesAt
 import dev.notypie.repository.calendar.ConnectionSaved
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
@@ -62,8 +64,11 @@ import io.mockk.verify
 import io.mockk.verifyOrder
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -91,6 +96,8 @@ class CalendarConnectionServiceTest :
                     ),
             )
         val calendarScopes = setOf(GoogleOAuthClient.CALENDAR_EVENTS_SCOPE, "openid", "email")
+        val store = createH2MeetingJpaStore()
+        afterSpec { store.close() }
 
         fun grant(
             refreshToken: String = "1//fresh",
@@ -181,8 +188,10 @@ class CalendarConnectionServiceTest :
         fun harness(
             transactionManager: PlatformTransactionManager = createStubTransactionManager(),
             slackEmail: String? = "dev@example.com",
+            connections: GoogleCalendarConnectionRepository = mockk(),
         ): Harness =
             Harness(
+                connections = connections,
                 cipher = cipher,
                 clock = clock,
                 appConfig = appConfig,
@@ -282,7 +291,7 @@ class CalendarConnectionServiceTest :
                         ephemeral().markdown() shouldBe
                             "Google Calendar is not connected. ${CalendarConnectionService.CONNECT_USAGE}"
                     }
-                    verify(exactly = 0) { h.connections.delete(userId = any()) }
+                    verify(exactly = 0) { h.connections.delete(userId = any(), observedEncryptedRefreshToken = any()) }
                     verify(exactly = 0) { h.queue.failPendingForUser(userId = any(), lastError = any(), now = any()) }
                     h.revocations.shouldBeEmpty()
                 }
@@ -293,7 +302,12 @@ class CalendarConnectionServiceTest :
                 val h =
                     harness().apply {
                         every { connections.find(userId = TEST_USER_ID) } returns connection
-                        every { connections.delete(userId = TEST_USER_ID) } returns true
+                        every {
+                            connections.delete(
+                                userId = TEST_USER_ID,
+                                observedEncryptedRefreshToken = connection.encryptedRefreshToken,
+                            )
+                        } just Runs
                         every { states.deleteForUser(userId = TEST_USER_ID) } returns 1
                         every {
                             queue.failPendingForUser(
@@ -306,7 +320,12 @@ class CalendarConnectionServiceTest :
                 h.service.handle(createCalendarConnectionRequestEvent(action = CalendarConnectionAction.DISCONNECT))
 
                 then("the row and the user's unused consent links are deleted in the slash transaction") {
-                    verify(exactly = 1) { h.connections.delete(userId = TEST_USER_ID) }
+                    verify(exactly = 1) {
+                        h.connections.delete(
+                            userId = TEST_USER_ID,
+                            observedEncryptedRefreshToken = connection.encryptedRefreshToken,
+                        )
+                    }
                     verify(exactly = 1) { h.states.deleteForUser(userId = TEST_USER_ID) }
                 }
 
@@ -540,11 +559,14 @@ class CalendarConnectionServiceTest :
                     }
                 val outcome = h.service.completeConnection(code = "good", state = "ok", error = null)
 
-                then("the refresh token is stored encrypted, never in clear") {
+                then("the refresh token is stored encrypted and bound to the requester, never in clear") {
                     outcome shouldBe CalendarConnectionOutcome.CONNECTED
-                    storedToken.slot.captured shouldStartWith "v1."
+                    storedToken.slot.captured shouldStartWith "v2."
                     storedToken.slot.captured shouldNotContain "1//fresh"
-                    cipher.decrypt(token = storedToken.slot.captured) shouldBe "1//fresh"
+                    cipher.decrypt(token = storedToken.slot.captured, userId = TEST_USER_ID) shouldBe "1//fresh"
+                    shouldThrow<IllegalArgumentException> {
+                        cipher.decrypt(token = storedToken.slot.captured, userId = "U_OTHER")
+                    }
                 }
 
                 then("the user gets a DM naming the connected account and no revocation is requested") {
@@ -574,7 +596,7 @@ class CalendarConnectionServiceTest :
                 then("the accounts match and the user is connected") {
                     h.service.completeConnection(code = "good", state = "ok", error = null) shouldBe
                         CalendarConnectionOutcome.CONNECTED
-                    cipher.decrypt(token = storedToken.slot.captured) shouldBe "1//fresh"
+                    cipher.decrypt(token = storedToken.slot.captured, userId = TEST_USER_ID) shouldBe "1//fresh"
                 }
             }
 
@@ -1006,6 +1028,80 @@ class CalendarConnectionServiceTest :
                         h.queue.touchForUser(userId = TEST_USER_ID, meetingIds = emptyList(), now = now)
                     }
                     verify(exactly = 1) { h.queue.touchForUser(userId = any(), meetingIds = any(), now = any()) }
+                }
+            }
+
+            `when`("another callback of the same user stores its grant between this store's read and its commit") {
+                val competing = cipher.encrypt(plaintext = "1//competing", userId = TEST_USER_ID)
+
+                fun saveActive(subject: String, token: String) =
+                    store.calendarConnectionRepository.saveActive(
+                        userId = TEST_USER_ID,
+                        googleSubject = subject,
+                        googleEmail = "dev@example.com",
+                        encryptedRefreshToken = token,
+                        now = now,
+                    )
+                store.inNewTransaction {
+                    saveActive(subject = "sub-new", token = cipher.encrypt(plaintext = "1//old", userId = TEST_USER_ID))
+                }
+                val competingTransaction =
+                    TransactionTemplate(store.transactionManager).apply {
+                        propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+                    }
+                var competed = false
+                val h =
+                    harness(
+                        transactionManager = store.transactionManager,
+                        connections = store.calendarConnectionRepository,
+                    ).withConsumedState()
+                        .withUpcomingMeetings()
+                        .apply {
+                            every { oauth.exchangeCode(code = "good") } returns grant(subject = "sub-new")
+                            every {
+                                meetings.getMeetingsByUserIdInRange(
+                                    userId = TEST_USER_ID,
+                                    startAt = any(),
+                                    endAt = any(),
+                                )
+                            } answers {
+                                if (!competed) {
+                                    competed = true
+                                    competingTransaction.execute {
+                                        saveActive(
+                                            subject = "sub-competing",
+                                            token = competing,
+                                        )
+                                    }
+                                }
+                                emptyList()
+                            }
+                        }
+                val (outcome, logs) =
+                    captureLogs(loggerName = CalendarConnectionService::class.java.name) {
+                        h.service.completeConnection(code = "good", state = "ok", error = null)
+                    }
+
+                then("the first attempt loses its version check and the retry stores the new grant") {
+                    outcome shouldBe CalendarConnectionOutcome.CONNECTED
+                    logs
+                        .eventsAt(level = Level.INFO)
+                        .single { it.formattedMessage.contains("retrying once") }
+                        .throwableProxy
+                        .shouldNotBeNull()
+                        .className shouldBe ObjectOptimisticLockingFailureException::class.java.name
+                    val stored =
+                        store.inNewTransaction {
+                            store.calendarConnectionRepository.find(userId = TEST_USER_ID).shouldNotBeNull()
+                        }
+                    stored.googleSubject shouldBe "sub-new"
+                    cipher.decrypt(token = stored.encryptedRefreshToken, userId = TEST_USER_ID) shouldBe "1//fresh"
+                }
+
+                then("the retry sees the competing grant as the one it replaced and hands that grant to the revoke") {
+                    val revocation = h.revocation()
+                    revocation.googleSubject shouldBe "sub-competing"
+                    revocation.encryptedRefreshToken shouldBe competing
                 }
             }
 

@@ -445,6 +445,48 @@ _type: decision · updated: 2026-10-19_
     data class의 생성된 `toString`이 그대로 찍는다(`CommandExecutor`의 WARN은 일부러 빼 둔다). 운영은 서명 검증을 쓰므로 위험은 낮다.
     상태: 유지. 근거: `domain/.../command/outbound/AGENTS.md`, `domain/.../command/inbound/AGENTS.md`.
 
+46. **Google refresh token 암호문은 그 행의 슬랙 사용자에 묶는다 — `v2` = AES-GCM + AAD `slack_user_id` (2026-10-15).**
+    `TokenCipher.encrypt(plaintext, userId)`는 `v2.<iv>.<ciphertext>`를 쓰고 사용자 id(UTF-8)를 GCM의 추가 인증 데이터로 넣는다.
+    `decrypt(token, userId)`는 `v2`를 그 id로 인증하고, AAD 없이 쓰인 `v1`(이전 형식)은 지금처럼 AAD 없이 읽는다. 호출부 셋 —
+    연결 저장(`CalendarConnectionService`, 소비한 state의 사용자), 토큰 갱신(`GoogleAccessTokenProvider`, 행의 `slackUserId`),
+    revoke(`GoogleTokenRevocationWorker`, 교체·삭제된 행의 `slackUserId`를 담은 이벤트의 `userId`) — 이 모두 행의 사용자 id를 넘기고,
+    빈 id는 거부한다. 키·IV 처리는 그대로다. 막는 것: 키 없이 DB 쓰기만 가진 공격자가 행 사이에서 암호문을 바꿔 넣는 것 — 바꿔 넣은
+    `v2`는 복호화에 실패해 동기화 경로에서는 `TOKEN_UNREADABLE`(연결 `REVOKED`, 재연결 DM), revoke 경로에서는 수동 제거 안내가 된다.
+    `v2` 본문의 접두어를 `v1`로 고쳐도 태그가 AAD를 덮으므로 실패한다. 이유(사용자 결정, 2026-10-15): 트리아지는 "그대로 두고
+    기록"을 권했지만(DB 쓰기 권한자는 이미 `outbox_message`로 봇 이름의 임의 메시지를 보낼 수 있어 AAD가 막는 위협은 더 큰 능력에
+    포함된다는 반론), V24가 아직 어디에도 적용되지 않았다고 기록돼 있어(`db/migration/AGENTS.md`, 2026-10-08 기준; 운영 DB는 보지 않았다)
+    지금이 가장 싸므로 한다. 기각: ① `v2`만 읽기(`v1` 읽기 없음) — 개발 DB의
+    기존 연결이 모두 끊긴다; ② 일괄 재암호화 잡 — 운영에 `v1` 행이 없고, 있더라도 재연결이 같은 일을 한다; ③ AAD에
+    `"google_calendar_connection:"` 같은 접두어 — 이 키는 이 열에만 쓰여 도메인 분리가 필요 없다. 상태: 유지. 근거:
+    `impl/calendar/AGENTS.md`(`TokenCipher`), `service/calendar/AGENTS.md`, `TokenCipherTest`(이전 코드가 만든 고정 `v1` 토큰 포함).
+    - **알려진 한계:** ① `v1` 행은 묶이지 않아 그 사용자가 다시 연결해 `saveActive`가 새 토큰을 `v2`로 쓸 때까지 바꿔치기가 가능하다
+      (토큰 갱신은 행을 다시 쓰지 않는다 — 이 클라이언트의 refresh 응답에는 새 refresh token이 없고 provider는 쓰지 않는다). ② **롤백:**
+      이 릴리스 이전 바이너리는 `v1`만 읽으므로, 그 바이너리로 되돌리면(배포 워크플로의 `rollout undo` 포함) 이 릴리스에서 저장·재연결된
+      모든 토큰이 그 사용자의 다음 동기화에서 `TOKEN_UNREADABLE` → `REVOKED` + 재연결 DM이 되고, disconnect의 revoke는 수동 제거
+      안내로 끝난다. 혼합 버전 롤아웃도 같다 — `Recreate`를 지운 뒤 이 릴리스 이전 파드와 겹치면 옛 파드의 동기화 틱이 새 파드가 저장한
+      `v2` 토큰을 못 읽어 그 연결을 `REVOKED`로 만든다(`k8s/README.md`의 `Recreate` 제거 조건, `deployment.yaml` 주석).
+      운영에 캘린더가 아직 켜지지 않았으므로 현재 영향은 없다(미확인: 운영 DB를 보지 않았다).
+47. **`google_calendar_connection`에 `@Version`을 둔다 — V28 (2026-10-15).** `saveActive`는 행을 읽고 다시 써서 교체한 grant를
+    돌려주는데(호출자가 다른 계정이면 revoke), 같은 사용자의 콜백 둘이 같은 행을 읽으면 나중 커밋이 먼저 저장된 grant를 "교체됨"으로
+    보고하지 않은 채 덮어써 그 grant가 Google에 살아 남았다. 막는 것은 MariaDB snapshot isolation의 1020뿐이었다(H2·구버전·설정 차이에서는
+    last-write-wins). 이제 `@field:Version var version: Long = 0L`(protected set, `MeetingSchema`와 같은 모양 — 원시 타입이라 `save()`의 신규
+    판정은 그대로 `id == 0`)이 어느 DB에서든 늦은 쪽을 `ObjectOptimisticLockingFailureException`으로 실패시키고, 그것은 1020과 같은
+    `ConcurrencyFailureException`이라 콜백의 기존 1회 재시도가 그대로 받는다 — 재시도는 행을 다시 읽어 사이에 저장된 grant를
+    교체된 것으로 보고하고 계정이 다르면 revoke를 요청한다. `delete(userId, observedEncryptedRefreshToken)`는 행을 다시 읽어 disconnect가 봤던
+    암호문과 같을 때만 그 엔티티를 remove 하므로(아니면 `ObjectOptimisticLockingFailureException`), 재연결이 커밋되기 전에 행을 읽은
+    disconnect는 새 grant의 행을 지우는 대신 실패하고 사용자가 다시 실행한다 — 같은 행이 덮어써진 경우는 버전 검사가(0행이면
+    `ObjectOptimisticLockingFailureException`, MariaDB 1020이면 `SnapshotIsolationConflictException` — 둘 다 `OptimisticLockingFailureException`),
+    다른 disconnect가 지운 뒤 connect가 새 PK로 다시 넣은 경우(READ COMMITTED에서 파생 `deleteBySlackUserId`는 새 행을 통과시켰다,
+    2026-10-19 Codex 교차 리뷰)는 암호문 비교가 막는다. **`markRevoked`(벌크
+    JPQL `UPDATE`)는 version을 올리지 않는다** — 그 CAS는 암호문 조건이 대신하고, revoke 사이에 끼어든 재연결(새 grant 저장)과
+    disconnect(어차피 삭제)는 이기는 것이 맞으며, 올리면 둘을 실패시키기만 한다. 이 테이블의 다른 쓰기는 모두 엔티티를 거친다.
+    기각: 그대로 두고 문서화(트리아지 권고) — 남는 피해가 고아 grant 하나지만 1020 전제가 어디에도 적혀 있지 않았고 비용이 컬럼 하나다.
+    운영: V28(`ALTER TABLE … ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0`, V27과 같은 5초 `lock_wait_timeout` 온라인 형식,
+    재실행 가능)은 **새 바이너리 배포 전에** 적용한다 — 엔티티가 컬럼을 매핑하므로 없으면 연결 조회가 모두 실패한다. 이전 바이너리는
+    컬럼을 무시하므로 롤백에도 그대로 둬도 된다. MariaDB에서는 아직 실행하지 않았다(미확인, V27과 같은 절차로 확인 예정). 상태: 유지.
+    근거: `V28__add_google_calendar_connection_version.sql` 헤더, `repository/calendar/AGENTS.md`, `GoogleCalendarConnectionRepositoryImplTest`
+    (두 스레드 경합), `CalendarConnectionServiceTest`(실제 JPA 경합 뒤 재시도).
+
 ## 빌드·런타임
 
 19. **`io.spring.dependency-management` 플러그인을 쓰지 않는다.** 이유: BOM 버전(kotlinx-coroutines 등)을
@@ -534,7 +576,7 @@ _type: decision · updated: 2026-10-19_
     변경과 **같은 트랜잭션**에 넣는다 — 처리 결과와 처리 표시가 함께 커밋·롤백되므로 실패한 원본은 표시가 남지 않아
     재시도가 정상 처리된다. 메모리 맵은 같은 파드 안의 1차 필터로 남긴다. 착수 전 조사할 것: 이벤트 핸들러가 트랜잭션
     밖에서 하는 일(비동기 AI 턴은 메모리 이벤트라 파드가 죽으면 사라짐 — dedup과는 별개 문제), Slack `event_id` 추출 위치,
-    다음 마이그레이션 번호(기록 당시 V24, 2026-10-13 기준 V27), 보존 기간 정리 작업.
+    다음 마이그레이션 번호(기록 당시 V24, 2026-10-15 기준 V29), 보존 기간 정리 작업.
     **슬래시·인터랙션 재전송 — 보류, 그때까지 수용된 위험 (2026-10-15 사용자 결정).** 위 중복 제거는 `/api/slack/events`만 다룬다(`SlackRequestVerificationFilter`는
     서명·타임스탬프 검증 뒤 그 경로가 아니면 바로 체인으로 넘긴다). 그래서 캡처한 서명된 슬래시·인터랙션 요청은 타임스탬프 허용치
     (`request-timestamp-tolerance-seconds`, 기본 300초) 안에서 다시 보낼 수 있다. 공격자가 먼저 TLS·인그레스·터널 경로에서 요청을
@@ -707,6 +749,13 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `CommandIntent$CancelMeeting`·`OutboundMessage$ReplaceMessage`의 `toString`(Kotlin 2.4.21), 슬랙 문서 "Handling user interaction"
   (response_url은 그 URL로 POST, 30분 안에 5회; trigger는 3초 만료·1회)·`views.open`(토큰 필수)(2026-10-15 조회), "Implementing slash
   commands"(`token`은 deprecated verification token, 2026-10-19 조회)
+- 토큰 AAD·연결 낙관적 락(#46·#47): `infrastructure/src/main/kotlin/dev/notypie/impl/calendar/TokenCipher.kt`,
+  `repository/calendar/{GoogleCalendarConnectionRepositoryImpl,JpaGoogleCalendarConnectionRepository}.kt`,
+  `repository/calendar/schema/GoogleCalendarConnectionSchema.kt`, `application/src/main/kotlin/dev/notypie/application/service/calendar/
+  {CalendarConnectionService,GoogleAccessTokenProvider,GoogleTokenRevocationWorker}.kt`, `GoogleOAuthClient.refresh`(새 refresh token을
+  읽지 않음), `db/migration/V28__add_google_calendar_connection_version.sql`, 스펙 `TokenCipherTest`·`GoogleCalendarConnectionRepositoryImplTest`·
+  `CalendarConnectionServiceTest`·`GoogleAccessTokenProviderTest`·`GoogleTokenRevocationWorkerTest`, 세션 스크래치의 트리아지 B1·B2
+  (2026-10-15, 미커밋 작업 트리 `feature/calendar-token-aad-version`)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

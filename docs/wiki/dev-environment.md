@@ -235,7 +235,7 @@ could not be checked" 페이지로 끝난다(코드에서 추론, 미측정). 2�
    - 켜면 client id·secret·암호화 키가 비었거나 리디렉션 URI가 `http(s)://`로 시작하지 않을 때 기동을 거부한다(`CalendarConfiguration`).
    - 암호화 키를 바꾸면 저장된 refresh token을 읽지 못한다. 그 사용자의 다음 동기화 때 연결이 `REVOKED`가 되고 재연결 DM이 한 번
      간다 — 키 회전 뒤의 유일한 복구 경로가 재연결이다.
-5. 스키마: `local`은 `ddl-auto: update`라 새 테이블과 인덱스가 자동으로 생긴다. `V24`·`V25`·`V27`을 손으로 적용하는 것은 `ddl-auto: none`(prod)뿐이다.
+5. 스키마: `local`은 `ddl-auto: update`라 새 테이블과 인덱스가 자동으로 생긴다. `V24`·`V25`·`V27`·`V28`을 손으로 적용하는 것은 `ddl-auto: none`(prod)뿐이다.
 6. **Testing 상태의 refresh token은 7일 뒤 만료된다**(Google 문서 기준, 이 저장소에서는 아직 관찰하지 않음). 그 뒤 첫 동기화의
    refresh가 `invalid_grant`로 거부되면 연결이 `REVOKED`가 되고 "…(it was revoked or expired)… Run `/calendar connect` to
    reconnect." DM이 간다. 정상 동작이며 다시 연결하면 된다.
@@ -249,7 +249,7 @@ could not be checked" 페이지로 끝난다(코드에서 추론, 미측정). 2�
   (무효 키였던 `enabled: false`는 2026-09-21에 제거). `db/migration/V*.sql`은 **사람이 수동으로 적용**한다.
 - 스키마 기동 방식: `local`/`slack-live`/`dev`는 `ddl-auto: update`로 Hibernate가 베이스 테이블을 만들고 `V*` 스크립트는 그 위에 얹는
   증분 패치다. `prod`는 `ddl-auto: none` + `spring.jpa.generate-ddl: false` — 배포 전에 새 마이그레이션을 운영 DB에 직접 적용한다.
-- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V27**(`google_oauth_state.slack_user_id` 인덱스, 캘린더 인프라 정리 PR, 2026-10-15), 다음은 **V28**. 번호를 정하기 전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
+- 번호 규칙 `V<n>__<snake_case>.sql`. 현재 최고 번호는 **V28**(`google_calendar_connection.version` 낙관적 락 컬럼, 2026-10-15), 다음은 **V29**. 번호를 정하기 전에 `git ls-tree -r --name-only origin/main | grep db/migration`으로 origin 선점을 확인한다. 적용된 스크립트는 수정·재번호 금지.
 - **번호는 적용 순서가 아니다 — V18~V23 릴리스 체크리스트.** `main`은 V17에서 멈춰 있었고 #26(`f9971700`, 2026-10-06)이
   V18~V23을 한꺼번에 실었다. 아직 V17인 환경의 적용 순서는 **V18(헤더의 `meeting_participants` 중복 점검 → 중복 행 삭제, 가장 작은 `id` 유지) → V19·V23 → V20 → V22 →
   구 파드 종료 → 배포 → V21**이다. V21을 뺀 나머지는 기본값 있는 컬럼, 인덱스, 더 넓은 타입만 바꾸고 구 바이너리는 그것에 의존하지
@@ -259,9 +259,12 @@ could not be checked" 페이지로 끝난다(코드에서 추론, 미측정). 2�
   뒤집힌 행을 다시 만든다. readiness는 스키마를 검사하지 않으므로 V18이 빠지면 모든 `meetings` 조회가, V20·V22가 빠지면 모든
   아웃박스 claim이 실패하는데도 배포 게이트는 통과한다. 머지 전에 `SHOW COLUMNS`로 `meetings.version`,
   `outbox_message.attempt_count`·`send_count`를 확인한다. 절차 원본은 `k8s/README.md`와 `db/migration/AGENTS.md`다.
-- **Google Calendar 릴리스 — V24 → V25 → V27.** V24·V25는 새 테이블만 만들고(`CREATE TABLE IF NOT EXISTS`) 기존 테이블을
-  건드리지 않으며, V27은 V24의 `google_oauth_state`에 `slack_user_id` 인덱스만 더한다(`/calendar disconnect`의 사용자별 `DELETE`가
-  기본 키 전체를 훑지 않게; 스크립트가 5초 락 대기의 온라인 형식을 직접 실행). 셋 다 이전 릴리스가 서비스하는 동안, 배포 전에 이 순서로 적용한다. `GOOGLE_CALENDAR_ENABLED=true`는 두 테이블이 생긴 뒤에만 켠다 — 미러
+- **Google Calendar 릴리스 — V24 → V25 → V27 → V28.** V24·V25는 새 테이블만 만들고(`CREATE TABLE IF NOT EXISTS`) 기존 테이블을
+  건드리지 않으며, V27은 V24의 `google_oauth_state`에 `slack_user_id` 인덱스만 더하고(`/calendar disconnect`의 사용자별 `DELETE`가
+  기본 키 전체를 훑지 않게), V28은 `google_calendar_connection`에 기본값 0인 `version` 컬럼만 더한다(결정 #47의 `@Version`; 두
+  스크립트 모두 5초 락 대기의 온라인 형식을 직접 실행). 넷 다 이전 릴리스가 서비스하는 동안, 배포 전에 이 순서로 적용한다 — V28은
+  새 바이너리가 매핑하므로 배포 뒤로 미룰 수 없다. 같은 릴리스부터 refresh token은 사용자에 묶인 `v2` 암호문으로 저장되고(결정 #46),
+  그 이전 바이너리로 롤백하면 그 뒤 저장·재연결된 토큰을 읽지 못해 해당 사용자들이 다음 동기화에서 재연결 DM을 받는다. `GOOGLE_CALENDAR_ENABLED=true`는 두 테이블이 생긴 뒤에만 켠다 — 미러
   훅이 미팅 쓰기 트랜잭션 안에서 이 테이블을 읽고 쓰므로, 테이블 없이 켜면 미팅 생성·수락·취소·일정 변경이 SQL 오류로 롤백된다
   (훅 구조에서 추론, 미측정). 꺼져 있으면 훅은 no-op이다.
 - **`/ask` 턴 레저 릴리스 — V26.** 새 테이블 `agent_ask_turn` 하나와 인덱스만 만들고(`CREATE TABLE IF NOT EXISTS`) 기존 테이블을

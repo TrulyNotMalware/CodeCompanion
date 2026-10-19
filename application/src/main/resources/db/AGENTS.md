@@ -11,6 +11,6 @@ environments that run `ddl-auto: none`; see `migration/AGENTS.md` for the rules.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `migration/` | `V1__` … `V27__` MariaDB patch scripts, one per schema change (see `migration/AGENTS.md`) |
+| `migration/` | `V1__` … `V28__` MariaDB patch scripts, one per schema change (see `migration/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

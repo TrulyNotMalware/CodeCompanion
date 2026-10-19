@@ -68,7 +68,7 @@ class GoogleAccessTokenProvider(
         }
         val refreshToken =
             try {
-                tokenCipher.decrypt(token = connection.encryptedRefreshToken)
+                tokenCipher.decrypt(token = connection.encryptedRefreshToken, userId = connection.slackUserId)
             } catch (exception: IllegalArgumentException) {
                 log.warn(exception) { "Stored Google refresh token could not be decrypted: userId=$userId" }
                 return revoked(

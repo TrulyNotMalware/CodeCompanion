@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
 
 # test
 
@@ -18,7 +18,7 @@ in-memory H2 with a real transaction manager built from testFixtures (`createH2D
 `AgentConverseServiceTest`, `AgentAskThreadStarterTest`, `AgentUsageReportServiceTest`, `OpsStatusServiceTest`,
 `GoogleTokenRevocationWorkerTransactionTest`, `CalendarSyncServiceTest` (four cases on `createH2TransactionManager`, two
 on `createH2MeetingJpaStore`),
-`CalendarConnectionServiceTest` (one case) and `MeetingCalendarMirrorServiceTest`; any case that claims a commit
+`CalendarConnectionServiceTest` (one case on `createH2TransactionManager`, one on `createH2MeetingJpaStore`) and `MeetingCalendarMirrorServiceTest`; any case that claims a commit
 or a rollback belongs in this group. Nothing here starts EmbeddedKafka.
 Shared builders live in the sibling `testFixtures/` source set (see `../testFixtures/AGENTS.md`).
 

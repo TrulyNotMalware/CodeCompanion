@@ -36,7 +36,7 @@ class GoogleTokenRevocationWorkerTransactionTest :
             GoogleTokenRevocationRequested(
                 userId = "U_TX",
                 googleSubject = "sub-1",
-                encryptedRefreshToken = cipher.encrypt(plaintext = "1//refresh"),
+                encryptedRefreshToken = cipher.encrypt(plaintext = "1//refresh", userId = "U_TX"),
                 reason = "disconnect",
             )
 

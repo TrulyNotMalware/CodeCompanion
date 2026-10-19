@@ -11,6 +11,9 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
+import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
+import dev.notypie.repository.calendar.GoogleCalendarConnectionRepositoryImpl
+import dev.notypie.repository.calendar.JpaGoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.JpaMeetingCalendarEventRepository
 import dev.notypie.repository.calendar.MeetingCalendarEventRepositoryImpl
 import dev.notypie.repository.meeting.JpaMeetingReminderRepository
@@ -124,6 +127,7 @@ class MeetingJpaStore(
     val jpaMeetingRepository: JpaMeetingRepository,
     val jpaMeetingReminderRepository: JpaMeetingReminderRepository,
     val jpaMeetingCalendarEventRepository: JpaMeetingCalendarEventRepository,
+    val jpaGoogleCalendarConnectionRepository: JpaGoogleCalendarConnectionRepository,
 ) : AutoCloseable {
     val meetingRepository =
         MeetingRepositoryImpl(jpaMeetingRepository = jpaMeetingRepository, clock = Clock.systemDefaultZone())
@@ -138,6 +142,10 @@ class MeetingJpaStore(
             jpaMeetingRepository = jpaMeetingRepository,
             jpaMeetingCalendarEventRepository = jpaMeetingCalendarEventRepository,
             transactionManager = transactionManager,
+        )
+    val calendarConnectionRepository: GoogleCalendarConnectionRepository =
+        GoogleCalendarConnectionRepositoryImpl(
+            jpaGoogleCalendarConnectionRepository = jpaGoogleCalendarConnectionRepository,
         )
 
     fun <T : Any> inNewTransaction(action: () -> T): T = TransactionTemplate(transactionManager).execute { action() }
@@ -175,5 +183,7 @@ fun createH2MeetingJpaStore(mariaDbMode: Boolean = false): MeetingJpaStore {
         jpaMeetingReminderRepository = repositoryFactory.getRepository(JpaMeetingReminderRepository::class.java),
         jpaMeetingCalendarEventRepository =
             repositoryFactory.getRepository(JpaMeetingCalendarEventRepository::class.java),
+        jpaGoogleCalendarConnectionRepository =
+            repositoryFactory.getRepository(JpaGoogleCalendarConnectionRepository::class.java),
     )
 }

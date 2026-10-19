@@ -4,6 +4,7 @@ import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
 import dev.notypie.repository.calendar.schema.GoogleCalendarConnectionSchema
 import dev.notypie.repository.calendar.schema.toCalendarConnection
+import org.springframework.orm.ObjectOptimisticLockingFailureException
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDateTime
@@ -52,8 +53,14 @@ open class GoogleCalendarConnectionRepositoryImpl(
     }
 
     @Transactional
-    override fun delete(userId: String): Boolean =
-        jpaGoogleCalendarConnectionRepository.deleteBySlackUserId(slackUserId = userId) > 0L
+    override fun delete(userId: String, observedEncryptedRefreshToken: String) {
+        val observed =
+            jpaGoogleCalendarConnectionRepository
+                .findBySlackUserId(slackUserId = userId)
+                ?.takeIf { it.encryptedRefreshToken == observedEncryptedRefreshToken }
+                ?: throw ObjectOptimisticLockingFailureException(GoogleCalendarConnectionSchema::class.java, userId)
+        jpaGoogleCalendarConnectionRepository.delete(observed)
+    }
 
     @Transactional(readOnly = true)
     override fun hasActiveConnection(userId: String): Boolean =

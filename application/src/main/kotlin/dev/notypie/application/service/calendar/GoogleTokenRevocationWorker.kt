@@ -77,7 +77,7 @@ class GoogleTokenRevocationWorker(
         }
         val token =
             try {
-                tokenCipher.decrypt(token = event.encryptedRefreshToken)
+                tokenCipher.decrypt(token = event.encryptedRefreshToken, userId = event.userId)
             } catch (exception: IllegalArgumentException) {
                 log.warn(exception) { "Stored Google refresh token could not be decrypted: userId=${event.userId}" }
                 notifyManualRemoval(userId = event.userId)

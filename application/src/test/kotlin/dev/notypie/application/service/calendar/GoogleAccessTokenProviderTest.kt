@@ -9,6 +9,7 @@ import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.schema.CalendarConnection
 import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
 import dev.notypie.schema.createCalendarConnection
+import dev.notypie.schema.createLegacyEncryptedToken
 import dev.notypie.schema.createTestTokenCipher
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
@@ -24,7 +25,7 @@ class GoogleAccessTokenProviderTest :
     BehaviorSpec({
         val start = Instant.parse("2026-10-08T01:00:00Z")
         val cipher = createTestTokenCipher()
-        val storedToken = cipher.encrypt(plaintext = "1//refresh")
+        val storedToken = cipher.encrypt(plaintext = "1//refresh", userId = TEST_USER_ID)
 
         fun connection(
             status: CalendarConnectionStatus = CalendarConnectionStatus.ACTIVE,
@@ -111,7 +112,7 @@ class GoogleAccessTokenProviderTest :
 
                 h.provider.accessToken(userId = TEST_USER_ID)
                 every { h.connections.find(userId = TEST_USER_ID) } returns
-                    connection(encryptedRefreshToken = cipher.encrypt(plaintext = "1//new"))
+                    connection(encryptedRefreshToken = cipher.encrypt(plaintext = "1//new", userId = TEST_USER_ID))
                 val afterReconnect = h.provider.accessToken(userId = TEST_USER_ID)
 
                 then("the cached token of the replaced grant is not reused") {
@@ -186,6 +187,42 @@ class GoogleAccessTokenProviderTest :
             }
         }
 
+        given("a stored token that is not bound to this user") {
+            `when`("the row holds a token encrypted for another Slack user") {
+                val copied = cipher.encrypt(plaintext = "1//other", userId = "U_OTHER")
+                val h = Harness(stored = connection(encryptedRefreshToken = copied))
+                val result = h.provider.accessToken(userId = TEST_USER_ID)
+
+                then(
+                    "it does not decrypt: the result is TOKEN_UNREADABLE for that ciphertext and Google is not called",
+                ) {
+                    result shouldBe
+                        AccessTokenResult.Revoked(
+                            observedEncryptedRefreshToken = copied,
+                            cause = RevocationCause.TOKEN_UNREADABLE,
+                        )
+                    verify(exactly = 0) { h.oauth.refresh(refreshToken = any()) }
+                }
+            }
+
+            `when`("the row holds a token stored before tokens were bound to their user") {
+                val h =
+                    Harness(
+                        stored =
+                            connection(
+                                encryptedRefreshToken = createLegacyEncryptedToken(plaintext = "1//legacy"),
+                            ),
+                    )
+                every { h.oauth.refresh(refreshToken = "1//legacy") } returns
+                    GoogleAccessToken(accessToken = "ya29.legacy", expiresInSeconds = 3600L)
+                val result = h.provider.accessToken(userId = TEST_USER_ID)
+
+                then("it still decrypts and is refreshed") {
+                    result shouldBe AccessTokenResult.Granted(accessToken = "ya29.legacy")
+                }
+            }
+        }
+
         given("Google rejects the refresh token with invalid_grant") {
             val h = Harness(stored = connection())
             every { h.oauth.refresh(refreshToken = "1//refresh") } throws
@@ -229,7 +266,7 @@ class GoogleAccessTokenProviderTest :
                 "a disconnect deleted the row" to null,
                 "the row was revoked" to connection(status = CalendarConnectionStatus.REVOKED),
                 "a reconnect stored another token" to
-                    connection(encryptedRefreshToken = cipher.encrypt(plaintext = "1//new")),
+                    connection(encryptedRefreshToken = cipher.encrypt(plaintext = "1//new", userId = TEST_USER_ID)),
             ).forEach { (label, afterRefresh) ->
                 `when`("$label meanwhile") {
                     val h = Harness(stored = connection())

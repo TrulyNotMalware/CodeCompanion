@@ -1,6 +1,7 @@
 package dev.notypie.repository.calendar
 
 import dev.notypie.repository.calendar.schema.CalendarConnectionStatus
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -8,12 +9,21 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager
+import org.springframework.orm.ObjectOptimisticLockingFailureException
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @DataJpaTest
 @ApplyExtension(extensions = [SpringExtension::class])
@@ -22,6 +32,7 @@ class GoogleCalendarConnectionRepositoryImplTest
     constructor(
         private val jpaGoogleCalendarConnectionRepository: JpaGoogleCalendarConnectionRepository,
         private val entityManager: TestEntityManager,
+        transactionManager: PlatformTransactionManager,
     ) : BehaviorSpec({
             val repository =
                 GoogleCalendarConnectionRepositoryImpl(
@@ -29,6 +40,63 @@ class GoogleCalendarConnectionRepositoryImplTest
                 )
             val first = Instant.parse("2026-10-07T10:00:00Z")
             val second = Instant.parse("2026-10-08T10:00:00Z")
+            val transactionTemplate =
+                TransactionTemplate(transactionManager).apply {
+                    propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+                }
+
+            fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }
+
+            fun reconnect(userId: String, token: String, subject: String): ConnectionSaved =
+                repository.saveActive(
+                    userId = userId,
+                    googleSubject = subject,
+                    googleEmail = "$subject@example.com",
+                    encryptedRefreshToken = token,
+                    now = second,
+                )
+
+            fun <R, T : Any> loseToReconnect(
+                userId: String,
+                read: () -> R,
+                write: (R) -> T,
+                winnerCommits: () -> ConnectionSaved = {
+                    reconnect(userId = userId, token = "v2.winner", subject = "sub-winner")
+                },
+            ): Pair<Result<ConnectionSaved>, Result<T>> {
+                val loserHasRead = CountDownLatch(1)
+                val winnerCommitted = CountDownLatch(1)
+                val executor = Executors.newFixedThreadPool(2)
+                val loser =
+                    executor.submit(
+                        Callable {
+                            runCatching {
+                                inTx {
+                                    val observed = read()
+                                    loserHasRead.countDown()
+                                    check(
+                                        winnerCommitted.await(5L, TimeUnit.SECONDS),
+                                    ) { "the winner must commit first" }
+                                    write(observed)
+                                }
+                            }
+                        },
+                    )
+                val winner =
+                    executor.submit(
+                        Callable {
+                            runCatching {
+                                check(loserHasRead.await(5L, TimeUnit.SECONDS)) { "the loser must read first" }
+                                inTx { winnerCommits() }
+                            }.also { winnerCommitted.countDown() }
+                        },
+                    )
+                try {
+                    return winner.get(10L, TimeUnit.SECONDS) to loser.get(10L, TimeUnit.SECONDS)
+                } finally {
+                    executor.shutdownNow()
+                }
+            }
 
             given("a user who connects, reconnects with another account and then disconnects") {
                 `when`("saveActive runs twice for the same user") {
@@ -73,7 +141,7 @@ class GoogleCalendarConnectionRepositoryImplTest
                 }
 
                 `when`("the connection is deleted") {
-                    then("find returns nothing and a second delete reports no row") {
+                    then("find returns nothing and a second delete fails as a lost race") {
                         repository.saveActive(
                             userId = "U_GONE",
                             googleSubject = null,
@@ -83,11 +151,13 @@ class GoogleCalendarConnectionRepositoryImplTest
                         )
                         entityManager.flush()
 
-                        repository.delete(userId = "U_GONE") shouldBe true
+                        repository.delete(userId = "U_GONE", observedEncryptedRefreshToken = "v1.x")
                         entityManager.flush()
                         entityManager.clear()
                         repository.find(userId = "U_GONE").shouldBeNull()
-                        repository.delete(userId = "U_GONE") shouldBe false
+                        shouldThrow<ObjectOptimisticLockingFailureException> {
+                            repository.delete(userId = "U_GONE", observedEncryptedRefreshToken = "v1.x")
+                        }
                     }
                 }
             }
@@ -206,6 +276,114 @@ class GoogleCalendarConnectionRepositoryImplTest
                         connection.encryptedRefreshToken shouldBe "v1.new"
                         connection.revokedAt.shouldBeNull()
                         connection.lastError.shouldBeNull()
+                    }
+                }
+            }
+
+            given("a connection that another transaction rewrites after this one read it") {
+                `when`("two reconnects of one user read the same row and the other commits first") {
+                    inTx { reconnect(userId = "U_RACE_SAVE", token = "v2.seed", subject = "sub-seed") }
+                    val (winner, loser) =
+                        loseToReconnect(
+                            userId = "U_RACE_SAVE",
+                            read = { reconnect(userId = "U_RACE_SAVE", token = "v2.loser", subject = "sub-loser") },
+                            write = { saved -> saved },
+                        )
+
+                    then("the later commit fails its version check instead of overwriting the grant just stored") {
+                        winner
+                            .getOrThrow()
+                            .replaced
+                            .shouldNotBeNull()
+                            .encryptedRefreshToken shouldBe "v2.seed"
+                        loser.exceptionOrNull().shouldBeInstanceOf<ObjectOptimisticLockingFailureException>()
+                        val stored =
+                            jpaGoogleCalendarConnectionRepository
+                                .findBySlackUserId(slackUserId = "U_RACE_SAVE")
+                                .shouldNotBeNull()
+                        stored.encryptedRefreshToken shouldBe "v2.winner"
+                        stored.googleSubject shouldBe "sub-winner"
+                        stored.version shouldBe 1L
+                    }
+                }
+
+                `when`("a disconnect read the row before a reconnect committed and deletes it afterwards") {
+                    inTx { reconnect(userId = "U_RACE_DEL", token = "v2.seed", subject = "sub-seed") }
+                    val (winner, loser) =
+                        loseToReconnect(
+                            userId = "U_RACE_DEL",
+                            read = { repository.find(userId = "U_RACE_DEL").shouldNotBeNull() },
+                            write = { observed ->
+                                repository.delete(
+                                    userId = "U_RACE_DEL",
+                                    observedEncryptedRefreshToken = observed.encryptedRefreshToken,
+                                )
+                            },
+                        )
+
+                    then("the delete fails its version check and the reconnected row survives") {
+                        winner.getOrThrow()
+                        loser.exceptionOrNull().shouldBeInstanceOf<ObjectOptimisticLockingFailureException>()
+                        repository.find(userId = "U_RACE_DEL").shouldNotBeNull().encryptedRefreshToken shouldBe
+                            "v2.winner"
+                    }
+                }
+
+                `when`("a disconnect read the row, another disconnect deleted it and a connect inserted a new row") {
+                    inTx { reconnect(userId = "U_RACE_NEW", token = "v2.seed", subject = "sub-seed") }
+                    val (winner, loser) =
+                        loseToReconnect(
+                            userId = "U_RACE_NEW",
+                            read = { repository.find(userId = "U_RACE_NEW").shouldNotBeNull() },
+                            write = { observed ->
+                                repository.delete(
+                                    userId = "U_RACE_NEW",
+                                    observedEncryptedRefreshToken = observed.encryptedRefreshToken,
+                                )
+                            },
+                            winnerCommits = {
+                                repository.delete(userId = "U_RACE_NEW", observedEncryptedRefreshToken = "v2.seed")
+                                reconnect(userId = "U_RACE_NEW", token = "v2.fresh", subject = "sub-fresh")
+                            },
+                        )
+
+                    then("the stale delete misses the new row's ciphertext and the fresh connection survives") {
+                        winner.getOrThrow().replaced.shouldBeNull()
+                        loser.exceptionOrNull().shouldBeInstanceOf<ObjectOptimisticLockingFailureException>()
+                        val stored =
+                            jpaGoogleCalendarConnectionRepository
+                                .findBySlackUserId(slackUserId = "U_RACE_NEW")
+                                .shouldNotBeNull()
+                        stored.encryptedRefreshToken shouldBe "v2.fresh"
+                        stored.version shouldBe 0L
+                    }
+                }
+
+                `when`("the worker marks the row revoked between a reconnect's read and its commit") {
+                    inTx { reconnect(userId = "U_RACE_RVK", token = "v2.seed", subject = "sub-seed") }
+                    val revokedBetween =
+                        inTx {
+                            val saved = reconnect(userId = "U_RACE_RVK", token = "v2.new", subject = "sub-new")
+                            inTx {
+                                repository.markRevoked(
+                                    userId = "U_RACE_RVK",
+                                    observedEncryptedRefreshToken = "v2.seed",
+                                    now = second,
+                                    reason = "invalid_grant",
+                                )
+                            } to saved
+                        }
+
+                    then("the bulk revocation leaves the version alone, so the reconnect still commits and wins") {
+                        revokedBetween.first shouldBe true
+                        val stored =
+                            jpaGoogleCalendarConnectionRepository
+                                .findBySlackUserId(slackUserId = "U_RACE_RVK")
+                                .shouldNotBeNull()
+                        stored.status shouldBe CalendarConnectionStatus.ACTIVE
+                        stored.encryptedRefreshToken shouldBe "v2.new"
+                        stored.revokedAt.shouldBeNull()
+                        stored.version shouldBe 1L
                     }
                 }
             }
