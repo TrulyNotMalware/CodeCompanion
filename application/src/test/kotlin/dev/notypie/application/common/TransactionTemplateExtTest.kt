@@ -2,10 +2,17 @@ package dev.notypie.application.common
 
 import dev.notypie.application.service.meeting.createH2DataSource
 import dev.notypie.application.service.meeting.createH2TransactionManager
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
+import io.mockk.every
+import io.mockk.mockk
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.TransactionSystemException
 import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -61,6 +68,63 @@ class TransactionTemplateExtTest :
                     result.exceptionOrNull().shouldBeInstanceOf<IllegalStateException>().message shouldBe
                         "outbox write failed at commit"
                     probeRows() shouldBe 0
+                }
+            }
+
+            `when`("the action throws an Error") {
+                jdbc.update("DELETE FROM tx_probe")
+                val thrown = StackOverflowError("deep")
+                val escaped =
+                    shouldThrow<StackOverflowError> {
+                        template.runInTx {
+                            jdbc.update("INSERT INTO tx_probe (id) VALUES (4)")
+                            throw thrown
+                        }
+                    }
+
+                then("the write rolls back and the same Error propagates instead of becoming a failure") {
+                    escaped shouldBeSameInstanceAs thrown
+                    probeRows() shouldBe 0
+                }
+            }
+
+            `when`("the action throws an InterruptedException") {
+                jdbc.update("DELETE FROM tx_probe")
+                val thrown = InterruptedException("shutting down")
+                var keptInterrupt = false
+                val result =
+                    try {
+                        template.runInTx {
+                            jdbc.update("INSERT INTO tx_probe (id) VALUES (5)")
+                            throw thrown
+                        }
+                    } finally {
+                        keptInterrupt = Thread.interrupted()
+                    }
+
+                then("the write rolls back, the interrupt is the failure and the interrupt flag stays set") {
+                    result.exceptionOrNull() shouldBeSameInstanceAs thrown
+                    keptInterrupt shouldBe true
+                    probeRows() shouldBe 0
+                }
+            }
+        }
+
+        given("runInTx when the rollback itself fails") {
+            `when`("the action throws an Error and the transaction manager cannot roll back") {
+                val rollbackFailure = TransactionSystemException("rollback failed")
+                val manager =
+                    mockk<PlatformTransactionManager> {
+                        every { getTransaction(any()) } returns mockk<TransactionStatus>(relaxed = true)
+                        every { rollback(any()) } throws rollbackFailure
+                    }
+                val thrown = StackOverflowError("deep")
+                val escaped =
+                    shouldThrow<StackOverflowError> { TransactionTemplate(manager).runInTx<Unit> { throw thrown } }
+
+                then("the same Error propagates with the rollback failure attached as suppressed") {
+                    escaped shouldBeSameInstanceAs thrown
+                    escaped.suppressed.single() shouldBeSameInstanceAs rollbackFailure
                 }
             }
         }

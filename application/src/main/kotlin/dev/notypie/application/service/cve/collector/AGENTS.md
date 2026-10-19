@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # application/service/cve/collector
 
@@ -12,7 +12,7 @@ collect ledger, fetches, and `insertIgnore`s each raw event as a `PENDING` `cve_
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveCollector.kt` | `class CveCollector(cveTopicRepository, cveEventRepository, cveCollectLedgerRepository, adapters: List<SourceAdapter>, windowMinutes)`. `@Scheduled(fixedDelay = 300_000) tick()`: `windowStart(now)` buckets the minute-of-hour to a multiple of `windowMinutes`; for each `findActiveTopics()` row, `collectTopic` picks `adapters.firstOrNull { it.supports(sourceType) }` (none → warn, skip), `claimWindow(topicId, windowStart)` (lost → skip), `adapter.fetch(topic)`, then `insertIgnore(topicId, externalId, title, rawContent, publishedAt)` per raw event and logs `fetched` / `inserted`; finally prunes the ledger with `deleteOlderThan(now - LEDGER_RETENTION_DAYS (7))`. Each topic and the prune run inside their own `runCatching`; the loop stops (and skips the prune) once the thread is interrupted |
+| `CveCollector.kt` | `class CveCollector(cveTopicRepository, cveEventRepository, cveCollectLedgerRepository, adapters: List<SourceAdapter>, windowMinutes)`. `@Scheduled(fixedDelay = 300_000) tick()`: `windowStart(now)` buckets the minute-of-hour to a multiple of `windowMinutes`; for each `findActiveTopics()` row, `collectTopic` picks `adapters.firstOrNull { it.supports(sourceType) }` (none → warn, skip), `claimWindow(topicId, windowStart)` (lost → skip), `adapter.fetch(topic)`, then `insertIgnore(topicId, externalId, title, rawContent, publishedAt)` per raw event and logs `fetched` / `inserted`; finally prunes the ledger with `deleteOlderThan(now - LEDGER_RETENTION_DAYS (7))`. Each topic and the prune run inside their own `containFailure` (an `Exception` is logged at ERROR; an `Error` ends the tick, skipping the later topics and the prune); the loop stops (and skips the prune) once the thread is interrupted, and an `InterruptedException` that escapes a topic leaves `tick()` with its flag set (the shared tick contract, 2026-10-15) |
 
 ## For AI Agents
 
@@ -25,7 +25,8 @@ collect ledger, fetches, and `insertIgnore`s each raw event as a `PENDING` `cve_
   topics past NVD's quota, fetched in the same order each time) is what `NvdCveSourceAdapter`'s pacing
   prevents; releasing the claim would not help, because the next tick would be refused the same way.
 - **Interrupts end the tick.** The NVD pacing wait rethrows `InterruptedException` with the flag still set;
-  `runCatching` logs it, and the loop checks `Thread.currentThread().isInterrupted` before the next topic.
+  the topic's `containFailure` rethrows it and it leaves `tick()` with the flag set, skipping the remaining topics and
+  the prune; Spring's scheduler logs it. The loop also checks `Thread.currentThread().isInterrupted` before the next topic.
 - `windowMinutes` must divide 60 (`CveConfiguration` rejects anything else); `windowStart` is what makes
   every instance ticking inside the same bucket race for one ledger row, so multi-replica deployments
   do not double-fetch. The tick cadence (5 minutes) is hard-coded and independent of the window size.
@@ -48,7 +49,7 @@ infrastructure testFixtures for topics. The ledger's claim SQL is covered by the
 `infrastructure/src/test/kotlin/dev/notypie/repository/cve/`.
 
 ### Common Patterns
-- Per-item `runCatching { ... }.onFailure { log.error(ex) { ... } }` isolation inside a scheduled tick.
+- Per-item `containFailure(onFailure = { ex -> log.error(ex) { ... } }) { ... }` isolation inside a scheduled tick.
 - Adapter lookup by capability (`supports(sourceType)`) over an injected `List`, not a `when` on the
   enum.
 - `companion object const val` for retention; tunables via constructor.

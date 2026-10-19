@@ -2,7 +2,7 @@ package dev.notypie.application.service.agent
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.service.relay.STATUS_WRITE_ATTEMPTS
-import dev.notypie.application.service.standup.containFailure
+import dev.notypie.common.containFailure
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentConversePayload

@@ -3,6 +3,8 @@ package dev.notypie.application.mcp
 import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
 import dev.notypie.application.security.mcp.ScopedTurnToken
 import dev.notypie.application.service.command.CommandRoleResolver
+import dev.notypie.common.containFailure
+import dev.notypie.common.runCatchingExceptions
 import dev.notypie.domain.command.authorization.CommandPermission
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.common.takeSurrogateSafe
@@ -16,6 +18,7 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult
 private val log = KotlinLogging.logger {}
 
 private const val ROLE_LOOKUP_FAILED = "RoleLookupFailed"
+internal const val ABORTED = "Aborted"
 
 internal const val MAX_TOOL_RESULT_CHARS = 20_000
 private const val TRUNCATED_MARKER = "… [truncated]"
@@ -56,7 +59,11 @@ class McpToolGate(
         val startedAt = System.nanoTime()
 
         fun audit(role: UserRole, outcome: McpToolCallOutcome, errorCode: String? = null) =
-            runCatching {
+            containFailure(
+                onFailure = { exception ->
+                    log.error(exception) { "MCP tool audit write failed: tool=$toolName outcome=$outcome" }
+                },
+            ) {
                 mcpToolCallHistoryRepository.record(
                     call =
                         McpToolCallRecord(
@@ -71,7 +78,7 @@ class McpToolGate(
                             durationMs = (System.nanoTime() - startedAt) / 1_000_000L,
                         ),
                 )
-            }.onFailure { log.error(it) { "MCP tool audit write failed: tool=$toolName outcome=$outcome" } }
+            }
 
         val resolution = commandRoleResolver.resolution(userId = token.userId)
         val resolvedRole = resolution.role
@@ -89,26 +96,33 @@ class McpToolGate(
             )
         }
 
-        return runCatching { body(token) }
-            .fold(
-                onSuccess = { text ->
-                    audit(role = resolvedRole, outcome = McpToolCallOutcome.COMPLETED)
-                    CallToolResult
-                        .builder()
-                        .addTextContent(fenceToolResult(text = text))
-                        .isError(false)
-                        .build()
-                },
-                onFailure = { failure ->
-                    log.error(failure) { "MCP tool execution failed: tool=$toolName" }
-                    audit(
-                        role = resolvedRole,
-                        outcome = McpToolCallOutcome.FAILED,
-                        errorCode = failure.javaClass.simpleName,
-                    )
-                    errorResult(text = "`$toolName` failed to execute. Try again or contact an admin.")
-                },
-            )
+        var audited = false
+        try {
+            return runCatchingExceptions { body(token) }
+                .fold(
+                    onSuccess = { text ->
+                        audited = true
+                        audit(role = resolvedRole, outcome = McpToolCallOutcome.COMPLETED)
+                        CallToolResult
+                            .builder()
+                            .addTextContent(fenceToolResult(text = text))
+                            .isError(false)
+                            .build()
+                    },
+                    onFailure = { failure ->
+                        log.error(failure) { "MCP tool execution failed: tool=$toolName" }
+                        audited = true
+                        audit(
+                            role = resolvedRole,
+                            outcome = McpToolCallOutcome.FAILED,
+                            errorCode = failure.javaClass.simpleName,
+                        )
+                        errorResult(text = "`$toolName` failed to execute. Try again or contact an admin.")
+                    },
+                )
+        } finally {
+            if (!audited) audit(role = resolvedRole, outcome = McpToolCallOutcome.FAILED, errorCode = ABORTED)
+        }
     }
 
     private fun errorResult(text: String): CallToolResult =

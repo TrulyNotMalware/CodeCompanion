@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # infrastructure/impl/cve
 
@@ -12,7 +12,7 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
 | File | Description |
 |------|-------------|
 | `SourceAdapter.kt` | `data class RawSourceEvent(externalId, title, rawContent, publishedAt: LocalDateTime?)`; `interface SourceAdapter { supports(CveSourceType): Boolean; fetch(CveTopic): List<RawSourceEvent> }`; `internal fun JsonNode.stringOrNull()` (blank folds to null); `internal fun parseSourceTimestamp(String?)` (offset or offset-free ISO, null on failure). The bounded send both adapters use moved to `../http/BoundedHttp.kt` on 2026-10-15; its `BoundedResponse(statusCode, headers, body)` keeps the response headers, which the GitHub adapter reads for its rate-limit log. |
-| `GithubReleaseSourceAdapter.kt` | `(token, perPage, requestTimeout, apiBaseUrl = "https://api.github.com")`. `source_config` `{"repo": "owner/name"}` validated by `REPO_PATTERN`; `GET /repos/{repo}/releases?per_page=N` with `Accept: application/vnd.github+json` and a bearer only when `token` is non-blank. `externalId` = release `id`, title = `name` else `tag_name`, `rawContent` = `body`, `publishedAt` = `published_at` A 403/429 carrying `X-RateLimit-Remaining: 0` or `Retry-After` is logged as `GitHub rate limit exhausted …` with the reset instant and auth mode, any other non-2xx as `GitHub releases returned <status>`; both return an empty list, so the log line is what tells a rate-limited window from a quiet repo. `anonymousLimitWarning(topicCount, requestsPerTopicPerHour)` returns a boot warning when `token` is blank and the load reaches `ANONYMOUS_HOURLY_LIMIT` (60/hour per IP), else null; `CveConfiguration.githubReleaseSourceAdapter` logs it for the active GitHub topics at one request per window (at least the 5-minute collector tick). |
+| `GithubReleaseSourceAdapter.kt` | `(token, perPage, requestTimeout, apiBaseUrl = "https://api.github.com", maxBodyBytes = 8 MiB, httpClient = HTTP/1.1 with a 5 s connect timeout)` (`httpClient` is a test seam, 2026-10-15). The request runs in `runCatchingExceptions` (infrastructure `common`): an `Exception` logs WARN and returns empty, an interrupt is rethrown with its flag, an `Error` propagates. `source_config` `{"repo": "owner/name"}` validated by `REPO_PATTERN`; `GET /repos/{repo}/releases?per_page=N` with `Accept: application/vnd.github+json` and a bearer only when `token` is non-blank. `externalId` = release `id`, title = `name` else `tag_name`, `rawContent` = `body`, `publishedAt` = `published_at` A 403/429 carrying `X-RateLimit-Remaining: 0` or `Retry-After` is logged as `GitHub rate limit exhausted …` with the reset instant and auth mode, any other non-2xx as `GitHub releases returned <status>`; both return an empty list, so the log line is what tells a rate-limited window from a quiet repo. `anonymousLimitWarning(topicCount, requestsPerTopicPerHour)` returns a boot warning when `token` is blank and the load reaches `ANONYMOUS_HOURLY_LIMIT` (60/hour per IP), else null; `CveConfiguration.githubReleaseSourceAdapter` logs it for the active GitHub topics at one request per window (at least the 5-minute collector tick). |
 | `NvdCveSourceAdapter.kt` | `(apiKey, lookbackMinutes, requestTimeout, apiBaseUrl = NVD 2.0 URL, clock (the context bean; the window is computed from its instant in UTC), maxBodyBytes = 32 MiB, requestInterval = 6 s, onPageCapReached = {})`. Before each request it waits until `requestInterval` has passed since the previous one (a `ReentrantLock` serialises callers); 403/429/503 log as a refusal (rate limit or outage) and return empty. `source_config` `{"cpe": ...}` → `virtualMatchString`, else `{"keyword": ...}` → `keywordSearch`; window `lastModStartDate/lastModEndDate = [now - lookback, now]` in UTC formatted `yyyy-MM-dd'T'HH:mm:ss.SSS`; `apiKey` header only when non-blank. Title = `"<CVE-ID> <first line of the en description>"`, `rawContent` = description + `\n\nCVSS baseScore=… baseSeverity=…` (v3.1 > v3.0 > v2) Pages: `resultsPerPage = RESULTS_PER_PAGE` (1,000, half NVD's maximum, so a page stays well under `maxBodyBytes`) and `startIndex` advanced by each page's size until `totalResults`, at most `MAX_PAGES` (10) pages, each behind the same request slot; past the cap it logs a WARN and calls `onPageCapReached(topic)` (the application counts `cve.nvd.page.cap.reached{topic}`) because the next overlapping window re-reads the same first pages. A failed or refused later page keeps the pages already read; an interrupt (in the slot wait or the call) is rethrown with the flag restored, as before. |
 
 ## For AI Agents
@@ -30,6 +30,8 @@ into `RawSourceEvent`s that `CveEventRepository.insertIgnore` persists idempoten
   up to `maxBodyBytes` (NVD 32 MiB, GitHub 8 MiB). A source that stalls mid-body would otherwise block
   `CveCollector.tick()` and, on the shared scheduler, every other `@Scheduled` job. Both failures surface as
   `IOException`s and follow the `fetch` contract above (log, `emptyList()`).
+- **"Never throw" covers `Exception`s only.** An `Error` (a `StackOverflowError`, a `LinkageError`) propagates out
+  of `fetch` and ends the collector's tick; do not widen a catch to `Throwable` to keep the empty-list contract.
 - **Never log credentials.** Log lines carry only `topic.topicKey`, the status code, and the exception.
 - **The NVD window is derived in UTC from `clock.instant()`.** NVD reads offset-free timestamps as UTC; a
   zoned wall clock would shift the window and silently empty every response. Inject a fixed `Clock` in
@@ -62,7 +64,9 @@ non-2xx, malformed JSON) for every new adapter — those are the contract.
 ### Common Patterns
 - JDK `HttpClient` pinned to HTTP/1.1 with a 5 s connect timeout, mirroring `impl/agent`.
 - `jsonMapper.readTree` + `stringOrNull()` for tolerant, allocation-light parsing of third-party JSON.
-- `runCatching { ... }.getOrElse { log; return emptyList() }` at every I/O and parse boundary.
+- At the I/O boundary: `runCatchingExceptions { ... }.getOrElse { log; return emptyList() }` (GitHub) or an explicit
+  `catch (InterruptedException)` + `catch (Exception)` (NVD). Pure parse sites keep `runCatching { … }.getOrElse { log;
+  return … }`.
 
 ## Dependencies
 

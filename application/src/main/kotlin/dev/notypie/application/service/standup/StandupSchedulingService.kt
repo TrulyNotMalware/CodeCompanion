@@ -2,6 +2,7 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.common.containFailure
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -293,17 +294,6 @@ class StandupSchedulingService(
                 )
             }
         }
-    }
-}
-
-internal inline fun containFailure(onFailure: (Exception) -> Unit, block: () -> Unit) {
-    try {
-        block()
-    } catch (interrupted: InterruptedException) {
-        Thread.currentThread().interrupt()
-        throw interrupted
-    } catch (ex: Exception) {
-        onFailure(ex)
     }
 }
 

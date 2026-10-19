@@ -14,11 +14,14 @@ import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.chainedParts
 import dev.notypie.repository.outbox.toChainHead
 import dev.notypie.schema.createOutboxColumnMap
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.TimeZone
@@ -45,6 +48,33 @@ class OutboxMessageTest :
                 then("both read back as the stored wall-clock value, not shifted by the JVM zone") {
                     converted.createdAt shouldBe expected
                     converted.updatedAt shouldBe expected.withNano(123_000_000)
+                }
+            }
+        }
+
+        given("a CDC after-image whose conversion throws") {
+            fun afterImageFailingWith(failure: Throwable): MutableMap<String, Any> =
+                object : HashMap<String, Any>() {
+                    override fun get(key: String): Any = throw failure
+                }
+
+            `when`("the failure is an Exception") {
+                val thrown = IllegalStateException("bad column")
+                val wrapped =
+                    shouldThrowExactly<RuntimeException> { afterImageFailingWith(failure = thrown).toOutboxMessage() }
+
+                then("it is wrapped with the original as the cause") {
+                    wrapped.cause shouldBeSameInstanceAs thrown
+                }
+            }
+
+            `when`("the failure is an Error") {
+                val thrown = StackOverflowError("deep")
+                val escaped =
+                    shouldThrow<StackOverflowError> { afterImageFailingWith(failure = thrown).toOutboxMessage() }
+
+                then("the same Error propagates unwrapped") {
+                    escaped shouldBeSameInstanceAs thrown
                 }
             }
         }

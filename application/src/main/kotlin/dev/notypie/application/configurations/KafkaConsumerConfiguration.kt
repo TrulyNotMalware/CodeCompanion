@@ -3,6 +3,7 @@ package dev.notypie.application.configurations
 import dev.notypie.application.configurations.conditions.OnCdcConsumer
 import dev.notypie.application.configurations.conditions.OnKafkaEventPublisher
 import dev.notypie.application.service.relay.CdcRecordParseException
+import dev.notypie.application.service.relay.ListenerErrorException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.common.KeyValues
 import io.micrometer.core.instrument.MeterRegistry
@@ -134,6 +135,7 @@ private val log = KotlinLogging.logger {}
 private val POISON_RECORD_EXCEPTIONS: List<Class<out Throwable>> =
     listOf(
         CdcRecordParseException::class.java,
+        ListenerErrorException::class.java,
         DeserializationException::class.java,
         MessageConversionException::class.java,
     )
@@ -155,6 +157,11 @@ class PoisonOnlyDeadLetterRecoverer(
         }
     }
 }
+
+internal fun cdcErrorHandler(recoverer: ConsumerAwareRecordRecoverer): DefaultErrorHandler =
+    DefaultErrorHandler(recoverer, FixedBackOff(1_000L, 2L)).apply {
+        addNotRetryableExceptions(CdcRecordParseException::class.java, ListenerErrorException::class.java)
+    }
 
 class CdcDeadLetterRecovery(
     jsonTemplate: KafkaTemplate<String, Any>,
@@ -257,11 +264,7 @@ class KafkaConsumerConfiguration(
         containerProperties.ackMode = ContainerProperties.AckMode.RECORD
         containerProperties.isStopImmediate = true
         containerProperties.shutdownTimeout = RECORD_SHUTDOWN_WAIT.toMillis()
-        setCommonErrorHandler(
-            DefaultErrorHandler(cdcDeadLetterRecovery.recoverer, FixedBackOff(1_000L, 2L)).apply {
-                addNotRetryableExceptions(CdcRecordParseException::class.java)
-            },
-        )
+        setCommonErrorHandler(cdcErrorHandler(recoverer = cdcDeadLetterRecovery.recoverer))
         setConsumerFactory(consumerFactory)
         containerProperties.setObservationConvention(convention)
     }

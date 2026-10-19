@@ -7,6 +7,7 @@ import dev.notypie.logging.captureLogs
 import dev.notypie.logging.messagesAt
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.schema.createCveTopic
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
@@ -14,7 +15,13 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
+import io.mockk.every
+import io.mockk.mockk
+import java.io.IOException
+import java.io.InputStream
 import java.net.InetSocketAddress
+import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.concurrent.CountDownLatch
@@ -138,6 +145,39 @@ class GithubReleaseSourceAdapterTest :
                 then("the interrupt propagates with its flag instead of an empty result") {
                     outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
                     keptInterrupt shouldBe true
+                }
+            }
+        }
+
+        given("an HTTP client that throws instead of answering") {
+            fun adapterOver(failure: Throwable): GithubReleaseSourceAdapter =
+                GithubReleaseSourceAdapter(
+                    token = "",
+                    perPage = 5,
+                    requestTimeout = Duration.ofSeconds(5L),
+                    httpClient =
+                        mockk { every { send(any(), any<HttpResponse.BodyHandler<InputStream>>()) } throws failure },
+                )
+
+            `when`("the failure is an Exception") {
+                val (events, logs) =
+                    captureLogs(loggerName = loggerName) {
+                        adapterOver(failure = IOException("connection reset")).fetch(topic = githubTopic())
+                    }
+
+                then("the window comes back empty with a WARN") {
+                    events shouldHaveSize 0
+                    logs.messagesAt(level = Level.WARN).single() shouldContain "GitHub releases request failed"
+                }
+            }
+
+            `when`("the failure is an Error") {
+                val thrown = StackOverflowError("deep")
+                val escaped =
+                    shouldThrow<StackOverflowError> { adapterOver(failure = thrown).fetch(topic = githubTopic()) }
+
+                then("the same Error propagates instead of an empty window") {
+                    escaped shouldBeSameInstanceAs thrown
                 }
             }
         }

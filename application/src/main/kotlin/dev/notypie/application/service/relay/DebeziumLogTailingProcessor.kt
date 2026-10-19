@@ -7,6 +7,8 @@ import dev.notypie.repository.outbox.schema.toOutboxMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.kafka.annotation.KafkaListener
+import org.springframework.kafka.support.KafkaHeaders
+import org.springframework.messaging.handler.annotation.Header
 import org.springframework.messaging.handler.annotation.Payload
 import java.time.Clock
 import java.time.LocalDateTime
@@ -18,6 +20,10 @@ class CdcRecordParseException(
     message: String,
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
+
+class ListenerErrorException(
+    cause: Error,
+) : RuntimeException("CDC listener hit ${cause::class.java.name}", cause)
 
 class DebeziumLogTailingProcessor(
     private val outboxRepository: MessageOutboxRepository,
@@ -34,7 +40,22 @@ class DebeziumLogTailingProcessor(
     )
     fun consume(
         @Payload(required = false) envelope: Envelope?,
+        @Header(name = KafkaHeaders.RECEIVED_PARTITION, required = false) partition: Int? = null,
+        @Header(name = KafkaHeaders.OFFSET, required = false) offset: Long? = null,
     ) {
+        try {
+            process(envelope = envelope)
+        } catch (error: Error) {
+            logger.error(error) {
+                "CDC record partition=${partition ?: "unknown"} offset=${offset ?: "unknown"} " +
+                    "eventId=${envelope?.payload?.after?.get("event_id") ?: "unknown"} hit " +
+                    "${error::class.java.name}; handing it to the container's error handler"
+            }
+            throw ListenerErrorException(cause = error)
+        }
+    }
+
+    private fun process(envelope: Envelope?) {
         if (envelope == null) {
             logger.debug { "Skipping CDC tombstone record." }
             return

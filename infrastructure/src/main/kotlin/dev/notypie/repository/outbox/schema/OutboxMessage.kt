@@ -98,14 +98,14 @@ class OutboxMessage(
 }
 
 fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
-    runCatching {
+    try {
         val createdAt = this["created_at"]
         val updatedAt = this["updated_at"]
         if (createdAt is Long) this["created_at"] = createdAt.debeziumDateTime()
         if (updatedAt is Long) this["updated_at"] = updatedAt.debeziumDateTime()
 
         jsonMapper.convertValue(this, OutboxMessage::class.java)
-    }.getOrElse { e ->
+    } catch (e: Exception) {
         logger.error(e) { "Failed to convert to OutboxMessage" }
         throw RuntimeException("Failed to convert to OutboxMessage. ${e.message}", e)
     }

@@ -235,7 +235,7 @@ minting; build the request event with the domain testFixtures rather than inline
   `AppConfig.agent.sidecar.requestTimeoutSeconds` (the orphan cutoff), `AppConfig.agent.retention` (the purge)
 - `application/service/relay/` — publishes `MessageDeliveredEvent`; `STATUS_WRITE_ATTEMPTS` (shared on purpose:
   the ledger write gets as many attempts as the status write that follows it)
-- `application/service/standup/StandupSchedulingService.kt` — `containFailure`
+- `infrastructure/common/ExceptionBoundary.kt` — `containFailure`
 - `infrastructure/impl/agent/` — `AgentGateway`, `AgentTurnRequest`, `AgentTurnResult`, `SidecarAgentClient`
 - `infrastructure/repository/agent/` — `AgentSessionRepository`, `AgentTurnHistoryRepository`,
   `AgentTurnRecord`, `AgentTurnOutcome`, `AgentTurnOutcomeUsage`, `RequesterTurnUsage`; the ledger

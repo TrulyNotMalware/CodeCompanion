@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-19 -->
 
 # infrastructure/repository/outbox/schema
 
@@ -11,7 +11,7 @@ decoding.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `OutboxMessage.kt` | `@Entity @Table(name = "outbox_message", indexes = [idx_outbox_idempotency_key])`. PK `event_id: String`; `idempotency_key`, `publisher_id`, `transport` (`String`, default `SLACK`), `payload` (`MEDIUMTEXT` since V23, codec-encoded envelope), `created_at` (`@CreationTimestamp`, not updatable), `updated_at?` (`@UpdateTimestamp`), `schema_version` (`INT NOT NULL DEFAULT 2`, default `OutboxSchemaVersion.V2`), `attempt_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised only by the native claim statements, V20), `send_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised by `renewClaim`, lowered by `deferClaim`, V22). Body: `@Version var version: Long` and `var status: String = PENDING.name`, both `protected set`; `updateMessageStatus(MessageStatus)`. Also `MutableMap<String, Any>.toOutboxMessage()` for Debezium rows, converting epoch-micro `Long` timestamps to `LocalDateTime` before `jsonMapper.convertValue`. Implements `Persistable<String>`: a `@Transient` flag is true for a freshly built row and cleared by `@PostPersist`/`@PostLoad`, so `save()` of a new row is a plain `persist` (an application-assigned id with a primitive `@Version` would otherwise make Spring Data `merge`, issuing a SELECT before every INSERT on the busiest write path). Only new rows are ever saved; status changes go through the native CAS statements |
+| `OutboxMessage.kt` | `@Entity @Table(name = "outbox_message", indexes = [idx_outbox_idempotency_key])`. PK `event_id: String`; `idempotency_key`, `publisher_id`, `transport` (`String`, default `SLACK`), `payload` (`MEDIUMTEXT` since V23, codec-encoded envelope), `created_at` (`@CreationTimestamp`, not updatable), `updated_at?` (`@UpdateTimestamp`), `schema_version` (`INT NOT NULL DEFAULT 2`, default `OutboxSchemaVersion.V2`), `attempt_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised only by the native claim statements, V20), `send_count` (`INT NOT NULL DEFAULT 0`, `updatable = false`, default `0`; raised by `renewClaim`, lowered by `deferClaim`, V22). Body: `@Version var version: Long` and `var status: String = PENDING.name`, both `protected set`; `updateMessageStatus(MessageStatus)`. Also `MutableMap<String, Any>.toOutboxMessage()` for Debezium rows, converting epoch-micro `Long` timestamps to `LocalDateTime` before `jsonMapper.convertValue`; an `Exception` during the conversion is logged and rethrown wrapped in a `RuntimeException` (`runCatchingExceptions`), an `Error` propagates unwrapped (2026-10-15). Implements `Persistable<String>`: a `@Transient` flag is true for a freshly built row and cleared by `@PostPersist`/`@PostLoad`, so `save()` of a new row is a plain `persist` (an application-assigned id with a primitive `@Version` would otherwise make Spring Data `merge`, issuing a SELECT before every INSERT on the busiest write path). Only new rows are ever saved; status changes go through the native CAS statements |
 | `MessageStatus.kt` | `enum MessageStatus { INIT, FAILURE, SUCCESS, PENDING, IN_PROGRESS }` |
 | `OutboxSchemaVersion.kt` | `object OutboxSchemaVersion { const V2 = 2; const V3 = 3; const V4 = 4; const V5 = 5; const V6 = 6; val SUPPORTED: Set<Int> = setOf(V2, V3, V4, V5, V6) }`. V3 = an envelope with a non-empty `continuation` (2026-10-02); V4 = a `ReplaceMessage` carrying a `fallback` (2026-10-08); V5 (2026-10-12) marks rows whose `ChannelMessage` content is `MessageContent.AgentQuestion` (`/ask` root message); V6 (2026-10-14, B-2) marks rows where any part carries a `ChannelMessage` / `Ephemeral` `fallback: DirectReply` — nearly every slash reply. During a two-replica rollout an old replica holds V6 rows `IN_PROGRESS` until the new one's sweep reclaims them, and a rollback to a pre-V6 binary holds them until the 24 h give-up |
 
@@ -55,7 +55,8 @@ decoding.
 `OutboxMessageTest` (BehaviorSpec, no Spring) checks `CodecOutboundMessagePort.toRow` output (identity
 columns, `schemaVersion == V2`, V3 for a chain head, V4/V5/V6 by the highest part, `status == PENDING`, fresh `eventId` per call, payload round-trip) and
 `updateMessageStatus`, and `toOutboxMessage()` with a micros `created_at` and a millis `updated_at` while the JVM default
-zone is set to `Asia/Seoul` (both decode to the stored wall-clock value). The H2 mapping is exercised by
+zone is set to `Asia/Seoul` (both decode to the stored wall-clock value), plus a map whose reads throw (an `Exception`
+wrapped with its cause, an `Error` unwrapped). The H2 mapping is exercised by
 `../MessageOutboxRepositoryTest`; `:application`'s `DebeziumLogTailingProcessorTest` runs the converter on full envelopes.
 
 ### Common Patterns

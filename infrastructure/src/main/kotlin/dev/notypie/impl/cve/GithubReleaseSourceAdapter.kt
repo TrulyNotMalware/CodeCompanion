@@ -1,6 +1,7 @@
 package dev.notypie.impl.cve
 
 import dev.notypie.common.jsonMapper
+import dev.notypie.common.runCatchingExceptions
 import dev.notypie.impl.http.BoundedResponse
 import dev.notypie.impl.http.sendWithinDeadline
 import dev.notypie.repository.cve.CveTopic
@@ -22,14 +23,13 @@ class GithubReleaseSourceAdapter(
     private val requestTimeout: Duration,
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
     private val maxBodyBytes: Int = DEFAULT_MAX_BODY_BYTES,
-) : SourceAdapter {
     private val httpClient: HttpClient =
         HttpClient
             .newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(5L))
-            .build()
-
+            .build(),
+) : SourceAdapter {
     override fun supports(sourceType: CveSourceType): Boolean = sourceType == CveSourceType.GITHUB_RELEASE
 
     fun anonymousLimitWarning(topicCount: Int, requestsPerTopicPerHour: Long): String? {
@@ -53,13 +53,9 @@ class GithubReleaseSourceAdapter(
                 .build()
 
         val response =
-            runCatching {
+            runCatchingExceptions {
                 httpClient.sendWithinDeadline(request = request, deadline = requestTimeout, maxBodyBytes = maxBodyBytes)
             }.getOrElse { ex ->
-                if (ex is InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    throw ex
-                }
                 log.warn(ex) { "GitHub releases request failed for topic=${topic.topicKey}" }
                 return emptyList()
             }

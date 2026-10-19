@@ -12,6 +12,7 @@ import com.slack.api.methods.response.chat.ChatUpdateResponse
 import com.slack.api.util.http.SlackHttpClient
 import com.slack.api.util.http.SlackHttpClient.buildOkHttpClient
 import dev.notypie.common.jsonMapper
+import dev.notypie.common.runCatchingExceptions
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -88,10 +89,10 @@ private const val RESPONSE_URL_METHOD = "response_url"
 private const val MAX_RESPONSE_BODY_BYTES = 4_096L
 private const val MAX_FAILURE_REASON_CHARS = 200
 private val MAX_INLINE_RETRY_AFTER: Duration = Duration.ofSeconds(3L)
-private val IDEMPOTENT_TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
+private val IDEMPOTENT_TRANSIENT_EXCEPTIONS: List<Class<out Exception>> =
     listOf(IOException::class.java, SlackApiException::class.java, SlackTransientErrorException::class.java)
 
-private val NOT_SENT_TRANSIENT_EXCEPTIONS: List<Class<out Throwable>> =
+private val NOT_SENT_TRANSIENT_EXCEPTIONS: List<Class<out Exception>> =
     listOf(SlackRequestNotSentException::class.java, SlackTransientErrorException::class.java)
 val SLACK_CALL_TIMEOUT: Duration = Duration.ofSeconds(6L)
 const val RATE_LIMITED_REASON = "ratelimited"
@@ -406,7 +407,7 @@ class ApplicationMessageDispatcher(
 
     override fun dispatchImmediate(event: OpenViewPayloadContents): CommandOutput {
         val response =
-            runCatching {
+            runCatchingExceptions {
                 slack.methods(botToken).viewsOpen { builder ->
                     builder.triggerId(event.triggerId).viewAsString(event.viewJson)
                 }

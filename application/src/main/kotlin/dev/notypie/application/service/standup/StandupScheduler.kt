@@ -1,5 +1,6 @@
 package dev.notypie.application.service.standup
 
+import dev.notypie.common.containFailure
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component

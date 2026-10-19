@@ -1,5 +1,6 @@
 package dev.notypie.impl.command
 
+import dev.notypie.common.runCatchingExceptions
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
@@ -166,7 +167,7 @@ class RestClientRequester(
         authorizationHeader: String?,
         responseType: Class<T>,
         uriVariables: Map<String, Any>,
-    ) = runCatching {
+    ) = runCatchingExceptions {
         validateUri(uri)
         logger.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
         method
@@ -188,7 +189,7 @@ class RestClientRequester(
         body: Any?,
         contentType: MediaType?,
         responseType: Class<T>,
-    ) = runCatching {
+    ) = runCatchingExceptions {
         validateUri(uri)
         logger.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
         method

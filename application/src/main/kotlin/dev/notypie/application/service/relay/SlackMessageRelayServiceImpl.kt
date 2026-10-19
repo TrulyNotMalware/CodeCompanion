@@ -2,6 +2,7 @@ package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.relayQueueCapacity
+import dev.notypie.common.runCatchingExceptions
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.SLACK_DISPATCH_TIME_BOUND
@@ -31,6 +32,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.SmartLifecycle
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.kafka.listener.AbstractMessageListenerContainer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
@@ -268,7 +270,7 @@ class SlackMessageRelayServiceImpl(
 
     private fun renew(claim: OutboxClaim): Boolean {
         val renewed =
-            runCatching {
+            runCatchingExceptions {
                 outboxRepository.renewClaim(eventId = claim.row.eventId, attemptCount = claim.attempt, now = now())
             }.getOrElse { exception ->
                 logger.error(exception) {
@@ -288,7 +290,7 @@ class SlackMessageRelayServiceImpl(
         val wait = minOf(retryAfter ?: DEFAULT_RATE_LIMIT_WAIT, giveUpAfter) + spreadOf(claim = claim)
         val eligibleAt = minOf(now().plus(wait), claim.row.createdAt.plus(giveUpAfter))
         val deferred =
-            runCatching {
+            runCatchingExceptions {
                 outboxRepository.deferClaim(
                     eventId = claim.row.eventId,
                     attemptCount = claim.attempt,
@@ -348,10 +350,16 @@ class SlackMessageRelayServiceImpl(
     }
 
     private fun writeTerminal(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope? = null): Boolean {
+        var attempt = 0
         val completed =
             try {
                 retryService.execute(
-                    action = { completeAndChain(claim = claim, status = status, next = next) },
+                    action = {
+                        attempt++
+                        val written = completeAndChain(claim = claim, status = status, next = next)
+                        val lostAck = written == 0 && attempt > 1 && recordedEarlier(claim = claim, status = status)
+                        if (lostAck) 1 else written
+                    },
                     maxAttempts = STATUS_WRITE_ATTEMPTS,
                 )
             } catch (exception: Exception) {
@@ -368,6 +376,11 @@ class SlackMessageRelayServiceImpl(
         }
         return completed == 1
     }
+
+    private fun recordedEarlier(claim: OutboxClaim, status: MessageStatus): Boolean =
+        outboxRepository
+            .findByIdOrNull(id = claim.row.eventId)
+            ?.let { row -> row.status == status.name && row.attemptCount == claim.attempt } == true
 
     private fun completeAndChain(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope?): Int =
         checkNotNull(

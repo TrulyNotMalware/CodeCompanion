@@ -1,6 +1,7 @@
 package dev.notypie.application.configurations
 
 import dev.notypie.application.service.relay.RELAY_RECORD_TIME_BOUND
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.DependsOn
@@ -17,6 +18,16 @@ const val DEFAULT_EXECUTOR_SHUTDOWN_AWAIT_SECONDS = 10
 val RECORD_SHUTDOWN_WAIT: Duration = Duration.ofSeconds(Math.ceilDiv(RELAY_RECORD_TIME_BOUND.toMillis(), 1_000L))
 
 fun relayQueueCapacity(appConfig: AppConfig): Int = appConfig.outbox.polling.batchSize
+
+private val relayLog = KotlinLogging.logger {}
+
+internal val RELAY_UNCAUGHT_ERROR_LOGGER: Thread.UncaughtExceptionHandler =
+    Thread.UncaughtExceptionHandler { thread, failure ->
+        relayLog.error(failure) {
+            "Relay worker ${thread.name} ended on an uncaught ${failure::class.java.name}; its claim stays " +
+                "IN_PROGRESS for the recovery sweep"
+        }
+    }
 
 @Configuration
 @EnableAsync
@@ -37,7 +48,10 @@ class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
     @Bean(name = ["relayTaskExecutor"])
     @DependsOn("entityManagerFactory")
     fun relayTaskExecutor(appConfig: AppConfig): Executor =
-        ThreadPoolTaskExecutor().apply {
+        object : ThreadPoolTaskExecutor() {
+            override fun newThread(runnable: Runnable): Thread =
+                super.newThread(runnable).apply { uncaughtExceptionHandler = RELAY_UNCAUGHT_ERROR_LOGGER }
+        }.apply {
             corePoolSize = 4
             maxPoolSize = 4
             queueCapacity = relayQueueCapacity(appConfig = appConfig)

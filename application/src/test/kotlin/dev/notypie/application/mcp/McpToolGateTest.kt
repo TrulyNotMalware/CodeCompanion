@@ -10,12 +10,14 @@ import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.repository.mcp.McpToolCallHistoryRepository
 import dev.notypie.repository.mcp.McpToolCallRecord
 import dev.notypie.repository.mcp.schema.McpToolCallOutcome
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -154,6 +156,84 @@ class McpToolGateTest :
                     verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
                     recorded.captured.outcome shouldBe McpToolCallOutcome.FAILED
                     recorded.captured.errorCode shouldBe "IllegalStateException"
+                }
+            }
+        }
+
+        given("a tool body that throws an Error") {
+            val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
+            val gate = gateWith(role = UserRole.ADMIN, auditRepository = auditRepository)
+            val thrown = StackOverflowError("deep")
+
+            `when`("dispatched") {
+                val escaped =
+                    shouldThrow<StackOverflowError> {
+                        gate.execute(
+                            transportContext = contextWith(token = token),
+                            toolName = "list_roles",
+                            requiredPermission = CommandPermission.ADMINISTRATION,
+                        ) { throw thrown }
+                    }
+
+                then("the same Error propagates after one FAILED row marked Aborted") {
+                    escaped shouldBeSameInstanceAs thrown
+                    val recorded = slot<McpToolCallRecord>()
+                    verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
+                    recorded.captured.outcome shouldBe McpToolCallOutcome.FAILED
+                    recorded.captured.errorCode shouldBe ABORTED
+                }
+            }
+        }
+
+        given("a tool body that is interrupted") {
+            val auditRepository = mockk<McpToolCallHistoryRepository>(relaxed = true)
+            val gate = gateWith(role = UserRole.ADMIN, auditRepository = auditRepository)
+            val thrown = InterruptedException("shutting down")
+
+            `when`("dispatched") {
+                var keptInterrupt = false
+                val escaped =
+                    try {
+                        shouldThrow<InterruptedException> {
+                            gate.execute(
+                                transportContext = contextWith(token = token),
+                                toolName = "list_roles",
+                                requiredPermission = CommandPermission.ADMINISTRATION,
+                            ) { throw thrown }
+                        }
+                    } finally {
+                        keptInterrupt = Thread.interrupted()
+                    }
+
+                then("the interrupt propagates with its flag after one FAILED row marked Aborted") {
+                    escaped shouldBeSameInstanceAs thrown
+                    keptInterrupt shouldBe true
+                    val recorded = slot<McpToolCallRecord>()
+                    verify(exactly = 1) { auditRepository.record(call = capture(recorded)) }
+                    recorded.captured.outcome shouldBe McpToolCallOutcome.FAILED
+                    recorded.captured.errorCode shouldBe ABORTED
+                }
+            }
+        }
+
+        given("an audit repository that throws an Error") {
+            val auditRepository = mockk<McpToolCallHistoryRepository>()
+            val thrown = StackOverflowError("audit")
+            every { auditRepository.record(call = any()) } throws thrown
+            val gate = gateWith(role = UserRole.ADMIN, auditRepository = auditRepository)
+
+            `when`("a tool is dispatched successfully") {
+                val escaped =
+                    shouldThrow<StackOverflowError> {
+                        gate.execute(
+                            transportContext = contextWith(token = token),
+                            toolName = "get_status",
+                            requiredPermission = CommandPermission.OPERATIONS,
+                        ) { "tool output" }
+                    }
+
+                then("the same Error propagates instead of being logged as a failed audit write") {
+                    escaped shouldBeSameInstanceAs thrown
                 }
             }
         }

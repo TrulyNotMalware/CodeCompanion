@@ -1,5 +1,6 @@
 package dev.notypie.application.service.cve.collector
 
+import dev.notypie.common.containFailure
 import dev.notypie.impl.cve.SourceAdapter
 import dev.notypie.repository.cve.CveCollectLedgerRepository
 import dev.notypie.repository.cve.CveEventRepository
@@ -30,11 +31,13 @@ class CveCollector(
                 log.warn { "CVE collection interrupted before topic=${topic.topicKey}; stopping this tick" }
                 return
             }
-            runCatching { collectTopic(topic = topic, windowStart = windowStart) }
-                .onFailure { ex -> log.error(ex) { "CVE collection failed for topic=${topic.topicKey}" } }
+            containFailure(
+                onFailure = { ex -> log.error(ex) { "CVE collection failed for topic=${topic.topicKey}" } },
+            ) { collectTopic(topic = topic, windowStart = windowStart) }
         }
-        runCatching { cveCollectLedgerRepository.deleteOlderThan(cutoff = now.minusDays(LEDGER_RETENTION_DAYS)) }
-            .onFailure { ex -> log.error(ex) { "CVE collect ledger prune failed" } }
+        containFailure(onFailure = { ex -> log.error(ex) { "CVE collect ledger prune failed" } }) {
+            cveCollectLedgerRepository.deleteOlderThan(cutoff = now.minusDays(LEDGER_RETENTION_DAYS))
+        }
     }
 
     private fun collectTopic(topic: CveTopic, windowStart: LocalDateTime) {

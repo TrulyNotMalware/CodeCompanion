@@ -101,7 +101,7 @@ interface MessageOutboxRepository : JpaRepository<OutboxMessage, String> {
     @Query(
         """
         UPDATE outbox_message
-        SET status = 'FAILURE', updated_at = :now
+        SET status = 'FAILURE', attempt_count = attempt_count + 1, updated_at = :now
         WHERE event_id = :eventId
           AND status = 'IN_PROGRESS'
           AND attempt_count = :attemptCount

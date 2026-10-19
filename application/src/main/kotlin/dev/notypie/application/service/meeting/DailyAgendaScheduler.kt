@@ -1,5 +1,6 @@
 package dev.notypie.application.service.meeting
 
+import dev.notypie.common.containFailure
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -12,10 +13,8 @@ class DailyAgendaScheduler(
 ) {
     @Scheduled(fixedDelay = 60_000)
     fun tick() {
-        runCatching {
+        containFailure(onFailure = { ex -> log.error(ex) { "Daily agenda scheduler tick failed" } }) {
             schedulingService.sendDailyAgenda()
-        }.onFailure { ex ->
-            log.error(ex) { "Daily agenda scheduler tick failed" }
         }
     }
 }

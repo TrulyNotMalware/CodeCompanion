@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
 
 # application/service/cve
 
@@ -34,7 +34,8 @@ Each stage owns a distinct exactly-once mechanism. Preserve them:
 - **Collect** — a topic claims its collect window once via `CveCollectLedgerRepository`. A lost claim
   means another instance owns that window, so the topic is skipped this tick. Raw events are written
   with `insertIgnore`, making overlapping windows idempotent. Every topic runs inside its own
-  `runCatching` so one bad source never aborts the rest; the ledger is pruned past its retention.
+  `containFailure` (infrastructure `common`) so one bad source's `Exception` never aborts the rest, while an
+  `Error` ends the tick; the ledger is pruned past its retention.
 - **Summarize** — `CveSummaryWorker` first calls `resetStuck` to fail rows a crashed worker
   abandoned (one retry spent, one backoff step), then claims events one at a time by **claim-token CAS**, producing exactly one summary
   per event. A single failure is recorded as `FAILED` with backoff (bounded by `maxRetries`) and never
@@ -66,7 +67,9 @@ covered by H2-backed specs in `infrastructure/src/test/kotlin/dev/notypie/reposi
 `CveEventCreator` / `CveTopicCreator` (infrastructure), `CveTopicConfigCreator` (config).
 
 ### Common Patterns
-- `@Scheduled(fixedDelay = ...)` ticks with per-item `runCatching` isolation.
+- `@Scheduled(fixedDelay = ...)` ticks with per-item `containFailure` isolation (an `Exception` is logged, an
+  `Error` propagates). An interrupt leaves the tick with its flag set, like every other tick (2026-10-15); Spring's
+  scheduler logs it, normally only at shutdown.
 - Tunables (`batchSize`, `maxRetries`, `backoffMinutes`, `stuckMinutes`, `windowMinutes`) are constructor
   parameters bound from `AppConfig.Cve` in `CveConfiguration` — do not hardcode them in the worker.
 - `runInTx` / `TransactionTemplate` for per-unit transactions inside a scheduled batch.

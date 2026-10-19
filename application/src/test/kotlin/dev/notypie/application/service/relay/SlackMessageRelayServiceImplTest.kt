@@ -3,6 +3,7 @@ package dev.notypie.application.service.relay
 import ch.qos.logback.classic.Level
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.AsyncConfig
+import dev.notypie.application.configurations.RELAY_UNCAUGHT_ERROR_LOGGER
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
@@ -62,6 +63,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionSystemException
 import java.time.Duration
 import java.time.LocalDateTime
+import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
@@ -423,6 +425,7 @@ class SlackMessageRelayServiceImplTest :
                                 messageTs = "1700000000.000300",
                             ),
                         )
+                    verify(exactly = 0) { outboxRepository.findById(any()) }
                 }
             }
 
@@ -684,6 +687,117 @@ class SlackMessageRelayServiceImplTest :
                 }
             }
 
+            `when`("the status write throws an Error") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val thrown = StackOverflowError("deep")
+                val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                every {
+                    outboxRepository.completeClaim(eventId = any(), attemptCount = any(), status = any(), now = any())
+                } throws thrown
+                val service =
+                    createRelayService(outboxRepository = outboxRepository, applicationEventPublisher = eventPublisher)
+
+                then("the same Error reaches the dispatching thread after one attempt, and no outcome is published") {
+                    shouldThrow<StackOverflowError> {
+                        service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+                    } shouldBeSameInstanceAs thrown
+                    verify(exactly = 1) {
+                        outboxRepository.completeClaim(
+                            eventId = any(),
+                            attemptCount = any(),
+                            status = any(),
+                            now = any(),
+                        )
+                    }
+                    verify(exactly = 0) { eventPublisher.publishEvent(ofType<OutboxUpdateEvent>()) }
+                }
+            }
+
+            `when`("renewing the claim throws an Exception") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val messageDispatcher = mockk<MessageDispatcher>()
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                every { outboxRepository.renewClaim(eventId = any(), attemptCount = any(), now = any()) } throws
+                    DataAccessResourceFailureException("connection lost")
+                val service =
+                    createRelayService(outboxRepository = outboxRepository, messageDispatcher = messageDispatcher)
+
+                then("it is logged and the row is left to the sweep without a send") {
+                    shouldNotThrowAny { service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1)) }
+                    verify(exactly = 0) { messageDispatcher.dispatch(event = any()) }
+                }
+            }
+
+            `when`("renewing the claim throws an Error") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val thrown = StackOverflowError("deep")
+                val messageDispatcher = mockk<MessageDispatcher>()
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                every { outboxRepository.renewClaim(eventId = any(), attemptCount = any(), now = any()) } throws thrown
+                val service =
+                    createRelayService(outboxRepository = outboxRepository, messageDispatcher = messageDispatcher)
+
+                then("the same Error propagates and nothing is sent") {
+                    shouldThrow<StackOverflowError> {
+                        service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+                    } shouldBeSameInstanceAs thrown
+                    verify(exactly = 0) { messageDispatcher.dispatch(event = any()) }
+                }
+            }
+
+            `when`("deferring a rate-limited row throws an Exception") {
+                val eventId = UUID.randomUUID().toString()
+                val row = createOutboxRow(eventId = eventId)
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                every { outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = any()) } throws
+                    DataAccessResourceFailureException("connection lost")
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher =
+                            dispatcherReturning(output = RateLimitedOutput(event = payload(), retryAfter = null)),
+                    )
+
+                then("the deferral was attempted, nothing escapes and no terminal status is written") {
+                    shouldNotThrowAny { service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1)) }
+                    verify(exactly = 1) {
+                        outboxRepository.deferClaim(eventId = eventId, attemptCount = 1, updatedAt = any())
+                    }
+                    verify(exactly = 0) {
+                        outboxRepository.completeClaim(
+                            eventId = any(),
+                            attemptCount = any(),
+                            status = any(),
+                            now = any(),
+                        )
+                    }
+                }
+            }
+
+            `when`("deferring a rate-limited row throws an Error") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val thrown = StackOverflowError("deep")
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                every { outboxRepository.deferClaim(eventId = any(), attemptCount = any(), updatedAt = any()) } throws
+                    thrown
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher =
+                            dispatcherReturning(output = RateLimitedOutput(event = payload(), retryAfter = null)),
+                    )
+
+                then("the same Error propagates") {
+                    shouldThrow<StackOverflowError> {
+                        service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+                    } shouldBeSameInstanceAs thrown
+                }
+            }
+
             `when`("a claimed row is older than the give-up window") {
                 val rowEventId = UUID.randomUUID()
                 val row =
@@ -828,6 +942,7 @@ class SlackMessageRelayServiceImplTest :
                             )
                         } returns nextRow
                     }
+                val published = mutableListOf<Any>()
                 val service =
                     createRelayService(
                         outboxRepository = outboxRepository,
@@ -835,10 +950,16 @@ class SlackMessageRelayServiceImplTest :
                         payloadRenderer =
                             mockk { every { render(row = row) } returns RenderedRow(payload = payload(), next = next) },
                         messageDispatcher = dispatcherReturning(output = result),
+                        applicationEventPublisher = mockk { every { publishEvent(capture(published)) } returns Unit },
                         transactionManager = transactionManager,
                     )
 
                 fun dispatch() = service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+
+                fun storedAs(status: MessageStatus, attemptCount: Int) {
+                    every { outboxRepository.findById(eventId) } returns
+                        Optional.of(createOutboxRow(eventId = eventId, status = status, attemptCount = attemptCount))
+                }
 
                 fun completed(status: MessageStatus) =
                     outboxRepository.completeClaim(
@@ -915,11 +1036,61 @@ class SlackMessageRelayServiceImplTest :
                     }
                 val lane =
                     ChainLane(result = delivered(), completed = listOf(1, 0), transactionManager = transactionManager)
+                lane.storedAs(status = MessageStatus.SUCCESS, attemptCount = 1)
                 lane.dispatch()
 
                 then("the retry finds the row already recorded and the next part is staged only once") {
                     verify(exactly = 2) { lane.completed(status = MessageStatus.SUCCESS) }
                     verify(exactly = 1) { lane.outboxRepository.save(any()) }
+                }
+
+                then("the re-read row counts as this owner's write, so the success event is still published") {
+                    lane.published
+                        .filterIsInstance<OutboxUpdateEvent>()
+                        .single()
+                        .shouldBeInstanceOf<MessagePublishSuccessEvent>()
+                        .eventId shouldBe UUID.fromString(lane.eventId)
+                }
+            }
+
+            `when`("the SUCCESS write fails at commit and a newer claim owns the row when it is retried") {
+                val transactionManager =
+                    createStubTransactionManager().also { manager ->
+                        every { manager.commit(any()) } throws
+                            TransactionSystemException("commit failed") andThen Unit
+                    }
+                val lane =
+                    ChainLane(result = delivered(), completed = listOf(1, 0), transactionManager = transactionManager)
+                lane.storedAs(status = MessageStatus.IN_PROGRESS, attemptCount = 2)
+                lane.dispatch()
+
+                then("the row is not this owner's, so no outcome event is published") {
+                    lane.published.filterIsInstance<OutboxUpdateEvent>() shouldBe emptyList()
+                }
+            }
+
+            listOf(
+                "a newer claim already recorded SUCCESS" to (MessageStatus.SUCCESS to 2),
+                "the same claim's row holds another status" to (MessageStatus.FAILURE to 1),
+            ).forEach { (what, stored) ->
+                `when`("the SUCCESS write fails at commit and, on the retry, $what") {
+                    val transactionManager =
+                        createStubTransactionManager().also { manager ->
+                            every { manager.commit(any()) } throws
+                                TransactionSystemException("commit failed") andThen Unit
+                        }
+                    val lane =
+                        ChainLane(
+                            result = delivered(),
+                            completed = listOf(1, 0),
+                            transactionManager = transactionManager,
+                        )
+                    lane.storedAs(status = stored.first, attemptCount = stored.second)
+                    lane.dispatch()
+
+                    then("both the status and the attempt must match, so no outcome event is published") {
+                        lane.published.filterIsInstance<OutboxUpdateEvent>() shouldBe emptyList()
+                    }
                 }
             }
         }
@@ -1312,6 +1483,52 @@ class SlackMessageRelayServiceImplTest :
                         .shouldBeInstanceOf<ThreadPoolExecutor.AbortPolicy>()
                     reservations.toSet() shouldBe setOf(pool.queueCapacity)
                     dispatched.get() shouldBe rounds * pool.queueCapacity
+                }
+            }
+
+            `when`("a claim on the production pool throws an Error") {
+                val pool = AsyncConfig().relayTaskExecutor(appConfig = AppConfig()) as ThreadPoolTaskExecutor
+                val failingId = UUID.randomUUID().toString()
+                val failing = OutboxClaim(row = createOutboxRow(eventId = failingId), attempt = 1)
+                val next = newClaim()
+                val nextDispatched = CountDownLatch(1)
+                val messageDispatcher = mockk<MessageDispatcher>()
+                every { messageDispatcher.dispatch(event = any()) } answers
+                    { delivered().also { nextDispatched.countDown() } }
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                every {
+                    outboxRepository.renewClaim(eventId = failingId, attemptCount = any(), now = any())
+                } throws StackOverflowError("deep")
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        messageDispatcher = messageDispatcher,
+                        relayTaskExecutor = pool,
+                    )
+                service.batchPendingMessages(claims = listOf(failing))
+                service.batchPendingMessages(claims = listOf(next))
+                val nextRan = nextDispatched.await(10L, TimeUnit.SECONDS)
+                val workerHandler =
+                    pool.threadPoolExecutor.threadFactory
+                        .newThread {}
+                        .uncaughtExceptionHandler
+                pool.shutdown()
+                val logged =
+                    captureLogs(loggerName = AsyncConfig::class.java.packageName) {
+                        RELAY_UNCAUGHT_ERROR_LOGGER.uncaughtException(
+                            Thread(null, {}, "relay-9"),
+                            StackOverflowError("deep"),
+                        )
+                    }.messagesAt(level = Level.ERROR)
+
+                then(
+                    "the pool's threads log an escaping Error with the thread name and the pool goes on with the next claim",
+                ) {
+                    nextRan shouldBe true
+                    workerHandler shouldBeSameInstanceAs RELAY_UNCAUGHT_ERROR_LOGGER
+                    logged.single { it.startsWith("Relay worker relay-9 ") } shouldStartWith
+                        "Relay worker relay-9 ended on an uncaught java.lang.StackOverflowError"
                 }
             }
 

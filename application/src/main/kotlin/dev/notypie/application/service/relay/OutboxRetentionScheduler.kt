@@ -1,6 +1,7 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.common.containFailure
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.scheduling.annotation.Scheduled
@@ -22,8 +23,7 @@ class OutboxRetentionScheduler(
 
     @Scheduled(fixedDelay = 3_600_000L, initialDelay = 300_000L)
     fun purge() {
-        runCatching { purgeOnce() }
-            .onFailure { log.error(it) { "Outbox retention purge failed" } }
+        containFailure(onFailure = { log.error(it) { "Outbox retention purge failed" } }) { purgeOnce() }
     }
 
     fun purgeOnce(): Int {
