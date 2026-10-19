@@ -11,6 +11,7 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -293,6 +294,48 @@ class OutboxRecoverySchedulerTest :
 
                 then("the relay is not touched") {
                     verify(exactly = 0) { relay.batchPendingMessages(claims = any()) }
+                }
+            }
+        }
+
+        given("a scheduled sweep whose read fails") {
+            `when`("the repository throws an Exception") {
+                val repository = mockk<MessageOutboxRepository>()
+                every { repository.findStuckInProgress(olderThan = any(), limit = any()) } throws
+                    IllegalStateException("db down")
+
+                then("the tick logs it and returns") {
+                    shouldNotThrowAny { scheduler(repository = repository, relay = relayWithSlots()).recover() }
+                }
+            }
+
+            `when`("the repository throws an Error") {
+                val repository = mockk<MessageOutboxRepository>()
+                val thrown = StackOverflowError("deep")
+                every { repository.findStuckInProgress(olderThan = any(), limit = any()) } throws thrown
+
+                then("the same Error propagates out of the tick") {
+                    shouldThrow<StackOverflowError> {
+                        scheduler(repository = repository, relay = relayWithSlots()).recover()
+                    } shouldBeSameInstanceAs thrown
+                }
+            }
+
+            `when`("the read is interrupted") {
+                val repository = mockk<MessageOutboxRepository>()
+                every { repository.findStuckInProgress(olderThan = any(), limit = any()) } throws
+                    InterruptedException("shutting down")
+
+                then("the interrupt is rethrown with the flag restored") {
+                    var keptInterrupt = false
+                    try {
+                        shouldThrow<InterruptedException> {
+                            scheduler(repository = repository, relay = relayWithSlots()).recover()
+                        }
+                    } finally {
+                        keptInterrupt = Thread.interrupted()
+                    }
+                    keptInterrupt shouldBe true
                 }
             }
         }

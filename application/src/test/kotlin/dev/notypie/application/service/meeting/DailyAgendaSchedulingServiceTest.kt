@@ -9,8 +9,11 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.meeting.AgendaDispatchRepository
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
+import io.kotest.assertions.throwables.shouldNotThrowAny
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
@@ -313,6 +316,44 @@ class DailyAgendaSchedulingServiceTest :
                 then("the claim row commits together with the enqueued DM") {
                     claimRows() shouldBe 1
                     verify(exactly = 1) { outboxRepo.save(any()) }
+                }
+            }
+        }
+
+        given("the daily agenda scheduler tick") {
+            `when`("the service throws an Exception") {
+                val service = mockk<DailyAgendaSchedulingService>()
+                every { service.sendDailyAgenda() } throws IllegalStateException("db down")
+
+                then("the tick logs it and returns") {
+                    shouldNotThrowAny { DailyAgendaScheduler(schedulingService = service).tick() }
+                }
+            }
+
+            `when`("the service throws an Error") {
+                val service = mockk<DailyAgendaSchedulingService>()
+                val thrown = StackOverflowError("deep")
+                every { service.sendDailyAgenda() } throws thrown
+
+                then("the same Error propagates out of the tick") {
+                    shouldThrow<StackOverflowError> {
+                        DailyAgendaScheduler(schedulingService = service).tick()
+                    } shouldBeSameInstanceAs thrown
+                }
+            }
+
+            `when`("the service is interrupted") {
+                val service = mockk<DailyAgendaSchedulingService>()
+                every { service.sendDailyAgenda() } throws InterruptedException("shutting down")
+
+                then("the interrupt is rethrown with the flag restored") {
+                    var keptInterrupt = false
+                    try {
+                        shouldThrow<InterruptedException> { DailyAgendaScheduler(schedulingService = service).tick() }
+                    } finally {
+                        keptInterrupt = Thread.interrupted()
+                    }
+                    keptInterrupt shouldBe true
                 }
             }
         }

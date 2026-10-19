@@ -1,6 +1,6 @@
 # 코딩 스타일 가이드
 
-_type: guide · updated: 2026-10-01_
+_type: guide · updated: 2026-10-15_
 
 > Kotlin답게, non-null 우선으로, 주석 대신 코드가 설명하게, 파일은 적게 — 그리고 리팩토링에는 반드시
 > 테스트가 따라온다.
@@ -35,6 +35,7 @@ _type: guide · updated: 2026-10-01_
 | Jackson | 모듈 공용 `dev.notypie.common.jsonMapper` 하나를 import한다. 별도 인스턴스는 다른 설정이 꼭 필요한 곳(MCP 전송, 스코프 토큰 코덱)에만 |
 | 트랜잭션 | `@Transactional`은 Repository `Impl`에. 앰비언트 트랜잭션이 없는 스케줄러·비동기 경로는 `TransactionTemplate.runInTx`로 경계를 명시 |
 | 예외 | `CodeCompanionRuntimeException` + `ErrorCode` enum + `exceptionDetails {}` — [error-handling-and-validation.md](error-handling-and-validation.md) |
+| 실패 경계 | 경계에서 `runCatching`·`catch (Throwable)`로 `Error`를 삼키지 않는다. `containFailure` / `runCatchingExceptions`(`dev.notypie.common`) 또는 타입을 지정한 `catch`를 쓴다. `Throwable`은 정리 후 같은 인스턴스를 다시 던질 때만(결정 #48) |
 | 검증 | 애그리거트 불변식은 `init`의 `validate(className = this.javaClass.simpleName) { ... }` |
 
 ## 테스트와 함께

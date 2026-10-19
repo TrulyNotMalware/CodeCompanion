@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-03 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # infrastructure/impl/retry
 
@@ -11,7 +11,7 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `RetryService.kt` | `class RetryService()`. `fun <T> execute(action: () -> T, recoveryCallBack: (() -> T)? = null, maxAttempts = 3, initialDelay = 100, multiplier = 2.0, maxDelay = 10000, jitter = 10, exceptions = listOf(Exception::class.java)): T` looks up (or builds once) a `RetryTemplate` per distinct policy in a `ConcurrentHashMap<PolicyKey, RetryTemplate>` and runs on that; a `RetryException` invokes `recoveryCallBack` or is rethrown. `maxAttempts` is the total execution count (`maxRetries = maxAttempts - 1`). Top-level `retryTimeBound(attemptTimeout, maxAttempts = 3)`: the longest a run of the default policy takes when every attempt fails after `attemptTimeout` — the attempts plus each backoff at its jitter maximum, the interval capped at `MAX_DELAY` and the jitter scaled by `interval / INITIAL_DELAY` as Spring 7's `ExponentialBackOff.applyJitter` does (second wait ≤ 0.2 s + 20 ms; 3 × 6 s → 18.33 s); the dispatcher's `SLACK_DISPATCH_TIME_BOUND` and the relay's shutdown budget are built on it |
+| `RetryService.kt` | `class RetryService()`. `fun <T> execute(action: () -> T, recoveryCallBack: (() -> T)? = null, maxAttempts = 3, initialDelay = 100, multiplier = 2.0, maxDelay = 10000, jitter = 10, exceptions = listOf(Exception::class.java)): T` looks up (or builds once) a `RetryTemplate` per distinct policy in a `ConcurrentHashMap<PolicyKey, RetryTemplate>` and runs on that; a `RetryException` whose `cause` is an `Error` rethrows that `Error` (no recovery); any other `RetryException` invokes `recoveryCallBack` or is rethrown. `maxAttempts` is the total execution count (`maxRetries = maxAttempts - 1`). Top-level `retryTimeBound(attemptTimeout, maxAttempts = 3)`: the longest a run of the default policy takes when every attempt fails after `attemptTimeout` — the attempts plus each backoff at its jitter maximum, the interval capped at `MAX_DELAY` and the jitter scaled by `interval / INITIAL_DELAY` as Spring 7's `ExponentialBackOff.applyJitter` does (second wait ≤ 0.2 s + 20 ms; 3 × 6 s → 18.33 s); the dispatcher's `SLACK_DISPATCH_TIME_BOUND` and the relay's shutdown budget are built on it |
 
 ## For AI Agents
 
@@ -21,12 +21,20 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
   thread's `3`. `RetryServiceTest` races two policies to keep this from regressing.
 - **`maxAttempts` is the total number of executions.** The service converts it to Spring's `maxRetries`
   (`maxAttempts - 1`), so the default `3` means three invocations, not four.
-- **Every failure surfaces as `RetryException` with the original exception as `cause`.** Spring 7 wraps
-  both an exhausted retry and an exception outside `exceptions` (not retried, one attempt). So
+- **Every `Exception` surfaces as `RetryException` with the original exception as `cause`.** Spring 7 wraps
+  both an exhausted retry and an exception outside `exceptions` (not retried, one attempt).
+  `RetryTemplate` catches `Throwable`, so it wraps an `Error` the same way (one attempt, since the default
+  policy includes only `Exception`); `execute` unwraps it and rethrows the `Error` itself, without running
+  `recoveryCallBack` (2026-10-15). Callers that catch `Exception` around `execute` therefore never see an `Error`
+  as an ordinary failure. So
   `recoveryCallBack` also runs for non-retryable exceptions, and `ApplicationMessageDispatcher` finds its
   `SlackRateLimitedException` by walking the cause chain and turns a `RetryException` whose `cause` is one of
   its transient types into the `transient_exhausted` outcome. `recoveryCallBack` returning `null` for a
   nullable `T` falls back to rethrowing. `RetryServiceTest` pins this contract.
+- The policy also `excludes(Error::class.java)`. Spring's `DefaultRetryPolicy` matches `includes` and `excludes` against the
+  whole cause chain (`ExceptionTypeFilter.match(throwable, true)`, spring-core 7.0.9), so an `Error` that wraps an included
+  `Exception` (`LinkageError(cause = IOException)`) is not retried either: it is wrapped once in `RetryException` and `execute`
+  rethrows it (2026-10-19). An `Exception` whose cause chain holds an `Error` is likewise left unretried.
 - **Retries only on exceptions.** Callers decide what is retryable by throwing: the dispatcher throws for
   transient Slack errors and returns an `ok = false` `CommandOutput` for permanent ones.
 - Callers: `impl/command/ApplicationMessageDispatcher` and `:application` `SlackMessageRelayServiceImpl` (terminal status
@@ -38,7 +46,7 @@ Spring Framework 7's core `RetryTemplate` and exposes per-call policy overrides 
 ./gradlew :infrastructure:test --tests 'dev.notypie.impl.retry.RetryServiceTest'
 ```
 The spec builds `RetryService()` directly with counting actions; it pins the `RetryException` + `cause`
-contract, success-after-failures with `maxAttempts = maxFailures + 1`, the recovery path, `maxAttempts` as the
+contract, the unwrapped `Error` (with or without an earlier retried `Exception`), success-after-failures with `maxAttempts = maxFailures + 1`, the recovery path, `maxAttempts` as the
 total execution count, and per-policy isolation under concurrency. Keep delays tiny (`initialDelay = 1`) so
 the suite stays fast.
 

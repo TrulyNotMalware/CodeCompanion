@@ -4,8 +4,10 @@ import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.schema.createCveEvent
 import dev.notypie.schema.createCveTopic
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -54,7 +56,12 @@ class CveSummaryWorkerTest :
             every {
                 eventRepository.markDone(id = 1L, token = capture(doneToken), summary = "SUMMARY", now = any())
             } returns 1
-            val worker = workerWith(eventRepository, topicRepository, summarizer)
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
 
             `when`("the tick runs") {
                 worker.tick()
@@ -86,7 +93,12 @@ class CveSummaryWorkerTest :
             every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
                 listOf(createCveEvent(id = 1L, topicId = 10L))
             every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } returns 0
-            val worker = workerWith(eventRepository, topicRepository, summarizer)
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
 
             `when`("the tick runs") {
                 worker.tick()
@@ -133,7 +145,12 @@ class CveSummaryWorkerTest :
                 )
             } returns 1
             every { eventRepository.markDone(id = 2L, token = any(), summary = "OK", now = any()) } returns 1
-            val worker = workerWith(eventRepository, topicRepository, summarizer)
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
 
             `when`("the tick runs") {
                 val before = LocalDateTime.now()
@@ -171,13 +188,22 @@ class CveSummaryWorkerTest :
             every { eventRepository.claimForSummary(id = any(), token = any(), now = any(), maxRetries = 5) } returns 1
             every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
             every { summarizer.summarize(request = any()) } throws InterruptedException("shutting down")
-            val worker = workerWith(eventRepository, topicRepository, summarizer)
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
 
             `when`("the tick runs") {
-                worker.tick()
-                val keptInterrupt = Thread.interrupted()
+                var keptInterrupt = false
+                try {
+                    shouldThrow<InterruptedException> { worker.tick() }
+                } finally {
+                    keptInterrupt = Thread.interrupted()
+                }
 
-                then("the retry budget is not spent and the tick stops before the next event") {
+                then("the retry budget is not spent and the interrupt leaves the tick before the next event") {
                     verify(
                         exactly = 0,
                     ) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
@@ -185,6 +211,73 @@ class CveSummaryWorkerTest :
                         exactly = 0,
                     ) { eventRepository.claimForSummary(id = 2L, token = any(), now = any(), maxRetries = 5) }
                     keptInterrupt shouldBe true
+                }
+            }
+        }
+
+        given("an event whose summarizer throws an Error, followed by another event") {
+            val eventRepository = mockk<CveEventRepository>(relaxed = true)
+            val topicRepository = mockk<CveTopicRepository>()
+            val summarizer = mockk<AiSummarizer>()
+            val thrown = StackOverflowError("deep")
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
+            every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
+                listOf(
+                    createCveEvent(id = 1L, topicId = 10L, retryCount = 0),
+                    createCveEvent(id = 2L, topicId = 10L, retryCount = 0),
+                )
+            every { eventRepository.claimForSummary(id = any(), token = any(), now = any(), maxRetries = 5) } returns 1
+            every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
+            every { summarizer.summarize(request = any()) } throws thrown
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
+
+            `when`("the tick runs") {
+                val escaped = shouldThrow<StackOverflowError> { worker.tick() }
+
+                then("the Error ends the tick without spending a retry or claiming the next event") {
+                    escaped shouldBeSameInstanceAs thrown
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.markFailed(id = any(), token = any(), nextAttemptAt = any(), now = any()) }
+                    verify(
+                        exactly = 0,
+                    ) { eventRepository.claimForSummary(id = 2L, token = any(), now = any(), maxRetries = 5) }
+                }
+            }
+        }
+
+        given("an event whose claim throws an Exception, followed by a healthy event") {
+            val eventRepository = mockk<CveEventRepository>(relaxed = true)
+            val topicRepository = mockk<CveTopicRepository>()
+            val summarizer = mockk<AiSummarizer>()
+            every { eventRepository.resetStuck(olderThan = any(), nextAttemptAt = any(), now = any()) } returns 0
+            every { eventRepository.findClaimable(now = any(), maxRetries = 5, limit = 10) } returns
+                listOf(createCveEvent(id = 1L, topicId = 10L), createCveEvent(id = 2L, topicId = 10L))
+            every { eventRepository.claimForSummary(id = 1L, token = any(), now = any(), maxRetries = 5) } throws
+                IllegalStateException("db down")
+            every { eventRepository.claimForSummary(id = 2L, token = any(), now = any(), maxRetries = 5) } returns 1
+            every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
+            every { summarizer.summarize(request = any()) } returns "OK"
+            every { eventRepository.markDone(id = 2L, token = any(), summary = "OK", now = any()) } returns 1
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
+
+            `when`("the tick runs") {
+                worker.tick()
+
+                then("the failure is contained to that event and the next event is summarized") {
+                    verify(
+                        exactly = 1,
+                    ) { eventRepository.markDone(id = 2L, token = any(), summary = "OK", now = any()) }
                 }
             }
         }
@@ -293,7 +386,12 @@ class CveSummaryWorkerTest :
             every { summarizer.summarize(request = any()) } throws
                 AiSummarizerBusyException(message = "Sidecar busy (code=busy) for event=1")
             every { eventRepository.releaseClaim(id = 1L, token = any(), nextAttemptAt = any(), now = any()) } returns 1
-            val worker = workerWith(eventRepository, topicRepository, summarizer)
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
 
             `when`("the tick runs") {
                 worker.tick()
@@ -323,7 +421,12 @@ class CveSummaryWorkerTest :
             every { topicRepository.findById(id = 10L) } returns createCveTopic(id = 10L)
             every { summarizer.summarize(request = any()) } returns "SUMMARY"
             every { eventRepository.markDone(id = 1L, token = any(), summary = "SUMMARY", now = any()) } returns 0
-            val worker = workerWith(eventRepository, topicRepository, summarizer)
+            val worker =
+                workerWith(
+                    eventRepository = eventRepository,
+                    topicRepository = topicRepository,
+                    summarizer = summarizer,
+                )
 
             `when`("the tick runs") {
                 worker.tick()

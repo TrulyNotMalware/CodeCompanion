@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # application/service/cve/ai
 
@@ -14,7 +14,7 @@ working (deterministically) with no LLM. Which implementation exists is decided 
 | File | Description |
 |------|-------------|
 | `AiSummarizer.kt` | `interface AiSummarizer { fun summarize(request: SummaryRequest): String }`, `data class SummaryRequest(eventId, topicDisplayName, category: CveTopicCategory, eventTitle, rawContent)`, `open class AiSummarizationException` and `class AiSummarizerBusyException` (backpressure — released without spending the retry budget) |
-| `CveSummaryWorker.kt` | `class CveSummaryWorker(cveEventRepository, cveTopicRepository, aiSummarizer, batchSize, maxRetries, backoffMinutes, stuckMinutes)`. `@Scheduled(fixedDelay = 60_000) tick()`: `resetStuck(olderThan = now - stuckMinutes, nextAttemptAt = now + backoffMinutes, now)` (each reset claim spends one retry; a non-zero count is logged at WARN) then `findClaimable(now, maxRetries, limit = batchSize)` → per event `claimForSummary(id, token = UUID, now, maxRetries)` (0 rows → skip), `summarize`, `markDone(id, token, summary, now)`; `AiSummarizerBusyException` → `releaseClaim(nextAttemptAt = now + 2 min)`; any other exception → `markFailed(nextAttemptAt = now + backoffMinutes * attempt)`, logged as dead-lettered once `attempt >= maxRetries` |
+| `CveSummaryWorker.kt` | `class CveSummaryWorker(cveEventRepository, cveTopicRepository, aiSummarizer, batchSize, maxRetries, backoffMinutes, stuckMinutes)`. `@Scheduled(fixedDelay = 60_000) tick()`: `resetStuck(olderThan = now - stuckMinutes, nextAttemptAt = now + backoffMinutes, now)` (each reset claim spends one retry; a non-zero count is logged at WARN) then `findClaimable(now, maxRetries, limit = batchSize)` → per event `claimForSummary(id, token = UUID, now, maxRetries)` (0 rows → skip), `summarize`, `markDone(id, token, summary, now)`; `AiSummarizerBusyException` → `releaseClaim(nextAttemptAt = now + 2 min)`; any other exception → `markFailed(nextAttemptAt = now + backoffMinutes * attempt)`, logged as dead-lettered once `attempt >= maxRetries`. Each event runs in `containFailure` (an `Exception` outside the summarize call, e.g. from `claimForSummary`, is logged and the next event goes on); the tick body runs in its own `containFailure` (ERROR `CVE summary worker tick failed`); an interrupt leaves the tick with its flag set and an `Error` propagates and ends the tick, both leaving the claim to `resetStuck` |
 | `CveSummaryPromptBuilder.kt` | `build(request)`: category instructions (`CVE` → `CVE_INSTRUCTIONS`; `LANGUAGE` / `FRAMEWORK` / `ETC` → `RELEASE_INSTRUCTIONS`, both ending in `OUTPUT_RULES`: Korean, Slack mrkdwn, ≤ ~30 lines), the trusted topic name, then the untrusted title + content inside `UNTRUSTED_BEGIN` / `UNTRUSTED_END` fences with `UNTRUSTED_GUARD` above; `neutralizeFences` replaces fence strings found in source data with `FENCE_REPLACEMENT` |
 | `SidecarAiSummarizer.kt` | `class SidecarAiSummarizer(agentGateway, promptBuilder)`: one-shot `AgentTurnRequest(sessionKey = "cve:summary:$eventId", prompt)` — no resume id, no MCP token. `Completed` → `finalText`; `Failed` → `AiSummarizationException`; `Busy` → `AiSummarizerBusyException` |
 | `NoopAiSummarizer.kt` | Returns the title plus the first `MAX_CONTENT_CHARS` (1500) UTF-16 units of `rawContent` (cut by `domain/common/takeSurrogateSafe`, never through a surrogate pair), or the title alone when the body is blank |
@@ -58,7 +58,7 @@ neutralisation, ordering), `SidecarAiSummarizerTest`, `NoopAiSummarizerTest`. Al
 in `infrastructure/src/test/kotlin/dev/notypie/repository/cve/`.
 
 ### Common Patterns
-- `runCatching` per event inside the tick so one failure never aborts the batch.
+- `containFailure` per event inside the tick so one `Exception` never aborts the batch; an `Error` does.
 - Tunables as constructor parameters bound from `AppConfig.Ai` in `CveConfiguration` — no `@Value`.
 - `companion object` `const val` for prompt fences and limits so specs assert on the constants.
 

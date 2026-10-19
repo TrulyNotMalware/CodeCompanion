@@ -7,8 +7,10 @@ import dev.notypie.repository.cve.CveTopicRepository
 import dev.notypie.repository.cve.schema.CveSourceType
 import dev.notypie.schema.createCveTopic
 import dev.notypie.schema.createRawSourceEvent
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -56,7 +58,12 @@ class CveCollectorTest :
             } returns 1
 
             `when`("tick runs") {
-                collectorWith(topicRepository, eventRepository, ledgerRepository, listOf(adapter)).tick()
+                collectorWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    ledgerRepository = ledgerRepository,
+                    adapters = listOf(adapter),
+                ).tick()
 
                 then("it fetches and ingests the raw event") {
                     verify(exactly = 1) { adapter.fetch(topic = topic) }
@@ -93,10 +100,21 @@ class CveCollectorTest :
             }
 
             `when`("tick runs") {
-                collectorWith(topicRepository, eventRepository, ledgerRepository, listOf(adapter)).tick()
-                val keptInterrupt = Thread.interrupted()
+                var keptInterrupt = false
+                try {
+                    shouldThrow<InterruptedException> {
+                        collectorWith(
+                            topicRepository = topicRepository,
+                            eventRepository = eventRepository,
+                            ledgerRepository = ledgerRepository,
+                            adapters = listOf(adapter),
+                        ).tick()
+                    }
+                } finally {
+                    keptInterrupt = Thread.interrupted()
+                }
 
-                then("it stops before the second topic and leaves the interrupt set") {
+                then("the interrupt leaves the tick with its flag set, before the second topic") {
                     verify(exactly = 0) { ledgerRepository.claimWindow(topicId = 2L, windowStart = any()) }
                     verify(exactly = 0) { adapter.fetch(topic = second) }
                     keptInterrupt shouldBe true
@@ -117,7 +135,13 @@ class CveCollectorTest :
             every { ledgerRepository.deleteOlderThan(cutoff = any()) } returns 0
 
             `when`("tick runs") {
-                collectorWith(topicRepository, mockk(), ledgerRepository, listOf(adapter), clock = clock).tick()
+                collectorWith(
+                    topicRepository = topicRepository,
+                    eventRepository = mockk(),
+                    ledgerRepository = ledgerRepository,
+                    adapters = listOf(adapter),
+                    clock = clock,
+                ).tick()
 
                 then("the claimed window and the ledger prune come from that clock") {
                     verify(exactly = 1) {
@@ -144,7 +168,12 @@ class CveCollectorTest :
             every { ledgerRepository.deleteOlderThan(cutoff = any()) } returns 0
 
             `when`("tick runs") {
-                collectorWith(topicRepository, eventRepository, ledgerRepository, listOf(adapter)).tick()
+                collectorWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    ledgerRepository = ledgerRepository,
+                    adapters = listOf(adapter),
+                ).tick()
 
                 then("it never fetches or ingests for the lost window") {
                     verify(exactly = 0) { adapter.fetch(topic = any()) }
@@ -186,7 +215,12 @@ class CveCollectorTest :
             } returns 1
 
             `when`("tick runs") {
-                collectorWith(topicRepository, eventRepository, ledgerRepository, listOf(adapter)).tick()
+                collectorWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    ledgerRepository = ledgerRepository,
+                    adapters = listOf(adapter),
+                ).tick()
 
                 then("the failure is isolated and the second topic is still collected") {
                     verify(exactly = 1) {
@@ -202,6 +236,38 @@ class CveCollectorTest :
             }
         }
 
+        given("two topics where the first adapter fetch throws an Error") {
+            val topicRepository = mockk<CveTopicRepository>()
+            val ledgerRepository = mockk<CveCollectLedgerRepository>()
+            val adapter = mockk<SourceAdapter>()
+            val failing = createCveTopic(id = 1L, topicKey = "a", sourceType = CveSourceType.GITHUB_RELEASE)
+            val healthy = createCveTopic(id = 2L, topicKey = "b", sourceType = CveSourceType.GITHUB_RELEASE)
+            val thrown = StackOverflowError("deep")
+            every { topicRepository.findActiveTopics() } returns listOf(failing, healthy)
+            every { adapter.supports(sourceType = CveSourceType.GITHUB_RELEASE) } returns true
+            every { ledgerRepository.claimWindow(topicId = any(), windowStart = any()) } returns true
+            every { ledgerRepository.deleteOlderThan(cutoff = any()) } returns 0
+            every { adapter.fetch(topic = failing) } throws thrown
+
+            `when`("tick runs") {
+                val escaped =
+                    shouldThrow<StackOverflowError> {
+                        collectorWith(
+                            topicRepository = topicRepository,
+                            eventRepository = mockk(),
+                            ledgerRepository = ledgerRepository,
+                            adapters = listOf(adapter),
+                        ).tick()
+                    }
+
+                then("the Error ends the tick: the second topic and the ledger prune do not run") {
+                    escaped shouldBeSameInstanceAs thrown
+                    verify(exactly = 0) { adapter.fetch(topic = healthy) }
+                    verify(exactly = 0) { ledgerRepository.deleteOlderThan(cutoff = any()) }
+                }
+            }
+        }
+
         given("a topic whose source type no adapter supports") {
             val topicRepository = mockk<CveTopicRepository>()
             val eventRepository = mockk<CveEventRepository>()
@@ -213,7 +279,12 @@ class CveCollectorTest :
             every { ledgerRepository.deleteOlderThan(cutoff = any()) } returns 0
 
             `when`("tick runs") {
-                collectorWith(topicRepository, eventRepository, ledgerRepository, listOf(adapter)).tick()
+                collectorWith(
+                    topicRepository = topicRepository,
+                    eventRepository = eventRepository,
+                    ledgerRepository = ledgerRepository,
+                    adapters = listOf(adapter),
+                ).tick()
 
                 then("the topic is skipped without claiming a window or fetching") {
                     verify(exactly = 0) { ledgerRepository.claimWindow(topicId = any(), windowStart = any()) }

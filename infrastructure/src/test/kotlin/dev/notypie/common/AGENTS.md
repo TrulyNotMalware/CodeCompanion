@@ -1,15 +1,16 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/common
 
 ## Purpose
-Unit specs for the context-free helpers in main `common/`: the JSON column converter and the Kafka partition
-key derivation. Both are plain Kotest specs with no Spring context and no mocks.
+Unit specs for the context-free helpers in main `common/`: the JSON column converter, the Kafka partition
+key derivation and the failure-boundary helpers. All are plain Kotest specs with no Spring context and no mocks.
 
 ## Key Files
 | File | Description |
 |------|-------------|
+| `ExceptionBoundaryTest.kt` | `containFailure` and `runCatchingExceptions`. Each: a normal block (ran, nothing reported / the value as success); an `Exception` (handed to `onFailure` / returned as the failure, nothing escapes); an `Error` (`StackOverflowError`, `NotImplementedError`) → the same instance escapes and `onFailure` never runs; an `InterruptedException` → the same instance rethrown with `Thread.interrupted()` true afterwards. Plain `BehaviorSpec`. |
 | `JPAJsonConverterTest.kt` | `JPAJsonConverter`. `convertToDatabaseColumn`: non-empty map → compact JSON, empty map → `{}`, nested maps, and `null` → the literal string `"null"` (pinned, not an empty column). `convertToEntityAttribute`: valid JSON, `{}`, nested objects come back as `Map`, and `null` → empty map. One round-trip case. Plain `BehaviorSpec`. |
 | `PartitionKeyUtilTest.kt` | `PartitionKeyUtil.createPartitionKey`. `Int` overload: positive (`10` → `4`), negative (`-10` → `4`, never negative), zero, determinism. `String` overload: result in `[0, 6)`, determinism, a 100-key sweep staying in range, empty string. Plain `BehaviorSpec`. |
 
@@ -35,7 +36,8 @@ key derivation. Both are plain Kotest specs with no Spring context and no mocks.
 ## Dependencies
 
 ### Internal
-- `infrastructure/src/main/kotlin/dev/notypie/common/` — `JPAJsonConverter`, `PartitionKeyUtil`, `jsonMapper`
+- `infrastructure/src/main/kotlin/dev/notypie/common/` — `JPAJsonConverter`, `PartitionKeyUtil`, `jsonMapper`,
+  `containFailure`, `runCatchingExceptions`
 
 ### External
 Kotest assertions only.

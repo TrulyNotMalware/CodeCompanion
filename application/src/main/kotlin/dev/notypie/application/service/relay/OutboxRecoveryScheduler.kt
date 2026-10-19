@@ -1,6 +1,7 @@
 package dev.notypie.application.service.relay
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.common.containFailure
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.chainedParts
 import dev.notypie.repository.outbox.schema.OutboxMessage
@@ -29,7 +30,7 @@ class OutboxRecoveryScheduler(
 
     @Scheduled(fixedDelay = RECOVERY_SWEEP_PERIOD_MILLIS, initialDelay = RECOVERY_SWEEP_PERIOD_MILLIS)
     fun recover() {
-        runCatching { recoverOnce() }.onFailure { log.error(it) { "Outbox recovery sweep failed" } }
+        containFailure(onFailure = { log.error(it) { "Outbox recovery sweep failed" } }) { recoverOnce() }
     }
 
     fun recoverOnce(): Int {

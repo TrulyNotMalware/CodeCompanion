@@ -112,6 +112,81 @@ class RetryServiceTest :
             }
         }
 
+        given("an action that throws an Error") {
+            `when`("it throws on the first attempt and a recovery callback is given") {
+                val thrown = StackOverflowError("deep")
+                var attempts = 0
+                var recovered = false
+                val escaped =
+                    shouldThrow<StackOverflowError> {
+                        retryService.execute<String>(
+                            action = {
+                                attempts++
+                                throw thrown
+                            },
+                            recoveryCallBack = {
+                                recovered = true
+                                "Recovery"
+                            },
+                            initialDelay = 1L,
+                        )
+                    }
+
+                then("the same Error escapes unwrapped after one attempt and recovery never runs") {
+                    escaped shouldBeSameInstanceAs thrown
+                    attempts shouldBe 1
+                    recovered shouldBe false
+                }
+            }
+
+            `when`("it throws after a retried Exception") {
+                val thrown = NotImplementedError("unfinished")
+                var attempts = 0
+                val escaped =
+                    shouldThrow<NotImplementedError> {
+                        retryService.execute<String>(
+                            action = {
+                                attempts++
+                                if (attempts == 1) throw IllegalStateException("transient") else throw thrown
+                            },
+                            initialDelay = 1L,
+                        )
+                    }
+
+                then("the Error of the last attempt escapes unwrapped, carrying the retried Exception as suppressed") {
+                    escaped shouldBeSameInstanceAs thrown
+                    attempts shouldBe 2
+                    escaped.suppressed.map { it.message } shouldBe listOf("transient")
+                }
+            }
+
+            `when`("it throws an Error whose cause is a retryable Exception and the next attempt would succeed") {
+                val thrown = LinkageError("boot", IOException("io"))
+                var attempts = 0
+                var recovered = false
+                val escaped =
+                    shouldThrow<LinkageError> {
+                        retryService.execute<String>(
+                            action = {
+                                attempts++
+                                if (attempts == 1) throw thrown else "late success"
+                            },
+                            recoveryCallBack = {
+                                recovered = true
+                                "Recovery"
+                            },
+                            initialDelay = 1L,
+                        )
+                    }
+
+                then("the policy matches the cause chain, so the Error is still never retried") {
+                    escaped shouldBeSameInstanceAs thrown
+                    attempts shouldBe 1
+                    recovered shouldBe false
+                }
+            }
+        }
+
         given("two callers with different policies running at the same time") {
             `when`("one asks for 5 attempts and the other for 2") {
                 val attemptsA = AtomicInteger(0)

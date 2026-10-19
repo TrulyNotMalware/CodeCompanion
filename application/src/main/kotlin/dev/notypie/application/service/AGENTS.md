@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
 
 # application/service
 
@@ -55,7 +55,12 @@ that the relay lane dispatches.
   The sweeps and purges keep trigger and logic in one class instead (`relay/OutboxRecoveryScheduler`,
   `relay/OutboxRetentionScheduler`, `agent/AgentAskThreadStarter`, `agent/AgentRetentionScheduler`): the `@Scheduled`
   method is a thin trigger around the failure containment (per table inside `AgentRetentionScheduler.purgeOnce`), and
-  the specs call `recoverOnce()` / `purgeOnce()` / `resumeOnce()`.
+  the specs call `recoverOnce()` / `purgeOnce()` / `resumeOnce()`. Ticks contain failures with `containFailure`
+  (infrastructure `common`), never `runCatching`: an `Exception` is logged and the next tick runs, an interrupt is
+  rethrown with its flag, and an `Error` ends the tick and reaches the scheduler's error handler (2026-10-15). This is
+  the one interrupt contract for every tick, the CVE collector and summary worker included: the tick ends with the
+  flag set and Spring's `TaskUtils` handler logs "Unexpected error occurred in scheduled task" (normally only at
+  shutdown); the next run is unaffected, because the pool clears the flag before its next task.
 - **Slow calls are async.** The agent turn runs in an async application listener; do not move an LLM or
   Slack Web API call onto the inbound request thread or inside a transaction.
 - Role gating goes through `CommandRoleResolver`. Resolution order is
@@ -69,7 +74,8 @@ that the relay lane dispatches.
 Every service here has a spec under `application/src/test/kotlin/dev/notypie/application/service/`.
 Pattern: MockK the ports (`SlackIntentResolver`, `OutboundMessageStager`, `EventPublisher`, repositories),
 inject a fixed `Clock`, then assert on the *effects* captured — not on Slack payloads. Scheduler specs
-target the `*SchedulingService`, never the `@Scheduled` wrapper.
+target the `*SchedulingService` for the logic; a wrapper is called only to pin its failure containment
+(`StandupSchedulerTest`, the `DailyAgendaScheduler` cases in `DailyAgendaSchedulingServiceTest`).
 
 ### Common Patterns
 - Interface + `Impl` pairs; the interface is the dependency other lanes take.

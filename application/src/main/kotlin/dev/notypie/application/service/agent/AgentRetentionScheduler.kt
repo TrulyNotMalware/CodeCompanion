@@ -1,7 +1,7 @@
 package dev.notypie.application.service.agent
 
 import dev.notypie.application.configurations.AppConfig
-import dev.notypie.application.service.standup.containFailure
+import dev.notypie.common.containFailure
 import dev.notypie.repository.agent.AgentAskTurnRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
 import dev.notypie.repository.mcp.McpToolCallHistoryRepository

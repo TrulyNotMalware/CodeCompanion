@@ -19,6 +19,7 @@ import dev.notypie.impl.retry.RetryService
 import dev.notypie.logging.captureLogs
 import dev.notypie.logging.messagesAt
 import io.kotest.assertions.throwables.shouldNotThrowAny
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.ints.shouldBeLessThan
@@ -26,6 +27,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -1217,6 +1219,50 @@ class ApplicationMessageDispatcherTest :
                         line shouldContain "meetingIdempotencyKey=none"
                         line shouldNotContain "null"
                     }
+                }
+            }
+        }
+
+        given("a Slack client that throws an Error") {
+            val thrown = StackOverflowError("deep")
+            val publisher = mockk<ApplicationEventPublisher>(relaxed = true)
+            val failingDispatcher =
+                ApplicationMessageDispatcher(
+                    botToken = "xoxb-test",
+                    applicationEventPublisher = publisher,
+                    retryService = RetryService(),
+                    onOutcomeUnknown = { unknownOutcomes.add(it) },
+                    onAccessBlocked = { accessBlocks.add(it) },
+                    slack =
+                        mockk {
+                            every { methods() } throws thrown
+                            every { methods(any<String>()) } throws thrown
+                        },
+                    okHttpClient = loopbackClient,
+                    sleeper = { sleeps.add(it) },
+                )
+
+            `when`("views.open is called") {
+                reset()
+                val escaped =
+                    shouldThrow<StackOverflowError> {
+                        failingDispatcher.dispatchImmediate(event = createOpenViewEvent(triggerId = "trigger").payload)
+                    }
+
+                then("the same Error propagates instead of becoming a failed output and an open-failure event") {
+                    escaped shouldBeSameInstanceAs thrown
+                    verify(exactly = 0) { publisher.publishEvent(any<Any>()) }
+                }
+            }
+
+            `when`("a chat message is dispatched") {
+                reset()
+                val escaped = shouldThrow<StackOverflowError> { failingDispatcher.dispatch(event = channelMessage()) }
+
+                then("the same Error propagates unwrapped after one attempt, with no outcome recorded") {
+                    escaped shouldBeSameInstanceAs thrown
+                    unknownOutcomes shouldHaveSize 0
+                    sleeps shouldHaveSize 0
                 }
             }
         }

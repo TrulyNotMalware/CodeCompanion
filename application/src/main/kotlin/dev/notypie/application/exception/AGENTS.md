@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-19 -->
 
 # application/exception
 
@@ -58,7 +58,8 @@ payload-parse failures raised while mapping an `app_mention` event, one infrastr
 - `neutralizeControlCharacters()` (`common/LogSanitizing.kt`) is shared across the module: change its replacement
   only together with the `CommandExecutor` spec that pins it.
 - Over Socket Mode (`socket/SocketModeReceiver`) there is no MVC dispatch, so nothing here applies —
-  failures are caught with `runCatching` and logged in the receiver.
+  an `Exception` is caught with `containFailure` (or, for interactions, a `catch (Exception)`) and logged in the
+  receiver; an `Error` propagates.
 - Keep infrastructure exceptions (JPA, Kafka, Slack SDK) in `infrastructure`; only failures of
   application orchestration belong in this package. New types: extend `CodeCompanionRuntimeException`,
   add an `ErrorCode` enum value, and register an `@ExceptionHandler` here in the same change.

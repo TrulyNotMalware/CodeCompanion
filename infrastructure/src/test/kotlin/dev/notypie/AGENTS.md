@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # infrastructure/src/test/kotlin/dev/notypie
 
@@ -18,7 +18,7 @@ testFixtures package of the same name.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `common/` | `JPAJsonConverter`, `PartitionKeyUtil` unit specs (see `common/AGENTS.md`) |
+| `common/` | `JPAJsonConverter`, `PartitionKeyUtil`, `ExceptionBoundary` unit specs (see `common/AGENTS.md`) |
 | `configurations/` | `HikariDataSourceBindingTest` — `spring.datasource.hikari.*` reaches the pool built by `JpaConfiguration` (see `configurations/AGENTS.md`) |
 | `exception/` | `DatabaseExceptionTest` — `throwIfSchemaNotFound` / `schemaNotFound` build a `DatabaseException` with table, error code and details (see `exception/AGENTS.md`) |
 | `impl/` | Adapter specs: `agent/`, `command/` (+ `slack/`), `cve/`, `retry/` (see `impl/AGENTS.md`) |

@@ -36,7 +36,7 @@ _type: architecture · updated: 2026-10-15_
    `MeetingReminderSchedulingService`, `StandupSummaryService`, `CveNotificationDispatcher`. 커맨드 컨텍스트는
    `CommandBasicInfo.forOutbound(publisherId, channel)`로 합성한다(`appToken` 공란: 봇 토큰으로 인증). DM은
    별도 타입이 아니라 `channel = userId`인 `ChannelMessage`/`Approval`로 표현한다.
-   - `runInTx`(`TransactionTemplateExt.kt`)는 예외를 `Result.failure`로 바꾸고 rollback-only를 찍는다. 호출자는
+   - `runInTx`(`TransactionTemplateExt.kt`)는 `Exception`을 `Result.failure`로 바꾸고 rollback-only를 찍는다(`Error`는 롤백 뒤 전파). 호출자는
      `Result`를 보고 실패 감사(`markDispatchFailed` 등)를 **별도 트랜잭션**에서 기록한다.
 
 ## 렌더는 배송 시점에 정확히 한 번, 모달만 예외

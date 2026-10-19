@@ -1,5 +1,6 @@
 package dev.notypie.application.service.standup
 
+import dev.notypie.common.runCatchingExceptions
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
 import dev.notypie.domain.command.entity.event.CreateStandupRoutinePayload
@@ -35,7 +36,7 @@ class StandupRoutineSetupService(
                 .findActiveRoutinesByChannel(commandChannel = payload.commandChannel)
                 .map { routine -> Routine.normalizeName(raw = routine.name) }
         val message =
-            runCatching { buildRoutine(payload = payload, activeNames = activeNames) }
+            runCatchingExceptions { buildRoutine(payload = payload, activeNames = activeNames) }
                 .fold(
                     onSuccess = { routine ->
                         confirmationMessage(routine = standupRepository.createRoutine(routine = routine))

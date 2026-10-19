@@ -78,18 +78,51 @@ _type: pattern · updated: 2026-10-19_
    `internal_error`로 받고, `ResponseEntityExceptionHandler`가 처리하는 Spring MVC 예외는 자기 상태를 유지한다.
    `app_mention`이 아닌 이벤트는 핸들러를 타지 않고 200으로 ack해 Slack 재시도를 막는다. `handleInteractions`는
    `response_action` 본문이 있으면 JSON 200, 아니면 빈 200.
-4. **Socket Mode → 로그(인터랙션은 ack 생략).** `SocketModeReceiver.handleSlash`/`handleEvent`는 `runCatching` + `log.error`이고
+4. **Socket Mode → 로그(인터랙션은 ack 생략).** `SocketModeReceiver.handleSlash`/`handleEvent`는 `containFailure` + `log.error`이고
    `handleInteractive`는 `catch (Exception)` + `log.error` 뒤 ack 없이 돌아온다. MVC 디스패치가 없으니 `ControllerAdvice`는
    적용되지 않고, slash/event는 ack를 먼저 보내므로 실패가 Slack에 전달될 방법이 없다. interactive만 handle → ack 순서라
-   `response_action`(인라인 검증 오류)을 ack에 실을 수 있다.
-5. **서비스 내부 관례.** `TransactionTemplate.runInTx`는 예외를 `Result.failure`로 바꾸고 `setRollbackOnly`만 한다 —
-   throw 여부는 호출자가 정한다. `StandupSchedulingService`/`MeetingReminderSchedulingService`는
+   `response_action`(인라인 검증 오류)을 ack에 실을 수 있다. 세 경로 모두 `Error`는 전파한다 — 엔벨로프 리스너의
+   `logErrorThenRethrow`가 envelopeId와 함께 ERROR로 남긴 뒤 다시 던지고, Slack SDK는 그 메시지 루프(10개 중 하나)를 조용히
+   끝낸다.
+5. **서비스 내부 관례.** `TransactionTemplate.runInTx`는 `Exception`을 `Result.failure`로 바꾸고 `setRollbackOnly`만 한다 —
+   throw 여부는 호출자가 정한다(`InterruptedException`은 플래그를 복원한 뒤 실패로 돌려주고, `Error`는 롤백된 뒤 전파). `StandupSchedulingService`/`MeetingReminderSchedulingService`는
    `DataIntegrityViolationException`을 "예상된 레이스"로 잡되 **행이 실제로 존재하는지 확인한 뒤에만** 삼킨다.
    스탠드업 스케줄러는 루틴·세션·단계 단위로 `containFailure`(`Exception`만 잡아 로그, `InterruptedException`은
    플래그를 복원해 다시 던지고 `Error`는 전파)로 격리해 한 루틴의 나쁜 데이터가 다른 루틴과 이후 단계를 막지 않게 한다.
-   `CveCollector`는 토픽마다 `runCatching`으로 격리한다. `CommandExecutor`는 로그 후 재throw하고 인텐트를 재큐잉하지
+   `CveCollector`는 토픽마다 `containFailure`로 격리한다. `CommandExecutor`는 로그 후 재throw하고 인텐트를 재큐잉하지
    않는다 — 재시도는 `idempotencyKey` 아래 상류(아웃박스 릴레이, Kafka, Slack 재전송)가 맡는다.
    `ApplicationMessageDispatcher`는 Slack `ok=false`를 예외가 아니라 `failOutput(reason)`으로 되돌리고 WARN을 남긴다.
+   액션이 던진 `Error`는 콜백에서 기록해 두었다가 롤백 자체가 어떤 예외로 실패하더라도(JPA는 번역된 `DataAccessException` 또는
+   `TransactionSystemException`) 그 `Error`를 다시 던진다(롤백 실패는 suppressed로, 2026-10-19). relay의 상태 기록(`writeTerminal`)도
+   `runInTx`를 거쳐 재시도 정책이 `Error`를 그대로 보게 한다. 다른 raw `TransactionTemplate.execute`(캘린더 store, ops 리포트 등)는
+   이 경우 Spring이 ERROR("Application exception overridden by rollback exception")를 남기고 롤백 예외를 던지며, 그것이
+   `catch (Exception)`에 잡히는 곳에서는 `Error`가 격하된다 — 수용(이중 장애이고 로그는 남는다).
+6. **`Error`는 삼키지 않는다(2026-10-15, 결정 #48).** 경계(스케줄러 틱, 행 단위 루프, 리스너·전송 가장자리, MCP 도구 본문과
+   감사 쓰기)는 `infrastructure/.../common/ExceptionBoundary.kt`의 두 헬퍼로 `Exception`만 잡는다: 부수효과 블록은
+   `containFailure(onFailure) { }`, `Result`가 필요한 곳은 `runCatchingExceptions { }`. 둘 다 `InterruptedException`은 플래그를
+   복원해 다시 던지고 `Error`는 그대로 전파한다. 경계마다 실제로 일어나는 일:
+   - **스케줄러 틱:** 그 틱이 끝나고 Spring의 `TaskUtils` 처리기가 ERROR를 남긴 뒤 다음 틱은 그대로 돈다(행 하나의
+     `StackOverflowError`도 틱 전체를 끝내고, 롤백된 행은 다음 틱에 다시 앞에 온다). 인터럽트도 모든 틱에서 같다 — 플래그를 단
+     채 틱을 떠나고 같은 처리기가 로그를 남긴다(보통 종료 때만).
+   - **릴레이 실행기(`relayTaskExecutor`):** 그 작업의 스레드가 죽고 풀이 새 스레드를 만든다. 스레드마다 단
+     `RELAY_UNCAUGHT_ERROR_LOGGER`가 스레드 이름과 함께 ERROR를 남긴다(eventId는 없다 — `IN_PROGRESS`에 남은 행이 단서). 행은
+     스윕이 다시 보낸다.
+   - **CDC 리스너(유일한 예외 조항):** spring-kafka 4.1은 `Error`를 오류 처리기에 넘기지 않고 컨테이너 전체를 멈추며 아무도
+     다시 띄우지 않는다. 그래서 `DebeziumLogTailingProcessor.consume`만 `Error`를 잡아 레코드 좌표·eventId와 함께 ERROR로
+     남기고 `ListenerErrorException`으로 감싸 다시 던진다. 이 래퍼는 poison·재시도 없음으로 분류돼 DLT로 한 번 가고(파싱 중
+     `Error`는 이 변경 전과 같은 결과), 컨테이너는 다음 레코드를 계속 소비한다. 디스패치 중 `Error`였다면 행은 `IN_PROGRESS`로
+     남아 스윕이 처리한다.
+   - **Socket Mode(로컬 전용):** 위 4번 — 로그 한 줄 뒤 SDK 메시지 루프 하나가 영구히 멈춘다. 열 번이면 앱 재시작이 필요하다.
+   - **MCP 도구:** 본문의 `Error`·인터럽트는 Spring AI MCP 서버로 전파되고, 그 전에 `finally`(아무것도 잡지 않음)가
+     `FAILED`/`Aborted` 감사 행을 한 줄 남기려 한다 — 최선 노력이다(인터럽트 플래그가 선 채 쓰므로 풀이 비어 기다려야 하면
+     HikariCP가 거절한다). 감사 쓰기 자체의 `Error`는 행 없이 전파된다.
+   - **`/standup setup` 리스너, `views.open`:** 동기 리스너의 `Error`는 명령 트랜잭션을 롤백하고 HTTP 요청까지 올라가 500이 된다
+     (사용자에게 거절 DM·열기 실패 DM이 가지 않는다; 코드 추적, 미실행).
+
+   `Throwable`/`Error`를 이름으로 잡는 곳은 같은 인스턴스를 정리·로그 후 다시 던지는 다섯 곳(`SlackRequestVerificationFilter`,
+   `SlackInteractionHandlerImpl`의 수동 트랜잭션, `SlackUserProfileResolver`의 in-flight future,
+   `SocketModeReceiver.logErrorThenRethrow`, `runInTx`의 기록 후 재던짐)과 위 CDC 리스너의 번역 한 곳뿐이다. 순수 파싱(enum 조회, JSON 엿보기 등; relay·CDC 리스너의 `UUID.fromString`은
+   `IllegalArgumentException`만 잡는다)과 워치독의 `stream.close()` `runCatching`은 그대로 둔다.
 
 ## 재시도: `RetryService` / `RetryOptions`
 
@@ -105,8 +138,11 @@ _type: pattern · updated: 2026-10-19_
   `STATUS_WRITE_ATTEMPTS` = 3회다(시도마다 한 트랜잭션, 연쇄 발송의 다음 조각 저장 포함). `/ask` 전달 리스너의 아웃박스 재조회와
   레저 기록도 이 상수를 일부러 함께 쓴다(2026-10-13, 결정 #40 — 올리면 세 루프가 함께 길어진다). 최악 소요는
   `retryTimeBound(attemptTimeout, maxAttempts)`가 코드로 계산한다.
-- `recoveryCallBack`은 재시도가 소진돼 `RetryException`이 났을 때(정책에 맞지 않는 `Error`가 곧바로 `RetryException`이 되는 경우 포함) 실행되고, 없으면 그 `RetryException`(마지막 원인을 감쌈)이
-  전파된다. 기본 `includes(Exception)`은 `DataIntegrityViolationException`·검증 예외처럼 재시도해도 소용없는 실패까지
+- `recoveryCallBack`은 재시도가 소진돼 `RetryException`이 났을 때 실행되고, 없으면 그 `RetryException`(마지막 원인을 감쌈)이
+  전파된다. 예외: spring-core 7 `RetryTemplate`은 `Throwable`을 잡아 `Error`도 (재시도 없이) `RetryException`으로 감싸는데,
+  `RetryService`는 원인이 `Error`면 그 `Error`를 그대로 던지고 `recoveryCallBack`을 돌리지 않는다(2026-10-15,
+  `RetryServiceTest`가 고정). 정책에는 `excludes(Error)`도 걸려 있다 — Spring은 includes/excludes를 원인 체인까지
+  대조하므로(`ExceptionTypeFilter.match(…, true)`) `Error(cause = IOException)`이 `includes(Exception)`에 걸려 재시도되던 구멍을 막는다(2026-10-19). 기본 `includes(Exception)`은 `DataIntegrityViolationException`·검증 예외처럼 재시도해도 소용없는 실패까지
   재시도하므로 비일시적 실패가 섞이는 호출은 `exceptions`를 명시한다.
 - `@EnableResilientMethods`는 켜져 있지만 저장소에 `@Retryable`은 없다.
 - **MariaDB 스냅숏 격리(2026-10-03).** MariaDB ≥ 11.6.2의 REPEATABLE READ는 `innodb_snapshot_isolation`이 기본 ON이다
@@ -137,13 +173,8 @@ _type: pattern · updated: 2026-10-19_
 - `DetailErrorAlertContext`(`MessageContent.ErrorNotice`를 채널에 게시)는 스펙은 있지만 **생성하는 프로덕션 코드가 없다.**
 - Socket Mode 실패는 로그로만 남는다(인터랙션은 ack하지 않아 Slack이 사용자에게 오류를 보인다). 로컬 프로파일 전용이라 감수하고 있는 상태다.
 - `ErrorBroadcaster`는 주입처가 없다(구현은 `StdoutErrorBroadcaster`뿐).
-- 경계 곳곳의 `runCatching`(`runInTx`, `CveCollector`, `SocketModeReceiver` 등)은 `Error`까지 `Result.failure`로 바꾼다.
-  반면 `Command.handleEvent`와 `containFailure`는 `Exception`만 잡는다. 두 방식이 섞여 있다.
-  현재 상태에서 `RetryService`도 `Error`를 호출자에게 일반 예외처럼 보여 준다: spring-core 7.0.9 `RetryTemplate`은 첫 시도에서
-  `Throwable`을 잡고(`RetryTemplate.java:135-137`), 재시도 정책의 `includes(Exception)`이 `Error`를 불일치로 판정해(`:149`)
-  재시도 없이 `RetryException`(cause = 그 `Error`, `:194-200`)을 던진다. `RetryService`는 이를 잡아 `recoveryCallBack`을
-  실행하거나 다시 던지므로 콜백이 있으면 `Error`에도 복구가 돈다(프로덕션 호출자는 콜백을 넘기지 않는다). `RetryServiceTest`에
-  `Error` 케이스는 없다.
+- (해소, 2026-10-15) 경계 곳곳의 `runCatching`이 `Error`까지 `Result.failure`로 바꾸던 공백과, `RetryTemplate`이 `Error`를
+  `RetryException`으로 감싸 호출자에게 일반 예외처럼 보이던 공백은 닫혔다 — 위 6번과 결정 #48.
 
 ## 근거
 
@@ -166,6 +197,8 @@ _type: pattern · updated: 2026-10-19_
   `application/.../configurations/ConsumerConfig.kt` (`ErrorBroadcasterConfig`),
   `infrastructure/src/main/kotlin/dev/notypie/repository/meeting/MeetingRepositoryImpl.kt`,
   `.../repository/standup/StandupRepositoryImpl.kt`
+- `infrastructure/src/main/kotlin/dev/notypie/common/ExceptionBoundary.kt` (`containFailure`, `runCatchingExceptions`),
+  `infrastructure/src/test/kotlin/dev/notypie/common/ExceptionBoundaryTest.kt`
 - `infrastructure/src/main/kotlin/dev/notypie/impl/retry/RetryService.kt`, `.../configurations/RetryConfiguration.kt`,
   `infrastructure/src/test/kotlin/dev/notypie/impl/retry/RetryServiceTest.kt`
 - `infrastructure/src/main/kotlin/dev/notypie/impl/command/ApplicationMessageDispatcher.kt`,
@@ -173,6 +206,10 @@ _type: pattern · updated: 2026-10-19_
 - spring-core 7.0.9 소스: `org/springframework/core/retry/RetryTemplate.java`(`:135-137,149,194-200`), `RetryException.java`
 - Spring Framework 7 reference, Core › Resilience Features (`maxRetries`는 최초 시도를 제외한 재시도 횟수;
   `RetryTemplate`은 호출마다 생성 가능한 경량 객체)
+- spring-kafka 4.1.1 `KafkaMessageListenerContainer.java`(`doInvokeRecordListener`의 `catch (RuntimeException)`, `ListenerConsumer.run`의 `catch (Error)`
+  "Stopping container due to an Error"), `MessagingMessageListenerAdapter.java`(`Error` 재던짐), `FailedRecordProcessor.java`; spring-context 7.0.9
+  `TaskUtils.LOG_AND_SUPPRESS_ERROR_HANDLER`; spring-core 7.0.9 `RetryTemplate.java`(`catch (Throwable)`, `RetryException` 원인); Slack SDK 1.52.0
+  `SocketModeClient.initializeMessageProcessorExecutor`(열 개의 `Exception`만 잡는 루프, `javap`) — 2026-10-19 Gradle 캐시 소스에서 확인
 
 ## 관련 페이지
 

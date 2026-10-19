@@ -295,9 +295,12 @@ class MessageOutboxRepositoryTest
                             now = LocalDateTime.now(),
                         )
 
-                    then("it becomes FAILURE") {
+                    then(
+                        "it becomes FAILURE under a new attempt token, so the old owner can never read it as its own write",
+                    ) {
                         abandoned shouldBe 1
                         statusOf(eventId = row.eventId) shouldBe MessageStatus.FAILURE.name
+                        attemptsOf(eventId = row.eventId) shouldBe 2
                     }
                 }
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-14 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-19 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/outbox/schema
 
@@ -20,8 +20,9 @@ no Spring, no database — it checks the in-memory `OutboxMessage` the port prod
   constant, not a literal); a chain head's V3 is asserted in the chain `given`.
 - `status` is asserted as `MessageStatus.X.name` because the column is a `String`; do not change the
   assertion to compare enums.
-- `toOutboxMessage()` (the Debezium `Map` → entity path with micro-epoch timestamps) is **not** covered here
-  or anywhere in the module.
+- `toOutboxMessage()` (the Debezium `Map` → entity path) is covered here for the timestamp decoding under a non-UTC
+  JVM zone and for failures: a `HashMap` whose `get` throws `IllegalStateException` → a `RuntimeException` whose
+  `cause` is that instance, `StackOverflowError` → the same instance, unwrapped.
 
 ### Testing Requirements
 ```bash

@@ -1,7 +1,7 @@
 package dev.notypie.application.service.calendar
 
 import dev.notypie.application.configurations.conditions.OnGoogleCalendarEnabled
-import dev.notypie.application.service.standup.containFailure
+import dev.notypie.common.containFailure
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.context.annotation.Conditional
 import org.springframework.scheduling.annotation.Scheduled

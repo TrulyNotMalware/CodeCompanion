@@ -515,6 +515,27 @@ _type: decision · updated: 2026-10-19_
     (`review_skill.md` 3.1)을 소유자가 2026-10-01에 보류하고 덮어쓰기를 유지하기로 했다. 이유: (근거 미기록 — 채워
     넣을 것). 상태: 유지. 주의: Boot를 올릴 때 BOM의 Jackson 버전과 이 값을 함께 비교한다. 근거: `build.gradle.kts`,
     #20.
+48. **경계는 `Exception`만 잡고 `Error`는 전파한다 — 행 단위 루프도 예외가 아니다 (2026-10-15).** 스케줄러 틱·행 루프·리스너와
+    전송 가장자리·MCP 도구 본문과 감사 쓰기는 `containFailure` / `runCatchingExceptions`(`infrastructure/.../common`)를 쓰고,
+    `runInTx`는 안쪽·바깥쪽 모두 `catch (Exception)`(액션의 `Error`를 기록해 롤백이 어떤 예외로 실패해도 그 `Error`를 다시 던짐; relay 상태 기록도 `runInTx` 경유),
+    `RetryService`는 `RetryException`의 원인이 `Error`면 그것을 던지고 정책은 `excludes(Error)`로 원인 체인에 `Error`가 있는 실패를 재시도하지 않는다. 이유:
+    OOM은 `-XX:+ExitOnOutOfMemoryError`로 이미 JVM을 끝내고, `LinkageError`는 배포 전체의 문제라 행 격리가 얻는 것이 없으며,
+    `Error`를 `Result.failure`로 바꾸면 사용자 거절 문구·`FAILED` 감사·재시도 복구로 위장된다. 대가: 데이터에 따라 결정적으로
+    나는 `Error`(예: 한 행의 `StackOverflowError`)는 그 틱을 끝내고, 롤백되는 claim(스탠드업 DM, CVE 쌍, 일일 안건)은 다음 틱에도
+    맨 앞에 와서 매분 ERROR를 남긴다. 그런 일이 실제로 생기면 답은 그 행에 시도 횟수를 다는 것이지 `Error`를 잡는 것이 아니다.
+    경계별 결과: 스케줄러 틱은 Spring이 로그를 남기고 다음 틱이 돈다; 릴레이 실행기는 그 스레드가 죽고 풀이 대체하며
+    `RELAY_UNCAUGHT_ERROR_LOGGER`가 스레드 이름과 함께 ERROR를 남긴다(행은 스윕이 처리); Socket Mode(로컬)는 로그 한 줄 뒤 SDK
+    메시지 루프 하나가 영구히 멈춘다; MCP 도구는 `FAILED`/`Aborted` 감사 행을 남기고 전파한다; `/standup setup`·`views.open`은
+    요청까지 올라가 500이 된다(코드 추적, 미실행). **예외 조항 — CDC 리스너 경계 한 곳(2026-10-19 사용자 결정 "리스너에서 번역").**
+    `DebeziumLogTailingProcessor.consume`은 `Error`를 잡아 레코드 좌표·eventId와 함께 ERROR로 남기고 `ListenerErrorException`으로
+    감싸 다시 던진다. 이유: spring-kafka 4.1은 리스너의 `Error`를 오류 처리기에 넘기지 않고 컨테이너를 멈추며
+    (`Stopping container due to an Error`) 재시작하지 않으므로, 행 하나의 `Error`가 파드 재시작 전까지 CDC 전달 전체를 멈추고
+    파싱 중 `Error`는 오프셋이 커밋되지 않아 재시작할 때마다 다시 멈추는 poison pill이 된다. 래퍼는 poison·재시도 없음으로
+    분류돼 DLT로 한 번 가고(파싱 중 `Error`는 이 변경 전과 같은 결과) 컨테이너는 계속 돈다. OOM은 플래그가 있는 곳(Dockerfile,
+    `run`)에서는 여전히 `-XX:+ExitOnOutOfMemoryError`로 JVM을 끝내고, 플래그 없는 `bootRun`·IDE·테스트 JVM에서는 다른 `Error`와
+    같이 DLT로 간다. 이 조항을 다른 경계로 넓히지 않는다.
+    기각: 행 루프만 `Error`를 격리(대안 B) — 위 이유. 상태: 유지. 근거: `infrastructure/src/main/kotlin/dev/notypie/common/AGENTS.md`,
+    [error-handling-and-validation.md](error-handling-and-validation.md), `service/relay/AGENTS.md`.
 
 ## CI/CD와 공급망
 
@@ -756,6 +777,18 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   읽지 않음), `db/migration/V28__add_google_calendar_connection_version.sql`, 스펙 `TokenCipherTest`·`GoogleCalendarConnectionRepositoryImplTest`·
   `CalendarConnectionServiceTest`·`GoogleAccessTokenProviderTest`·`GoogleTokenRevocationWorkerTest`, 세션 스크래치의 트리아지 B1·B2
   (2026-10-15, 미커밋 작업 트리 `feature/calendar-token-aad-version`)
+- `Error`를 삼키지 않는 경계와 CDC 예외 조항(#48): `infrastructure/src/main/kotlin/dev/notypie/common/ExceptionBoundary.kt`,
+  `application/.../common/TransactionTemplateExt.kt`, `infrastructure/.../impl/retry/RetryService.kt`, `service/relay/DebeziumLogTailingProcessor.kt`
+  (`ListenerErrorException`), `configurations/KafkaConsumerConfiguration.kt`(poison·재시도 없음 목록), `configurations/AsyncConfig.kt`
+  (`RELAY_UNCAUGHT_ERROR_LOGGER`), `mcp/McpToolGate.kt`(`finally` 감사), `socket/SocketModeReceiver.kt`(`logErrorThenRethrow`); 라이브러리 소스
+  (2026-10-19, Gradle 캐시): spring-kafka 4.1.1 `KafkaMessageListenerContainer.java`(`doInvokeRecordListener` `catch (RuntimeException)`,
+  `ListenerConsumer.run` `catch (Error)` "Stopping container due to an Error"), `MessagingMessageListenerAdapter.java`(`Error` 재던짐),
+  `FailedRecordProcessor.java`(원인 체인 탐색); spring-context 7.0.9 `TaskUtils.LOG_AND_SUPPRESS_ERROR_HANDLER`,
+  `ExecutorConfigurationSupport`(스레드 팩토리); spring-core 7.0.9 `RetryTemplate.java`(`catch (Throwable)`, `RetryException`의 원인·suppressed);
+  Slack SDK 1.52.0 `SocketModeClient.initializeMessageProcessorExecutor`(`javap`, `Exception`만 잡는 루프 10개); 스펙
+  `DebeziumLogTailingProcessorTest`(실제 `KafkaMessageListenerContainer` + `MockConsumer`: DLT 두 건·재시도 없음·컨테이너 유지),
+  `McpToolGateTest`, `ExceptionBoundaryTest`, `RetryServiceTest`, `SlackMessageRelayServiceImplTest`(실제 풀 스레드의 핸들러 동일성),
+  `SocketModeReceiverTest`; 변이 검사 7건(2026-10-15, 헬퍼가 `Throwable`을 잡게·모든 경계를 `runCatching`으로·L2 분기 제거 등)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

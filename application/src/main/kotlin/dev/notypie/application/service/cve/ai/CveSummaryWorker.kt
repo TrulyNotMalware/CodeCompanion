@@ -1,5 +1,6 @@
 package dev.notypie.application.service.cve.ai
 
+import dev.notypie.common.containFailure
 import dev.notypie.repository.cve.CveEvent
 import dev.notypie.repository.cve.CveEventRepository
 import dev.notypie.repository.cve.CveTopicRepository
@@ -23,7 +24,7 @@ class CveSummaryWorker(
 ) {
     @Scheduled(fixedDelay = 60_000)
     fun tick() {
-        runCatching {
+        containFailure(onFailure = { ex -> log.error(ex) { "CVE summary worker tick failed" } }) {
             val now = LocalDateTime.now(clock)
             val reset =
                 cveEventRepository.resetStuck(
@@ -40,21 +41,13 @@ class CveSummaryWorker(
             cveEventRepository
                 .findClaimable(now = now, maxRetries = maxRetries, limit = batchSize)
                 .forEach { event -> summarizeOne(event = event) }
-        }.onFailure { ex ->
-            if (ex is InterruptedException) {
-                log.warn { "CVE summary worker interrupted; stopping this tick" }
-            } else {
-                log.error(ex) { "CVE summary worker tick failed" }
-            }
         }
     }
 
     private fun summarizeOne(event: CveEvent) {
-        runCatching { dispatchOne(event = event) }
-            .onFailure { ex ->
-                if (ex is InterruptedException) throw ex
-                log.error(ex) { "CVE summary handling failed for event=${event.id}" }
-            }
+        containFailure(onFailure = { ex -> log.error(ex) { "CVE summary handling failed for event=${event.id}" } }) {
+            dispatchOne(event = event)
+        }
     }
 
     private fun dispatchOne(event: CveEvent) {

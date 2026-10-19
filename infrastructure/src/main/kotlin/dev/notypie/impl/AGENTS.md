@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
 
 # infrastructure/impl
 
@@ -53,7 +53,7 @@ outbound messages into Slack payloads, and publishes events. `impl/agent` talks 
   `ViewSubmissionChannelRoutingRegressionTest`.
 - **`SourceAdapter.fetch` must never throw.** A malformed `source_config` or a non-2xx/transport failure
   returns an empty list, so one bad topic cannot abort a collection tick (the collector's per-topic
-  `runCatching` is the second line of defense). Adapters are selected by `supports(sourceType)`; add a
+  `containFailure` is the second line of defense; an `Error` is not caught by either and ends the tick). Adapters are selected by `supports(sourceType)`; add a
   source by adding an adapter bean, not by editing the collector.
 - **`SidecarAgentClient` folds an SSE stream** (`session` → N×`text`/`tool_use`/`tool_result` → terminal
   `done`|`error`) into one `AgentTurnResult`. LF, CRLF and bare-CR line endings are all accepted without

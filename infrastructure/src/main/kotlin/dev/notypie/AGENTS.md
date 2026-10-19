@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # infrastructure/src/main/kotlin/dev/notypie
 
@@ -7,13 +7,13 @@
 Package root of the infrastructure module, split into six packages: `impl` (Slack transport, AI sidecar,
 CVE feed, retry adapters), `repository` (JPA lanes plus the transactional outbox), `templates` (Slack Block
 Kit builders), `configurations` (`JpaConfiguration`, `RetryConfiguration`), `exception` (`ErrorBroadcaster`,
-`DatabaseException`), and `common` (`jsonMapper`, `JPAJsonConverter`, `PartitionKeyUtil`). No source file
+`DatabaseException`), and `common` (`jsonMapper`, `JPAJsonConverter`, `PartitionKeyUtil`, `containFailure`, `runCatchingExceptions`). No source file
 sits directly in this package.
 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `common/` | Shared Jackson 3 `jsonMapper`, `JPAJsonConverter`, `PartitionKeyUtil` (see `common/AGENTS.md`) |
+| `common/` | Shared Jackson 3 `jsonMapper`, `JPAJsonConverter`, `PartitionKeyUtil`, and the `Exception`-only boundary helpers `containFailure` / `runCatchingExceptions` (see `common/AGENTS.md`) |
 | `configurations/` | HikariCP/JPA wiring and the fifteen repository-adapter beans; `RetryTemplate` + `RetryService` (see `configurations/AGENTS.md`) |
 | `exception/` | `ErrorBroadcaster` port and its only implementation `StdoutErrorBroadcaster`; `meeting/DatabaseException` family (see `exception/AGENTS.md`) |
 | `impl/` | Transport and external-service adapters: `command/` (Slack), `agent/`, `cve/`, `retry/` (see `impl/AGENTS.md`) |

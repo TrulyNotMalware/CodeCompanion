@@ -4,8 +4,11 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.repository.outbox.MessageOutboxRepository
+import io.kotest.assertions.throwables.shouldNotThrowAny
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -44,7 +47,16 @@ class OutboxRetentionSchedulerTest :
                     IllegalStateException("db")
 
                 then("the tick swallows it so the scheduler thread survives") {
-                    scheduler.purge()
+                    shouldNotThrowAny { scheduler.purge() }
+                }
+            }
+
+            `when`("the repository throws an Error inside the scheduled tick") {
+                val thrown = StackOverflowError("deep")
+                every { repository.deleteTerminalOlderThan(olderThan = any(), limit = any()) } throws thrown
+
+                then("the same Error propagates out of the tick") {
+                    shouldThrow<StackOverflowError> { scheduler.purge() } shouldBeSameInstanceAs thrown
                 }
             }
         }

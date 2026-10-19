@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
 
 # infrastructure
 
@@ -24,7 +24,7 @@ repository contracts) and is consumed by `:application`. Produces a plain `jar` 
 | `src/main/kotlin/dev/notypie/templates/` | Slack message/modal builders and DSLs (see `src/main/kotlin/dev/notypie/templates/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/configurations/` | `JpaConfiguration`, `RetryConfiguration` (see `src/main/kotlin/dev/notypie/configurations/AGENTS.md`) |
 | `src/main/kotlin/dev/notypie/exception/` | `ErrorBroadcaster` port with its only implementation `StdoutErrorBroadcaster` (registered by `:application`'s `ErrorBroadcasterConfig`, injected nowhere); `meeting/DatabaseException` (see `src/main/kotlin/dev/notypie/exception/AGENTS.md`) |
-| `src/main/kotlin/dev/notypie/common/` | `JsonMapper` (Jackson 3 `jsonMapper`), `JPAJsonConverter`, `PartitionKeyUtil` (see `src/main/kotlin/dev/notypie/common/AGENTS.md`) |
+| `src/main/kotlin/dev/notypie/common/` | `JsonMapper` (Jackson 3 `jsonMapper`), `JPAJsonConverter`, `PartitionKeyUtil`, the failure-boundary helpers `containFailure` / `runCatchingExceptions` (see `src/main/kotlin/dev/notypie/common/AGENTS.md`) |
 | `src/test/` | H2 + `EmbeddedKafka` integration specs; `TestApplication.kt` boots the slice |
 | `src/testFixtures/` | Slack payload builders and schema creators reused by `:application` |
 | `src/` | Module sources: main, test, testFixtures (see `src/AGENTS.md`) |

@@ -11,12 +11,14 @@ import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.entity.Routine
 import dev.notypie.impl.command.event.SendSlackMessageEvent
 import dev.notypie.repository.standup.StandupRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -312,6 +314,33 @@ class StandupRoutineSetupServiceTest :
 
                 then("Routine validation rejects it before anything is persisted") {
                     verify(exactly = 0) { repo.createRoutine(routine = any()) }
+                }
+            }
+
+            `when`("building the routine throws an Error") {
+                val repo = mockk<StandupRepository>()
+                every { repo.findActiveRoutinesByChannel(commandChannel = any()) } returns emptyList()
+                val stager = mockk<OutboundMessageStager>()
+                val service =
+                    StandupRoutineSetupService(
+                        standupRepository = repo,
+                        outboundStager = stager,
+                        eventPublisher = mockk(relaxed = true),
+                    )
+                val thrown = StackOverflowError("deep")
+                val memberIds =
+                    object : AbstractList<String>() {
+                        override val size: Int = 1
+
+                        override fun get(index: Int): String = throw thrown
+                    }
+
+                then("the same Error propagates instead of reaching the creator as a rejection") {
+                    shouldThrow<StackOverflowError> {
+                        service.createRoutine(event = createCreateStandupRoutineEvent(memberIds = memberIds))
+                    } shouldBeSameInstanceAs thrown
+                    verify(exactly = 0) { repo.createRoutine(routine = any()) }
+                    verify(exactly = 0) { stager.stage(message = any(), basicInfo = any()) }
                 }
             }
         }

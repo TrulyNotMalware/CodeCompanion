@@ -13,6 +13,7 @@ import dev.notypie.application.service.interaction.InteractionHandler
 import dev.notypie.application.service.meeting.MeetingService
 import dev.notypie.application.service.mention.AppMentionEventHandler
 import dev.notypie.application.service.standup.StandupSlashService
+import dev.notypie.common.containFailure
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.impl.command.ViewOpenDeferral
@@ -52,35 +53,57 @@ class SocketModeReceiver(
             log.warn { "`local` profile active but slack.app.api.app-token is blank — receiver not started." }
             return
         }
-        runCatching {
+        containFailure(onFailure = { log.error(it) { "Failed to start Socket Mode receiver." } }) {
             val socketClient = Slack.getInstance().socketMode(appToken)
             socketClient.addSlashCommandsEnvelopeListener { envelope ->
-                ack(socketClient = socketClient, envelopeId = envelope.envelopeId)
-                handleSlash(payloadJson = envelope.payload.toString())
+                logErrorThenRethrow(kind = "slash", envelopeId = envelope.envelopeId) {
+                    ack(socketClient = socketClient, envelopeId = envelope.envelopeId)
+                    handleSlash(payloadJson = envelope.payload.toString())
+                }
             }
             socketClient.addInteractiveEnvelopeListener { envelope ->
-                // Handled first — a view_submission's response_action must ride the ack itself.
-                handleInteractive(payloadJson = envelope.payload.toString()) { ackBody ->
-                    ackInteractive(socketClient = socketClient, envelopeId = envelope.envelopeId, ackBody = ackBody)
+                logErrorThenRethrow(kind = "interactive", envelopeId = envelope.envelopeId) {
+                    // Handled first — a view_submission's response_action must ride the ack itself.
+                    handleInteractive(payloadJson = envelope.payload.toString()) { ackBody ->
+                        ackInteractive(socketClient = socketClient, envelopeId = envelope.envelopeId, ackBody = ackBody)
+                    }
                 }
             }
             socketClient.addEventsApiEnvelopeListener { envelope ->
-                ack(socketClient = socketClient, envelopeId = envelope.envelopeId)
-                handleEvent(payloadJson = envelope.payload.toString())
+                logErrorThenRethrow(kind = "event", envelopeId = envelope.envelopeId) {
+                    ack(socketClient = socketClient, envelopeId = envelope.envelopeId)
+                    handleEvent(payloadJson = envelope.payload.toString())
+                }
             }
             socketClient.connect()
             client = socketClient
             log.info { "Slack Socket Mode receiver connected (local profile)." }
-        }.onFailure { log.error(it) { "Failed to start Socket Mode receiver." } }
+        }
     }
 
     override fun stop() {
-        runCatching { client?.disconnect() }
-            .onFailure { log.warn(it) { "Failed to disconnect Socket Mode client cleanly." } }
-        client = null
+        try {
+            containFailure(onFailure = { log.warn(it) { "Failed to disconnect Socket Mode client cleanly." } }) {
+                client?.disconnect()
+            }
+        } finally {
+            client = null
+        }
     }
 
     override fun isRunning(): Boolean = client != null
+
+    internal fun logErrorThenRethrow(kind: String, envelopeId: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (error: Error) {
+            log.error(error) {
+                "Socket Mode $kind envelope envelopeId=$envelopeId hit ${error::class.java.name}; the SDK drops this " +
+                    "message loop (one of ten) without a log of its own, so restart the app if Socket Mode goes quiet"
+            }
+            throw error
+        }
+    }
 
     private fun ack(socketClient: SocketModeClient, envelopeId: String) =
         socketClient.sendSocketModeResponse(AckResponse.builder().envelopeId(envelopeId).build())
@@ -94,8 +117,8 @@ class SocketModeReceiver(
         socketClient.sendSocketModeResponse("""{"envelope_id":"$envelopeId","payload":$ackBody}""")
     }
 
-    private fun handleSlash(payloadJson: String) {
-        runCatching {
+    internal fun handleSlash(payloadJson: String) {
+        containFailure(onFailure = { log.error(it) { "Socket Mode slash-command handling failed." } }) {
             val data =
                 jsonMapper
                     .readValue(payloadJson, Map::class.java)
@@ -103,7 +126,7 @@ class SocketModeReceiver(
                     .associate { (key, value) -> key.toString() to value.toString() }
             val (payload, commandData) = parseRequestBodyData(headers = noHeaders, data = data)
             ViewOpenDeferral.afterBoundary { dispatchSlash(payload = payload, commandData = commandData) }
-        }.onFailure { log.error(it) { "Socket Mode slash-command handling failed." } }
+        }
     }
 
     internal fun dispatchSlash(payload: SlashCommandRequestBody, commandData: InboundCommand) {
@@ -179,8 +202,8 @@ class SocketModeReceiver(
         acknowledge(ackBody)
     }
 
-    private fun handleEvent(payloadJson: String) {
-        runCatching {
+    internal fun handleEvent(payloadJson: String) {
+        containFailure(onFailure = { log.error(it) { "Socket Mode event handling failed." } }) {
             @Suppress("UNCHECKED_CAST")
             val payload = jsonMapper.readValue(payloadJson, Map::class.java) as Map<String, Any>
             val eventType = (payload["event"] as? Map<*, *>)?.get("type")
@@ -189,6 +212,6 @@ class SocketModeReceiver(
             } else {
                 log.debug { "Ignoring non-app_mention Socket Mode event: type=$eventType" }
             }
-        }.onFailure { log.error(it) { "Socket Mode event handling failed." } }
+        }
     }
 }

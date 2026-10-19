@@ -5,13 +5,16 @@ import com.sun.net.httpserver.HttpServer
 import dev.notypie.dto.PostDomainCreateRequestBody
 import dev.notypie.dto.PostDomainResponse
 import dev.notypie.dto.PostDomainUpdateRequestBody
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
 import java.net.InetSocketAddress
 import java.time.Duration
@@ -223,6 +226,46 @@ class RestClientRequesterTest :
 
                 then("the value is encoded and cannot add parameters or a fragment") {
                     rawQuery shouldBe "user=U1%26extra%3D1%23frag"
+                }
+            }
+        }
+
+        given("a client that throws inside the exchange") {
+            fun requesterFailingWith(failure: Throwable): RestRequester =
+                RestClientRequester(
+                    baseUrl = "http://127.0.0.1:9",
+                    restClientBuilder = RestClient.builder().requestInterceptor { _, _, _ -> throw failure },
+                )
+
+            fun RestRequester.getOnce() =
+                safeGet(uri = "/probe", authorizationHeader = null, responseType = String::class.java)
+
+            fun RestRequester.postOnce() =
+                safePost(
+                    uri = "/probe",
+                    authorizationHeader = null,
+                    body = "probe",
+                    contentType = MediaType.TEXT_PLAIN,
+                    responseType = String::class.java,
+                )
+
+            `when`("the failure is an Exception") {
+                val thrown = IllegalStateException("broken")
+                val requester = requesterFailingWith(failure = thrown)
+
+                then("a request without and with a body returns it as the failure") {
+                    requester.getOnce().exceptionOrNull() shouldBeSameInstanceAs thrown
+                    requester.postOnce().exceptionOrNull() shouldBeSameInstanceAs thrown
+                }
+            }
+
+            `when`("the failure is an Error") {
+                val thrown = StackOverflowError("deep")
+                val requester = requesterFailingWith(failure = thrown)
+
+                then("a request without and with a body lets the same Error propagate") {
+                    shouldThrow<StackOverflowError> { requester.getOnce() } shouldBeSameInstanceAs thrown
+                    shouldThrow<StackOverflowError> { requester.postOnce() } shouldBeSameInstanceAs thrown
                 }
             }
         }

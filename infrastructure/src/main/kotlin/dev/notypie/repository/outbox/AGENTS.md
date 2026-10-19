@@ -33,7 +33,9 @@ tag and the Spring Data repository carrying the claim / recovery / health querie
   `observed + 1` (the `claim` / `reclaim` helpers in `application/service/relay/MessageRelayService.kt`).
   `renewClaim`, `deferClaim`, `completeClaim` and `abandonStuck` all require that exact attempt: a worker whose
   row was reclaimed can neither send, defer nor overwrite the new owner's result, and the sweep cannot abandon
-  a row a fresh owner just renewed. Claims are single-id; a bulk claim could not say which rows were won.
+  a row a fresh owner just renewed. `abandonStuck` bumps `attempt_count` as a reclaim does (2026-10-19), so the
+  relay's lost-acknowledgement re-read (`status` + `attempt_count`) can never mistake an abandoned row for its own write.
+  Claims are single-id; a bulk claim could not say which rows were won.
 - **`send_count` is the retry budget, `attempt_count` is not.** Only `renewClaim` (the step right before a
   send) raises it and only `deferClaim` (a rate limit) lowers it, so claims that were taken over in the
   relay queue and sends Slack rate-limited never count. The recovery sweep abandons on `send_count`, and

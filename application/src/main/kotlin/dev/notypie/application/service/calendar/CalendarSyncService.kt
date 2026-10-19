@@ -2,7 +2,7 @@ package dev.notypie.application.service.calendar
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.CALENDAR_GOOGLE_PROPERTIES_PREFIX
-import dev.notypie.application.service.standup.containFailure
+import dev.notypie.common.containFailure
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.domain.common.escapeMarkup

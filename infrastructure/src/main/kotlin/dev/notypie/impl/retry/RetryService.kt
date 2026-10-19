@@ -17,7 +17,7 @@ class RetryService {
         val multiplier: Double,
         val maxDelay: Long,
         val jitter: Long,
-        val exceptions: Set<Class<out Throwable>>,
+        val exceptions: Set<Class<out Exception>>,
     )
 
     fun <T> execute(
@@ -28,7 +28,7 @@ class RetryService {
         multiplier: Double = RetryOptions.MULTIPLIER.default.toDouble(),
         maxDelay: Long = RetryOptions.MAX_DELAY.default,
         jitter: Long = RetryOptions.JITTER.default,
-        exceptions: List<Class<out Throwable>> = listOf(Exception::class.java),
+        exceptions: List<Class<out Exception>> = listOf(Exception::class.java),
     ): T {
         val key =
             PolicyKey(
@@ -43,6 +43,11 @@ class RetryService {
         return try {
             template.execute { action() }
         } catch (e: RetryException) {
+            val cause = e.cause
+            if (cause is Error) {
+                e.suppressed.forEach(cause::addSuppressed)
+                throw cause
+            }
             recoveryCallBack?.invoke() ?: throw e
         }
     }
@@ -56,6 +61,7 @@ class RetryService {
             .maxDelay(Duration.ofMillis(key.maxDelay))
             .jitter(Duration.ofMillis(key.jitter))
             .includes(key.exceptions.toList())
+            .excludes(Error::class.java)
             .build()
 }
 

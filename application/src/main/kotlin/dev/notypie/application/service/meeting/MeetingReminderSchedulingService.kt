@@ -2,7 +2,7 @@ package dev.notypie.application.service.meeting
 
 import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
-import dev.notypie.application.service.standup.containFailure
+import dev.notypie.common.containFailure
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -166,8 +166,8 @@ class MeetingReminderSchedulingService(
                 }
             }
 
-        if (outcome.isFailure) {
-            val ex = outcome.exceptionOrNull()!!
+        val ex = outcome.exceptionOrNull()
+        if (ex != null) {
             log.error(ex) { "Meeting reminder dispatch failed: reminderId=$reminderId meetingId=${item.meetingId}" }
             if (!reminderRepository.markReminderFailed(
                     reminderId = reminderId,

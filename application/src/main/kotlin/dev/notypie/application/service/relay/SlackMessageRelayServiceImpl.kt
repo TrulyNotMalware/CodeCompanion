@@ -1,7 +1,9 @@
 package dev.notypie.application.service.relay
 
+import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.relayQueueCapacity
+import dev.notypie.common.runCatchingExceptions
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.impl.command.RestClientRequester
 import dev.notypie.impl.command.SLACK_DISPATCH_TIME_BOUND
@@ -31,6 +33,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.SmartLifecycle
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.kafka.listener.AbstractMessageListenerContainer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 import org.springframework.stereotype.Component
@@ -159,14 +162,15 @@ class SlackMessageRelayServiceImpl(
             return
         }
         val eventId =
-            runCatching { UUID.fromString(row.eventId) }
-                .getOrElse { parseFailure ->
-                    logger.error(parseFailure) {
-                        "Failing outbox row with malformed eventId='${row.eventId}' idempotencyKey=${row.idempotencyKey}"
-                    }
-                    writeTerminal(claim = claim, status = MessageStatus.FAILURE)
-                    return
+            try {
+                UUID.fromString(row.eventId)
+            } catch (malformed: IllegalArgumentException) {
+                logger.error(malformed) {
+                    "Failing outbox row with malformed eventId='${row.eventId}' idempotencyKey=${row.idempotencyKey}"
                 }
+                writeTerminal(claim = claim, status = MessageStatus.FAILURE)
+                return
+            }
         if (row.createdAt < now().minus(giveUpAfter)) {
             logger.error {
                 "Failing outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} unsent: created at " +
@@ -268,7 +272,7 @@ class SlackMessageRelayServiceImpl(
 
     private fun renew(claim: OutboxClaim): Boolean {
         val renewed =
-            runCatching {
+            runCatchingExceptions {
                 outboxRepository.renewClaim(eventId = claim.row.eventId, attemptCount = claim.attempt, now = now())
             }.getOrElse { exception ->
                 logger.error(exception) {
@@ -288,7 +292,7 @@ class SlackMessageRelayServiceImpl(
         val wait = minOf(retryAfter ?: DEFAULT_RATE_LIMIT_WAIT, giveUpAfter) + spreadOf(claim = claim)
         val eligibleAt = minOf(now().plus(wait), claim.row.createdAt.plus(giveUpAfter))
         val deferred =
-            runCatching {
+            runCatchingExceptions {
                 outboxRepository.deferClaim(
                     eventId = claim.row.eventId,
                     attemptCount = claim.attempt,
@@ -348,10 +352,16 @@ class SlackMessageRelayServiceImpl(
     }
 
     private fun writeTerminal(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope? = null): Boolean {
+        var attempt = 0
         val completed =
             try {
                 retryService.execute(
-                    action = { completeAndChain(claim = claim, status = status, next = next) },
+                    action = {
+                        attempt++
+                        val written = completeAndChain(claim = claim, status = status, next = next)
+                        val lostAck = written == 0 && attempt > 1 && recordedEarlier(claim = claim, status = status)
+                        if (lostAck) 1 else written
+                    },
                     maxAttempts = STATUS_WRITE_ATTEMPTS,
                 )
             } catch (exception: Exception) {
@@ -369,9 +379,14 @@ class SlackMessageRelayServiceImpl(
         return completed == 1
     }
 
+    private fun recordedEarlier(claim: OutboxClaim, status: MessageStatus): Boolean =
+        outboxRepository
+            .findByIdOrNull(id = claim.row.eventId)
+            ?.let { row -> row.status == status.name && row.attemptCount == claim.attempt } == true
+
     private fun completeAndChain(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope?): Int =
-        checkNotNull(
-            statusTransaction.execute {
+        statusTransaction
+            .runInTx {
                 val completed =
                     outboxRepository.completeClaim(
                         eventId = claim.row.eventId,
@@ -381,8 +396,7 @@ class SlackMessageRelayServiceImpl(
                     )
                 if (completed == 1 && next != null) outboxRepository.save(nextRow(row = claim.row, next = next))
                 completed
-            },
-        )
+            }.getOrThrow()
 
     private fun nextRow(row: OutboxMessage, next: OutboundEnvelope): OutboxMessage =
         outboundMessagePort.toRow(

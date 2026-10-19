@@ -8,6 +8,7 @@ import dev.notypie.application.configurations.DEAD_LETTER_MAX_BLOCK
 import dev.notypie.application.configurations.DEAD_LETTER_PUBLISH_FAILURES_METRIC
 import dev.notypie.application.configurations.PoisonOnlyDeadLetterRecoverer
 import dev.notypie.application.configurations.cdcDeadLetterRecoverer
+import dev.notypie.application.configurations.cdcErrorHandler
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
 import dev.notypie.application.outbox.createOutboxRow
@@ -16,6 +17,7 @@ import dev.notypie.application.outbox.stubClaimLifecycle
 import dev.notypie.impl.command.RATE_LIMITED_REASON
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
 import dev.notypie.repository.outbox.dto.MessagePublishFailedEvent
@@ -24,11 +26,15 @@ import dev.notypie.repository.outbox.dto.OutboxUpdateEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.just
@@ -37,8 +43,11 @@ import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
 import org.apache.kafka.clients.consumer.Consumer
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.MockConsumer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.springframework.context.ApplicationEventPublisher
@@ -48,12 +57,29 @@ import org.springframework.kafka.core.DefaultKafkaProducerFactory
 import org.springframework.kafka.core.KafkaOperations
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.kafka.listener.ConsumerAwareRecordRecoverer
+import org.springframework.kafka.listener.ContainerProperties
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer
+import org.springframework.kafka.listener.KafkaMessageListenerContainer
 import org.springframework.kafka.listener.ListenerExecutionFailedException
+import org.springframework.kafka.listener.MessageListener
+import org.springframework.kafka.mock.MockConsumerFactory
 import org.springframework.kafka.support.SendResult
 import java.util.Optional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+
+private class FailingColumn(
+    private val error: Error,
+) {
+    val value: String
+        get() = throw error
+}
+
+private fun failingColumn(error: Error): Any = FailingColumn(error = error)
 
 class DebeziumLogTailingProcessorTest :
     BehaviorSpec({
@@ -363,6 +389,160 @@ class DebeziumLogTailingProcessorTest :
                         )
                     }
                     verify(exactly = 0) { f.outboxRepository.findById(any()) }
+                }
+            }
+        }
+
+        given("records whose handling hits an Error") {
+            `when`("converting the after-image throws an Error") {
+                val f = fixture()
+                val eventId = UUID.randomUUID().toString()
+                val thrown = NotImplementedError("unfinished column")
+                val (wrapped, logs) =
+                    captureLogs(loggerName = loggerName) {
+                        shouldThrowExactly<ListenerErrorException> {
+                            f.processor.consume(
+                                envelope =
+                                    createCdcEnvelope(
+                                        after =
+                                            createOutboxAfterImage(eventId = eventId) +
+                                                ("payload" to failingColumn(error = thrown)),
+                                    ),
+                                partition = 3,
+                                offset = 42L,
+                            )
+                        }
+                    }
+
+                then(
+                    "it reaches the container as a ListenerErrorException carrying the same Error, logged with the record",
+                ) {
+                    wrapped.cause shouldBeSameInstanceAs thrown
+                    logs.messagesAt(level = Level.ERROR).single() shouldContain "partition=3 offset=42 eventId=$eventId"
+                    verify(exactly = 0) { f.outboxRepository.findById(any()) }
+                }
+            }
+
+            `when`("the dispatch throws an Error") {
+                val f = fixture()
+                val eventId = UUID.randomUUID().toString()
+                val thrown = StackOverflowError("deep")
+                f.outboxRepository.currentRowIs(eventId = eventId, status = MessageStatus.PENDING)
+                f.outboxRepository.claimReturns(eventId = eventId, won = 1)
+                every { f.dispatcher.dispatch(event = any()) } throws thrown
+
+                then("it reaches the container as a ListenerErrorException carrying the same Error") {
+                    shouldThrowExactly<ListenerErrorException> {
+                        f.processor.consume(
+                            envelope = createCdcEnvelope(after = createOutboxAfterImage(eventId = eventId)),
+                        )
+                    }.cause shouldBeSameInstanceAs thrown
+                }
+            }
+        }
+
+        given("a listener container in front of the processor, with the CDC error handler") {
+            val topic = "cdc.code_companion.outbox_message"
+            val partition = TopicPartition(topic, 0)
+            val parseFailingId = UUID.randomUUID().toString()
+            val dispatchFailingId = UUID.randomUUID().toString()
+            val nextId = UUID.randomUUID().toString()
+            val parseError = NotImplementedError("unfinished column")
+            val dispatchError = StackOverflowError("deep")
+            val outboxRepository = mockk<MessageOutboxRepository>()
+            listOf(dispatchFailingId, nextId).forEach { eventId ->
+                outboxRepository.currentRowIs(eventId = eventId, status = MessageStatus.PENDING)
+                outboxRepository.claimReturns(eventId = eventId, won = 1)
+            }
+            val nextDispatched = CountDownLatch(1)
+            val failingDispatches = AtomicInteger(0)
+            val relayService =
+                mockk<MessageRelayService> {
+                    every { dispatchClaimed(claim = match { it.row.eventId == dispatchFailingId }) } answers {
+                        failingDispatches.incrementAndGet()
+                        throw dispatchError
+                    }
+                    every { dispatchClaimed(claim = match { it.row.eventId == nextId }) } answers
+                        { nextDispatched.countDown() }
+                }
+            val processor =
+                DebeziumLogTailingProcessor(
+                    outboxRepository = outboxRepository,
+                    relayService = relayService,
+                    clock = createFixedUtcClock(),
+                )
+            val deadLettered = CopyOnWriteArrayList<Pair<Long, Exception?>>()
+            val consumer = MockConsumer<String, Any>("earliest")
+            consumer.updateBeginningOffsets(mapOf(partition to 0L))
+            consumer.schedulePollTask { consumer.rebalance(listOf(partition)) }
+            listOf(
+                createOutboxAfterImage(eventId = parseFailingId) +
+                    ("payload" to failingColumn(error = parseError)),
+                createOutboxAfterImage(eventId = dispatchFailingId),
+                createOutboxAfterImage(eventId = nextId),
+            ).forEachIndexed { offset, afterImage ->
+                consumer.schedulePollTask {
+                    consumer.addRecord(
+                        ConsumerRecord<String, Any>(
+                            topic,
+                            0,
+                            offset.toLong(),
+                            "key-$offset",
+                            createCdcEnvelope(after = afterImage),
+                        ),
+                    )
+                }
+            }
+            val container =
+                KafkaMessageListenerContainer(
+                    MockConsumerFactory { consumer },
+                    ContainerProperties(topic).apply {
+                        ackMode = ContainerProperties.AckMode.RECORD
+                        setGroupId("cdc-error-test")
+                        setMessageListener(
+                            MessageListener<String, Any> { record ->
+                                processor.consume(
+                                    envelope = record.value() as Envelope?,
+                                    partition = record.partition(),
+                                    offset = record.offset(),
+                                )
+                            },
+                        )
+                    },
+                )
+            container.commonErrorHandler =
+                cdcErrorHandler(
+                    recoverer =
+                        PoisonOnlyDeadLetterRecoverer(
+                            deadLetter =
+                                ConsumerAwareRecordRecoverer { record, _, exception ->
+                                    deadLettered += record.offset() to exception
+                                },
+                        ),
+                )
+
+            `when`("a parse-time Error and a dispatch Error arrive before an ordinary record") {
+                container.start()
+                val consumedNext = nextDispatched.await(10L, TimeUnit.SECONDS)
+                val stillRunning = container.isRunning
+                container.stop()
+
+                then(
+                    "both go to the dead-letter topic once, unretried, and the container goes on with the next record",
+                ) {
+                    consumedNext shouldBe true
+                    stillRunning shouldBe true
+                    deadLettered.map { it.first } shouldBe listOf(0L, 1L)
+                    deadLettered.forEach { (_, exception) ->
+                        generateSequence<Throwable>(exception) { it.cause }
+                            .filterIsInstance<ListenerErrorException>()
+                            .toList() shouldHaveSize 1
+                    }
+                    generateSequence<Throwable>(deadLettered[0].second) { it.cause }.last() shouldBeSameInstanceAs
+                        parseError
+                    generateSequence<Throwable>(deadLettered[1].second) { it.cause }.last() shouldBeSameInstanceAs
+                        dispatchError
+                    failingDispatches.get() shouldBe 1
                 }
             }
         }
