@@ -9,6 +9,7 @@ import dev.notypie.application.security.SlackRetryDeduplicator
 import dev.notypie.application.service.agent.ASK_RESUME_PERIOD_MILLIS
 import dev.notypie.application.service.agent.AgentAskThreadStarter
 import dev.notypie.application.service.agent.AgentConverseService
+import dev.notypie.application.service.agent.AgentRetentionScheduler
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.cve.CveTopicBootstrap
 import dev.notypie.application.service.meeting.DailyAgendaSchedulingService
@@ -56,6 +57,8 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -74,6 +77,7 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.dao.support.PersistenceExceptionTranslator
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.scheduling.TaskScheduler
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.scheduling.config.FixedDelayTask
@@ -148,6 +152,23 @@ class ApplicationContextSmokeTest
                                 .shouldBeInstanceOf<FixedDelayTask>()
                         sweep.intervalDuration shouldBe period
                         sweep.initialDelayDuration shouldBe period
+                    }
+
+                    then("the agent retention purge is an hourly fixed-delay task, first run 10-20 min after start") {
+                        val purge =
+                            context
+                                .getBean(ScheduledAnnotationBeanPostProcessor::class.java)
+                                .scheduledTasks
+                                .map { it.task }
+                                .single { it.toString() == "${AgentRetentionScheduler::class.java.name}.purge" }
+                                .shouldBeInstanceOf<FixedDelayTask>()
+                        purge.intervalDuration shouldBe Duration.ofHours(1L)
+                        purge.initialDelayDuration shouldBeGreaterThanOrEqualTo Duration.ofMinutes(10L)
+                        purge.initialDelayDuration shouldBeLessThan Duration.ofMinutes(20L)
+                        AgentRetentionScheduler::class.java
+                            .getMethod("purge")
+                            .getAnnotation(Scheduled::class.java)
+                            .initialDelayString shouldStartWith "\${random.long["
                     }
 
                     then("the relay is wired to the dedicated relayTaskExecutor") {

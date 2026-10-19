@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
 
 # infrastructure/repository/agent
 
@@ -9,6 +9,8 @@ session id so a thread resumes as one conversation, and `agent_turn_history` is 
 every turn (outcome, error code, token usage, duration), read back as windowed aggregates for `@bot usage`.
 `agent_ask_turn` is the `/ask` turn ledger: one row per delivered question, moved through a small state machine
 by compare-and-set statements, so a turn that has not reached an outcome can be found and run again (2026-10-13).
+`agent_turn_history` and the ledger's finished rows are purged past their retention by `:application`
+`AgentRetentionScheduler` (2026-10-15); `agent_session` is never purged.
 
 ## Key Files
 | File | Description |
@@ -16,10 +18,10 @@ by compare-and-set statements, so a turn that has not reached an outcome can be 
 | `AgentSessionRepository.kt` | Port: `findProviderSessionId(sessionKey): String?`, `saveProviderSessionId(sessionKey, providerSessionId, now: LocalDateTime)` (`now` is the caller's app clock) |
 | `AgentSessionRepositoryImpl.kt` | `saveProviderSessionId` is one statement, `JpaAgentSessionRepository.upsertProviderSessionId` — no read before the write. Final class, no `@Transactional` |
 | `JpaAgentSessionRepository.kt` | `JpaRepository<AgentSessionSchema, Long>` + derived `findBySessionKey(sessionKey): AgentSessionSchema?`; native `upsertProviderSessionId(sessionKey, providerSessionId, now)` = `INSERT … ON DUPLICATE KEY UPDATE provider_session_id, updated_at` on `uk_agent_session_session_key` (`created_at` and `updated_at` from `:now`) |
-| `AgentTurnHistoryRepository.kt` | `data class AgentTurnRecord(sessionKey, requesterId, channel, idempotencyKey: UUID, outcome: AgentTurnOutcome, errorCode?, inputTokens?, outputTokens?, durationMs)`; aggregate rows `AgentTurnOutcomeUsage(outcome, turns, inputTokens, outputTokens, totalDurationMs)` and `RequesterTurnUsage(requesterId, turns, inputTokens, outputTokens)` (all `Long`); port `record(turn)`, `countByOutcomeSince(since)`, `topRequestersSince(since, limit)` |
-| `AgentTurnHistoryRepositoryImpl.kt` | Maps `AgentTurnRecord` to `AgentTurnHistorySchema` (UUID → 36-char string) and saves; the two aggregates delegate to the JPQL below (`limit` → `PageRequest.of(0, limit)`) |
-| `AgentAskTurnRepository.kt` | `@Repository interface AgentAskTurnRepository : JpaRepository<AgentAskTurnSchema, String>`, used by `:application` directly (no port or `*Impl`, as with `MessageOutboxRepository`). Four native `@Modifying @Transactional` CAS statements, each returning the affected row count and stamping `updated_at` with the caller's `now`: `begin(eventId, attemptCount, now)`, `release(eventId, attemptCount, now)`, `releaseOrphan(eventId, attemptCount, orphanedBefore, now)`, `finish(eventId, attemptCount, status: String, now)`; the native read `findResumable(pendingBefore, orphanedBefore, limit)` (`PENDING` rows with `updated_at < pendingBefore` or `IN_PROGRESS` rows with `updated_at < orphanedBefore`, `ORDER BY updated_at ASC LIMIT`); `data class RecordedAskTurn(turn: AgentAskTurnSchema, storedNow: Boolean)`; and the extension `fun AgentAskTurnRepository.recordDelivered(eventId, messageTs, now): RecordedAskTurn` (insert first → `storedNow = true`; on `DataIntegrityViolationException` the stored row with `storedNow = false`, or the exception again when no row exists; `check`s that no transaction is active) |
-| `JpaAgentTurnHistoryRepository.kt` | `JpaRepository<AgentTurnHistorySchema, Long>` + two JPQL constructor-expression queries over `created_at >= :since`: `countByOutcomeSince` (`GROUP BY outcome`) and `topRequestersSince(since, pageable)` (`GROUP BY requesterId ORDER BY COUNT DESC, requesterId ASC`). Token and duration sums are `COALESCE(SUM(...), 0L)`, so a group whose turns all lack token counts reads 0, not null |
+| `AgentTurnHistoryRepository.kt` | `data class AgentTurnRecord(sessionKey, requesterId, channel, idempotencyKey: UUID, outcome: AgentTurnOutcome, errorCode?, inputTokens?, outputTokens?, durationMs)`; aggregate rows `AgentTurnOutcomeUsage(outcome, turns, inputTokens, outputTokens, totalDurationMs)` and `RequesterTurnUsage(requesterId, turns, inputTokens, outputTokens)` (all `Long`); port `record(turn)`, `countByOutcomeSince(since)`, `topRequestersSince(since, limit)`, `deleteOlderThan(olderThan, limit): Int` (the retention purge, 2026-10-15) |
+| `AgentTurnHistoryRepositoryImpl.kt` | Maps `AgentTurnRecord` to `AgentTurnHistorySchema` (UUID → 36-char string) and saves; the two aggregates delegate to the JPQL below (`limit` → `PageRequest.of(0, limit)`), `deleteOlderThan` to the native delete |
+| `AgentAskTurnRepository.kt` | `@Repository interface AgentAskTurnRepository : JpaRepository<AgentAskTurnSchema, String>`, used by `:application` directly (no port or `*Impl`, as with `MessageOutboxRepository`). Four native `@Modifying @Transactional` CAS statements, each returning the affected row count and stamping `updated_at` with the caller's `now`: `begin(eventId, attemptCount, now)`, `release(eventId, attemptCount, now)`, `releaseOrphan(eventId, attemptCount, orphanedBefore, now)`, `finish(eventId, attemptCount, status: String, now)`; the native read `findResumable(pendingBefore, orphanedBefore, limit)` (`PENDING` rows with `updated_at < pendingBefore` or `IN_PROGRESS` rows with `updated_at < orphanedBefore`, `ORDER BY updated_at ASC LIMIT`); the native `@Modifying @Transactional` `deleteFinishedOlderThan(olderThan, limit): Int` (`DELETE … WHERE status IN ('COMPLETED', 'ABANDONED') AND updated_at < :olderThan LIMIT :limit`, the retention purge; `PENDING` / `IN_PROGRESS` rows are never deleted, however old, 2026-10-15); `data class RecordedAskTurn(turn: AgentAskTurnSchema, storedNow: Boolean)`; and the extension `fun AgentAskTurnRepository.recordDelivered(eventId, messageTs, now): RecordedAskTurn` (insert first → `storedNow = true`; on `DataIntegrityViolationException` the stored row with `storedNow = false`, or the exception again when no row exists; `check`s that no transaction is active) |
+| `JpaAgentTurnHistoryRepository.kt` | `JpaRepository<AgentTurnHistorySchema, Long>` + two JPQL constructor-expression queries over `created_at >= :since`: `countByOutcomeSince` (`GROUP BY outcome`) and `topRequestersSince(since, pageable)` (`GROUP BY requesterId ORDER BY COUNT DESC, requesterId ASC`). Token and duration sums are `COALESCE(SUM(...), 0L)`, so a group whose turns all lack token counts reads 0, not null. Native `@Modifying @Transactional` `deleteOlderThan(olderThan, limit): Int` = `DELETE … WHERE created_at < :olderThan LIMIT :limit` on `idx_agent_turn_history_created_at` (2026-10-15) |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -81,14 +83,52 @@ by compare-and-set statements, so a turn that has not reached an outcome can be 
   `save` runs in Spring Data's own transaction. Follow the `open class` + `@Transactional` shape from
   `repository/cve` if a method ever needs two statements to commit together.
 - **`record` is fire-and-forget audit;** a failure here should not fail the user's turn — the caller
-  (`AgentConverseService`) decides. Rows are never updated.
+  (`AgentConverseService`) decides. Rows are never updated; they are deleted only by the retention purge.
+- **Retention deletes are bounded, native and status-guarded** (2026-10-15). JPQL bulk deletes cannot take a
+  `LIMIT`, so each purge statement is native `DELETE … LIMIT :limit` like the outbox purge, one statement per
+  transaction, and the caller loops until a batch comes back short. The ledger purge must keep its `status IN
+  ('COMPLETED', 'ABANDONED')` guard: deleting a `PENDING` / `IN_PROGRESS` row makes its owner's next CAS change 0
+  rows (`AgentTurnLeaseLostException`, the answer rolls back) and drops the turn from the sweep. The status list is a
+  literal, so `AgentAskTurnRepositoryTest` classifies every `AgentAskTurnStatus` constant in a `when` without `else`
+  and checks that exactly the finished ones are deleted: a new constant does not compile until it is classified.
+- **Run each purge statement outside any surrounding transaction** (2026-10-19). Each `DELETE … LIMIT` must be the
+  first and only statement of its own transaction (the repository method's `@Transactional`). Wrapping several batches
+  or the whole purge in one transaction, or reading before the delete, holds every batch's locks to the end and, on
+  MariaDB with `innodb_snapshot_isolation`, can make the replica that waited fail with ER_CHECKREAD 1020 at commit
+  when both replicas purge the same range (inferred from the 1020 cases above, not measured).
+- **Not yet run on MariaDB (pre-rollout checklist):**
+  1. `EXPLAIN DELETE …` for the three purge statements. The ledger one must be a range on
+     `idx_agent_ask_turn_status_updated_at` (two status ranges), each history one a range on its `created_at` index.
+     `LIMIT` bounds the rows deleted, not the rows scanned or locked: a full scan under REPEATABLE READ examines and locks
+     the live `PENDING` / `IN_PROGRESS` rows it passes even with `LIMIT 1`, and walks the whole table when nothing matches.
+     A smaller `batch-size` does not fix that; the index or the statement does.
+  2. Two sessions deleting the same range at once: the lock waits actually observed (the scheduler's startup jitter only
+     lowers the chance of overlap).
+  3. The successive-batch contract the scheduler relies on — each call deletes at most `limit` rows and returns the true
+     count, so the loop drains a backlog and stops on the first short batch. **The H2 specs do not prove it** (next bullet);
+     `AgentRetentionSchedulerTest` feeds the counts from MockK.
+
+  A `DELETE … LIMIT` without `ORDER BY` is flagged unsafe for statement-based binlog; the repository's MariaDB configs set
+  `binlog_format=ROW` (`resources/cdc/docker-compose/mariadb/my.cnf`, `cdc/k8s/yamls/mariadb/mariadb-config.yaml`).
+- **H2 miscounts these deletes after the first call** (2026-10-17, observed in `AgentAskTurnRepositoryTest` with exact
+  assertions, H2 2.4.240 `MODE=MariaDB`, Hibernate-generated table). The statement as Hibernate sent it —
+  `DELETE FROM agent_ask_turn WHERE status IN ('COMPLETED', 'ABANDONED') AND updated_at < ? LIMIT ?` with a `TIMESTAMP`
+  cutoff and `INTEGER` 2 bound — gave, for three `COMPLETED` rows past the cutoff, counts/rows left `[2, 1, 0, 0]`
+  (expected `[2, 1, 1, 0]`: the second call deleted the last row and reported 0), and for three `COMPLETED` plus three
+  `ABANDONED` rows `[(2, 4), (2, 1), (0, 0), (0, 0)]` (expected `[(2, 4), (2, 2), (2, 0), (0, 0)]`: the second call deleted
+  three rows under `LIMIT 2` and reported 2). Same result inside the test transaction, with every call committed, and
+  on a `VARCHAR` copy of the table through the same Hibernate path; the trigger is not identified (a direct JDBC run of
+  the statement on the same jar counted correctly in review). So the ledger specs assert the first call exactly and, for
+  later calls, only what holds even under that miscount: each reported count is within `0..limit`, the eligible rows left
+  never increase and reach zero, and ineligible rows stay. A later call deleting more than `limit`, or returning a wrong
+  count, would still pass; that part of the contract is for the MariaDB check above. MariaDB's counting was not checked.
 - `turnId` in `mcp_tool_call_history` joins `agent_turn_history.idempotency_key`; keep the 36-char string
   form when touching either side. Migrations: `V9` (`agent_session`), `V10` (`agent_turn_history`), `V26`
   (`agent_ask_turn`).
 - Beans: `JpaConfiguration.agentSessionRepository` / `agentTurnHistoryRepository`; consumers:
-  `:application` `AgentConverseService` (writes) and `AgentUsageReportService` (aggregates). `AgentAskTurnRepository`
-  is its own Spring Data bean (picked up by `@EnableJpaRepositories`); its consumer is `:application`
-  `AgentAskThreadStarter`.
+  `:application` `AgentConverseService` (writes), `AgentUsageReportService` (aggregates) and `AgentRetentionScheduler`
+  (purge). `AgentAskTurnRepository` is its own Spring Data bean (picked up by `@EnableJpaRepositories`); its consumers
+  are `:application` `AgentAskThreadStarter` and `AgentRetentionScheduler`.
 - `created_at` is `@CreationTimestamp` (JVM clock, system zone), so the `since` a caller passes must come from a
   system-zone clock too; the app's `Clock` bean is `Clock.systemDefaultZone()`.
 
@@ -100,7 +140,11 @@ by compare-and-set statements, so a turn that has not reached an outcome can be 
 specs in `:application` that mock the two ports. `AgentTurnHistoryRepositoryImplTest` (same H2 mode) pins the two
 aggregates; `record` has no spec here. `AgentAskTurnRepositoryTest` (same H2 mode) pins the winning and every
 losing path of each CAS, both counters across a whole life, `recordDelivered` and `findResumable`; the
-`:application` `AgentAskThreadStarterTest` drives the same statements through the lease.
+`:application` `AgentAskThreadStarterTest` drives the same statements through the lease. The retention deletes are
+pinned on the same H2 mode: the ledger purge deletes only finished rows strictly older than the cutoff (and exactly the
+statuses a `when` over `AgentAskTurnStatus` classifies as finished), and its first call honours the limit with one or
+both finished statuses; each history purge deletes only rows created strictly before the cutoff, at most `limit` per
+call.
 
 ### Common Patterns
 - Port interface + `*Impl` + `Jpa*Repository` triple; ports expose primitives / records, never entities. The

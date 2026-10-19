@@ -104,6 +104,22 @@ interface AgentAskTurnRepository : JpaRepository<AgentAskTurnSchema, String> {
         @Param("orphanedBefore") orphanedBefore: LocalDateTime,
         @Param("limit") limit: Int,
     ): List<AgentAskTurnSchema>
+
+    @Modifying
+    @Transactional
+    @Query(
+        """
+        DELETE FROM agent_ask_turn
+        WHERE status IN ('COMPLETED', 'ABANDONED')
+          AND updated_at < :olderThan
+        LIMIT :limit
+    """,
+        nativeQuery = true,
+    )
+    fun deleteFinishedOlderThan(
+        @Param("olderThan") olderThan: LocalDateTime,
+        @Param("limit") limit: Int,
+    ): Int
 }
 
 data class RecordedAskTurn(

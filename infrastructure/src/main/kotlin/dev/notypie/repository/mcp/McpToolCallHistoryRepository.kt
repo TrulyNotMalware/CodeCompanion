@@ -26,4 +26,6 @@ interface McpToolCallHistoryRepository {
     fun record(call: McpToolCallRecord)
 
     fun countByToolSince(since: LocalDateTime): List<ToolCallUsage>
+
+    fun deleteOlderThan(olderThan: LocalDateTime, limit: Int): Int
 }

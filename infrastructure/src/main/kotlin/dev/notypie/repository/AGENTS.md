@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
 
 # infrastructure/repository
 
@@ -16,9 +16,9 @@ subpackage of `@Entity` classes.
 | `meeting/` | Meetings, participants, agenda dispatch, reminders; `AddParticipantResult` (see `meeting/AGENTS.md`) |
 | `standup/` | Routines, sessions, per-member dispatches (see `standup/AGENTS.md`) |
 | `cve/` | Topics, events, subscriptions, deliveries, collect ledger (see `cve/AGENTS.md`) |
-| `agent/` | `agent_session`, `agent_turn_history` (token usage, duration, outcome) and `agent_ask_turn`, the `/ask` turn ledger with its lease CAS statements (see `agent/AGENTS.md`) |
+| `agent/` | `agent_session`, `agent_turn_history` (token usage, duration, outcome) and `agent_ask_turn`, the `/ask` turn ledger with its lease CAS statements; the history and the finished ledger rows have bounded retention deletes (see `agent/AGENTS.md`) |
 | `authorization/` | `user_command_role` grants backing the role system (see `authorization/AGENTS.md`) |
-| `mcp/` | `mcp_tool_call_history` audit trail (see `mcp/AGENTS.md`) |
+| `mcp/` | `mcp_tool_call_history` audit trail, with a bounded retention delete (see `mcp/AGENTS.md`) |
 | `calendar/` | `google_calendar_connection` (encrypted refresh token per Slack user), the single-use `google_oauth_state` ledger and the `meeting_calendar_event` mirror queue (claim-token plus `change_seq` generation CAS) (see `calendar/AGENTS.md`) |
 
 ## For AI Agents

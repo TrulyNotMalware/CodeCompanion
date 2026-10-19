@@ -6,6 +6,8 @@ import dev.notypie.schema.createAgentAskTurnSchema
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldBeMonotonicallyDecreasing
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -487,6 +489,85 @@ class AgentAskTurnRepositoryTest
                             listOf(AgentAskTurnStatus.IN_PROGRESS, AgentAskTurnStatus.PENDING)
                         resumable.map { it.attemptCount } shouldContainExactly listOf(3, 0)
                         firstOnly.map { it.eventId } shouldContainExactly listOf(orphaned)
+                    }
+                }
+            }
+
+            given("deleteFinishedOlderThan") {
+                val cutoff = now.minusDays(14L)
+
+                `when`("turns of every status sit on both sides of the cutoff") {
+                    then("only COMPLETED/ABANDONED turns touched before it go; older waiting and running turns stay") {
+                        val completed =
+                            stored(status = AgentAskTurnStatus.COMPLETED, updatedAt = cutoff.minusNanos(1_000L))
+                        val abandoned = stored(status = AgentAskTurnStatus.ABANDONED, updatedAt = cutoff.minusDays(30L))
+                        val kept =
+                            listOf(
+                                stored(status = AgentAskTurnStatus.PENDING, updatedAt = cutoff.minusDays(30L)),
+                                stored(status = AgentAskTurnStatus.IN_PROGRESS, updatedAt = cutoff.minusDays(30L)),
+                                stored(status = AgentAskTurnStatus.COMPLETED, updatedAt = cutoff),
+                                stored(status = AgentAskTurnStatus.ABANDONED, updatedAt = cutoff.plusSeconds(1L)),
+                            )
+
+                        repository.deleteFinishedOlderThan(olderThan = cutoff, limit = 10) shouldBe 2
+
+                        repository.existsById(completed) shouldBe false
+                        repository.existsById(abandoned) shouldBe false
+                        kept.map { repository.existsById(it) } shouldContainExactly List(size = kept.size) { true }
+                    }
+                }
+
+                `when`("one turn of every status sits past the cutoff") {
+                    then("exactly the statuses no transition leaves are deleted") {
+                        fun finished(status: AgentAskTurnStatus): Boolean =
+                            when (status) {
+                                AgentAskTurnStatus.PENDING, AgentAskTurnStatus.IN_PROGRESS -> false
+                                AgentAskTurnStatus.COMPLETED, AgentAskTurnStatus.ABANDONED -> true
+                            }
+                        val pastCutoff = cutoff.minusDays(1L)
+                        val turnByStatus =
+                            AgentAskTurnStatus.entries.associateWith { stored(status = it, updatedAt = pastCutoff) }
+
+                        repository.deleteFinishedOlderThan(olderThan = cutoff, limit = 10)
+
+                        turnByStatus.filterValues { repository.existsById(it) }.keys shouldBe
+                            AgentAskTurnStatus.entries.filterNot { finished(status = it) }.toSet()
+                    }
+                }
+
+                `when`("more finished turns are past the cutoff than the limit") {
+                    then("one call deletes exactly limit rows and the next call the rest") {
+                        val pastCutoff = cutoff.minusDays(1L)
+                        val finished =
+                            List(size = 3) { stored(status = AgentAskTurnStatus.COMPLETED, updatedAt = pastCutoff) }
+
+                        repository.deleteFinishedOlderThan(olderThan = cutoff, limit = 2) shouldBe 2
+                        finished.count { repository.existsById(it) } shouldBe 1
+                        repository.deleteFinishedOlderThan(olderThan = cutoff, limit = 2)
+                        finished.count { repository.existsById(it) } shouldBe 0
+                    }
+                }
+
+                `when`("COMPLETED and ABANDONED turns past the cutoff outnumber the limit") {
+                    then("the first call deletes limit rows across both statuses and later calls the rest") {
+                        val pastCutoff = cutoff.minusDays(1L)
+                        val finished =
+                            List(size = 3) { stored(status = AgentAskTurnStatus.COMPLETED, updatedAt = pastCutoff) } +
+                                List(size = 3) { stored(status = AgentAskTurnStatus.ABANDONED, updatedAt = pastCutoff) }
+                        val waiting = stored(status = AgentAskTurnStatus.PENDING, updatedAt = pastCutoff)
+
+                        repository.deleteFinishedOlderThan(olderThan = cutoff, limit = 2) shouldBe 2
+                        finished.count { repository.existsById(it) } shouldBe 4
+                        val later =
+                            List(size = 3) {
+                                repository.deleteFinishedOlderThan(olderThan = cutoff, limit = 2) to
+                                    finished.count { repository.existsById(it) }
+                            }
+
+                        later.map { (reported, _) -> reported }.filterNot { it in 0..2 }.shouldBeEmpty()
+                        (listOf(4) + later.map { (_, left) -> left }).shouldBeMonotonicallyDecreasing()
+                        later.last().second shouldBe 0
+                        repository.existsById(waiting) shouldBe true
                     }
                 }
             }

@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-15_
+_type: decision · updated: 2026-10-19_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -232,8 +232,27 @@ _type: decision · updated: 2026-10-15_
       포기 조건(5회/1시간)에서 안내 없이 `ABANDONED`(CAS가 이겼을 때만 ERROR·집계; 스레드 안내는 채널이 읽을 수 없는 행에만 있어 만들 수 없고, 아웃박스 행의
       `publisherId`로 DM을 보내는 것은 별도 기능이다). 행이 없거나 질문이 아닌 내용이면 예전처럼 즉시 `ABANDONED`.
       이것은 relay와 같은 트레이드오프다: 더 새 버전의 행은 그 버전을 아는 레플리카가 돌리도록 기다리게 하는 대신(롤아웃 중), 1시간 넘게 새 레플리카가
-      돌아오지 않으면 예전 같으면 필드를 버리고라도 답했을 질문이 안내 없이 포기되고, 디코드 자체가 안 되는 행은 즉시 포기되는 대신 1시간을 기다린다. ⑤ 진행할 수 없는
-      행(이 JVM 큐에 있는 턴, 거절된 offer, 안내 쓰기가 실패한 포기, 읽을 수 없는 질문 행은 최대 1시간)은 `updated_at`이 가장 오래돼 20건 배치의 앞자리를 계속 차지한다.
+      돌아오지 않으면 예전 같으면 필드를 버리고라도 답했을 질문이 안내 없이 포기되고, 디코드 자체가 안 되는 행은 즉시 포기되는 대신 1시간을 기다린다. ⑤ (2026-10-15 해소) 진행할 수 없는
+      행(이 JVM 큐에 있는 턴, 거절된 offer, 안내 쓰기가 실패한 포기, 읽을 수 없는 질문 행은 최대 1시간)은 `updated_at`이 가장 오래돼 20건 배치의 앞자리를 계속 차지한다
+      → 오래 붙잡는 것은 읽을 수 없는 질문 행뿐이다(큐의 턴은 곧 `begin`하고, 거절된 offer는 executor가 가득 찼다는 뜻이라 뒤의 행도 못 들어가며,
+      안내 쓰기 실패는 DB 장애라 어차피 전부 막힌다). 그래서 스윕은 직전 스윕에서 읽을 수 없던 행 수만큼 다음 읽기를 넓힌다 —
+      `limit = ASK_RESUME_BATCH_SIZE + min(그 수, ASK_UNREADABLE_LOOK_AHEAD_MAX)`(상한 80행 추가, 한 스윕에 최대 100행). 그 수는 이 JVM의
+      메모리(`@Volatile`)에만 있고, 그 행들이 포기되거나 읽을 수 있게 되면 0으로 돌아온다. look-ahead 때문에 읽을 수 없는 행에 새로 쓰는 것은
+      없다 — 기다리는 `PENDING` 행은 포기 조건 전까지 그대로 두고 스윕마다 ERROR 하나만 남긴다. 다만 고아 `IN_PROGRESS` 행은 질문을 읽기
+      **전에** `releaseOrphan`으로 `PENDING`이 되며 `updated_at`이 바뀌고, 포기 조건에서는 `ABANDONED`로 쓰인다(둘 다 이전부터의 동작). 남는 것:
+      재시작 직후 첫 스윕은 다시 한 배치만 읽는다(다음 스윕부터 넘어간다); 한 스윕은 최대 100행만 읽으므로 맨 앞의 100행이 모두 읽을 수 없는
+      행이면 그 뒤의 행은 포기 시점까지 막힌다(81개면 남은 19자리로 뒤의 행에 닿는다); 넓힌 스윕은 그 사이 앞의 행이 다른 곳에서 끝났다면
+      20건 넘게 offer할 수 있다(executor의 bounded 큐가 넘치는 것을 거절한다); look-ahead는 포기 기한을 늦추지 않으므로 늦게 닿은 읽을 수 있는
+      턴은 이미 1시간이 지나 포기될 수 있다.
+      지금은 잠복한 문제였다 — 이 바이너리가 쓰는 최고 버전이 V6이고 `SUPPORTED`가 V2~V6이라 읽을 수 없는 행은 미래 V7 행을 남긴 롤백이나
+      디코드할 수 없는 payload(`OutboundMessageCodecException`, 같은 코덱이 썼으므로 드물다)에서 생기고,
+      prod는 지금 `strategy: Recreate`라 혼합 플릿이 없다 — 다만 그 블록은 V20 전환용 임시 설정이다(`k8s/deployment.yaml` 주석: "For this release only",
+      후속 PR이 지운다). 그 뒤에는 롤링 배포마다 잠깐 혼합 플릿이 생기므로, 아래 touch 기각의 근거가 실제 상황이 된다. **기각: `updated_at` touch**(B-1 계획의 "touch 없음" 결정을 유지) — 읽을 수 있는지는 행이 아니라
+      (행, 바이너리)의 성질이다. 혼합 플릿에서 읽지 못하는 레플리카가 스윕마다 touch하면, 위상이 어긋난 읽을 수 있는 레플리카의 스윕 시점에 그 행은
+      늘 `ASK_PENDING_GRACE`(60초)보다 새것이라 집히지 않고, 1시간 뒤 읽지 못하는 쪽이 안내 없이 포기한다(touch가 없으면 읽을 수 있는 레플리카가 다음
+      스윕에 재개한다). `next_attempt_at` 컬럼(같은 공유 상태 결함에 마이그레이션까지), 고정된 넓은 스캔(임계가 20에서 100으로 옮겨 갈 뿐),
+      로그한 행을 `NOT IN`으로 빼기(스윕마다 ERROR가 사라지고 빈 목록을 따로 다뤄야 한다)도 기각. 근거: `AgentAskThreadStarter.kt`,
+      `AgentAskThreadStarterTest`(배치보다 많은 읽을 수 없는 행 뒤의 읽을 수 있는 턴, 상한 80), `service/agent/AGENTS.md`.
       ⑥ 첫 실행이 중단되고 뒤의 실행이 busy면 busy 안내가 나가지 않는다 — 첫 실행의 안내 트랜잭션이 롤백된 경우도 같다(고아 회수
       뒤의 실행은 lease의 두 번째 실행이다. 안내는 첫 반납과 함께만 커밋되므로 두 번 나가지는 않는다). ⑦ 디스패치 결과를 모르는 질문(`outcome_unknown`)은 전달 이벤트도 ts도
       없어 턴이 없다(변함없음). ⑧ `@bot` 멘션 턴은 여전히 메모리뿐이라 턴 중 재시작이면 사라진다 — **보류, 수용된 한계(2026-10-15 사용자 결정).**
@@ -242,7 +261,7 @@ _type: decision · updated: 2026-10-15_
       표면이 늘고(멘션의 질문은 우리 DB에 원문이 없다), 같은 스레드에서 이어지는 멘션의 순서 역전을 풀어야 하며, `agent_ask_turn`을 재사용하든
       새 테이블을 두든 V27 이상의 마이그레이션이 든다. 나중에 한다면 프롬프트를 저장하지 않는 **알림 전용 설계**(멘션 트랜잭션에 마커만
       기록하고, 스윕이 오래된 미완료 마커에 "다시 물어봐 주세요" 스레드 답을 남긴다)부터 시작한다. 다시 볼 조건: 멘션 사용량이 `/ask`를 크게
-      앞서거나 롤링 배포로 재시작이 잦아질 때. ⑨ 레저 행은 지우지 않는다(보존 정리 없음).
+      앞서거나 롤링 배포로 재시작이 잦아질 때. ⑨ (2026-10-15 해소 → 결정 #43) 레저 행은 지우지 않는다(보존 정리 없음).
       ⑩ 첫 busy 안내는 Slack이 늦게 배달하면 답보다 뒤에 도착할 수 있다 — 문구는 더 이상 작업이 진행 중이라고 말하지 않는다.
       ⑪ 한 질문의 전달 둘이 동시에 겹치면(아웃박스 소유자 둘이 모두 보낸 경우) 행을 넣은 쪽이 가득 차 과부하 안내로 끝내는 사이
       다른 쪽이 막 큐에 넣은 턴은 아무 일도 하지 않는다(코드를 읽어 확인, 스펙 없음).
@@ -322,6 +341,70 @@ _type: decision · updated: 2026-10-15_
     Messages 탭이 읽기 전용이라 DM에 답할 수는 없다. 안내문의 `<#C>`는 채널 id 멘션이라 봇이 없는 1:1 DM(`D…`)·그룹 DM(`G…`)에서 거절된 경우에는 어색하게 렌더되고 "초대" 안내도 맞지 않는다(그 대화에서 거절될 때만 보인다). 어느 채널 유형이 `not_in_channel`과 `channel_not_found` 중 무엇을 돌려주는지는
     미확인이라 둘 다 처리한다. 상태: 유지. 근거: `service/relay/AGENTS.md`, `impl/command/AGENTS.md`,
     `domain/.../command/outbound/AGENTS.md`, `.omc/plans/b2-not-in-channel-slash-replies.md`(git 미추적).
+
+43. **에이전트 레인의 레저와 감사 행은 보존 기간이 지나면 지운다 — `agent_ask_turn`의 끝난 행은 14일, `agent_turn_history`와
+    `mcp_tool_call_history`는 180일 (2026-10-15).** `AgentRetentionScheduler`가 매시간(fixedDelay 1시간; 첫 실행은 인스턴스마다 기동 뒤 10~20분 사이에서
+    무작위 — `initialDelayString = "${random.long[600000,1200000]}"`. 아웃박스 purge의 5분보다 늦고, `Recreate`로 함께 기동한 두 레플리카의 틱이
+    매시간 같은 순간에 맞물리지 않게 어긋난다, 2026-10-19 리뷰 반영) 세 테이블을 차례로 지운다. 레저는 `status IN ('COMPLETED', 'ABANDONED') AND updated_at < now − ask-turn-days`, 두 감사
+    테이블은 `created_at < now − history-days`이고, 모두 아웃박스 purge와 같은 네이티브 `DELETE … LIMIT :batch-size`(기본 1000)를 짧은 배치가
+    나올 때까지 틱당 최대 20회 반복한다. 테이블마다 실패를 따로 가둬(`containFailure`: `Exception`은 테이블을 이름으로 남기는 ERROR 하나, 다음
+    테이블은 그대로 진행, `Error`는 전파) 한 테이블의 장애가 나머지를 막지 않는다. 키는 `slack.app.agent.retention.{ask-turn-days, history-days,
+    batch-size}`이고 prod YAML에 아웃박스 보존처럼 값을 적어 둔다. 이유: 세 테이블 모두 정리가 없어 무한히 자랐고(결정 #40 ⑨), 감사 행에는
+    요청자·채널·세션 키와 툴 인자(`arguments_json`, 최대 2000자)가 들어 있어 무기한 보존은 개인정보 면에서도 맞지 않다(사용자 결정: 14일 / 180일).
+    - **기간의 하한은 기동 때 검증한다.** `history-days`는 사용량 보고(`@bot usage [days]`, MCP `get_ai_usage`)가 읽는 최대 범위
+      `CommandIntent.AgentUsageReport.MAX_DAYS`(90일)보다 하루 이상 길어야 한다(`MIN_HISTORY_DAYS` = 91, 2026-10-19 Codex 교차 리뷰 반영). 보고는
+      `since = now − days`를 한 번 정하고 세 쿼리를 차례로 읽는데 공유 스냅샷이 없다(MCP는 `renderReport`를 바로 부르고, Slack 경로의
+      `detachedTemplate`은 `PROPAGATION_NOT_SUPPORTED`). 기간이 정확히 90일이면 그 사이에 시작한 purge가 `[since, since + Δ)`의 행을 지워
+      합계·순위·툴 호출이 서로 어긋날 수 있다. 하루의 여유는 보고 한 번이 하루 안에 끝난다는 전제의 여유다. 그보다 짧으면 보고가 조용히 줄어든다. `ask-turn-days`는 아웃박스의
+      재전송 상한 `outbox.polling.give-up-after-hours`(24시간)보다 **길어야** 한다(같으면 거부) — 레저 행은 같은 질문의 재전달을 한 턴으로 묶는
+      중복 키라서(`recordDelivered`가 insert부터 한다), 아웃박스가 그 질문을 아직 다시 보낼 수 있을 때 행이 지워지면 재전달이 두 번째 턴을 만든다.
+      레저 행의 `updated_at`은 질문 아웃박스 행의 `created_at`보다 늦으므로 이 부등식이면 지울 때 그 행은 이미 재전송 창 밖이다. 둘 다
+      `AppConfig` 바인딩 실패(키 이름을 담은 메시지)로 기동을 막는다 — `history-days`는 `Agent.Retention`의 `init`, `ask-turn-days`는 두 하위
+      트리를 함께 보는 루트 `AppConfig`의 `init`. 상한도 있다(2026-10-19 리뷰 반영): 두 기간은 3,650일 이하, `batch-size`는 1~10,000이고, 범위를
+      벗어나면 키 이름과 범위를 담은 메시지로 바인딩이 실패한다 — 터무니없는 값이 `Duration` 계산에서 키 이름 없는 `ArithmeticException`이 되지
+      않게 하고, 한 문장이 지우는 행 수(트랜잭션 크기)를 묶어 둔다 — `LIMIT`이 묶는 것은 지우는 행이지 훑거나 잠그는 행이 아니다. 교차 검사는 `TimeUnit.DAYS.toHours`(넘치면 `Long.MAX_VALUE`로 포화)로 비교해
+      `give-up-after-hours`가 아무리 커도 넘침 없이 같은 메시지로 거부한다. 두 감사 테이블은 `mcp_tool_call_history.turn_id` ↔
+      `agent_turn_history.idempotency_key`로 논리적으로 이어지므로 같은 기간을 쓴다. 다만 같은 기간이 함께 지워짐을 보장하지는 않는다 — 테이블마다
+      배치 예산(틱당 20회)과 실패 격리가 따로라, 밀린 양이 다르거나 한쪽 실패가 반복되면 한쪽 행이 몇 시간·며칠, 실패가 이어지는 동안은 계속 더
+      남을 수 있다. 두 테이블을 조인하는 운영 쿼리와 선언된 FK는 없다.
+    - **레저는 끝난 행만 지운다.** `PENDING`/`IN_PROGRESS` 행은 아무리 오래돼도 남긴다 — 지우면 진행 중인 lease의 다음 CAS가 0행이 되어
+      `AgentTurnLeaseLostException`으로 답이 롤백되고, 스윕도 그 턴을 다시 찾지 못한다. 그런 행은 전달 1시간(`ASK_GIVE_UP_AFTER`) 뒤부터 포기
+      대상이 되지만, 언제 끝나는지는 보장되지 않는다(스윕 순서, 배치 크기, 실패가 늦출 수 있다). 그동안은 purge 대상이 아니므로 기다릴 뿐이다. 끝난 행을 읽는 코드는 `recordDelivered`의 중복 경로뿐이다. 문장의 상태 목록은 리터럴이라, 스펙이 `AgentAskTurnStatus`의 모든
+      상수를 `else` 없는 `when`으로 분류해 상수마다 한 행씩 지워 보고 끝난 상태만 사라지는지 본다 — 새 상수는 분류하기 전에는 스펙이 컴파일되지
+      않는다.
+    - **인덱스는 이미 있다(마이그레이션 없음).** 레저는 V26의 `(status, updated_at)`(아웃박스 purge처럼 상태별 range 둘), 감사 테이블은 V10·V13의
+      `created_at` 인덱스. V10·V13 헤더의 "append-only"는 "갱신하지 않는다"는 뜻이라 삭제와 모순되지 않으며, 출하된 스크립트는 고치지 않는다.
+      CDC는 `outbox_message`만 캡처하므로 이 삭제는 Kafka로 흐르지 않는다. 시계: 감사 행의 `created_at`은 `@CreationTimestamp`(JVM 시스템 존)이고
+      앱 `Clock` 빈이 `Clock.systemDefaultZone()`이라 `LocalDateTime.now(clock)` 컷오프가 둘 다에 맞는다.
+    - **기각:** ① `OutboxRetentionScheduler`를 일반 `RetentionScheduler`로 — relay 레인이 agent 저장소를 알게 되고 리뷰 표면이 커진다(대신 배치
+      루프 약 10줄이 겹친다. 그 루프를 `application/common`의 작은 함수로 합치는 것은 아웃박스 purge의 오류 처리를 고치는 PR 뒤의 후속으로 둔다); ② 기존 스윕에 얹기(`CveCollector` 방식) — 60초마다 DELETE가 돌고 감사 테이블에는 얹을 스케줄러가 없다; ③ DB EVENT나
+      k8s CronJob SQL — 테스트할 수 없고 수동 마이그레이션 관례와 충돌한다. `agent_session`(V9, 스레드마다 한 행)은 지우지 않는다 — 지우면 그
+      스레드의 사이드카 세션 연속성이 끊기고, 사이드카 쪽 세션 만료 정책은 확인하지 않았다(미확인, 사용자 결정으로 범위 밖).
+    - **운영:** 오래 돈 DB의 첫 실행은 쌓인 행을 한 번에 다 지우지 못한다 — 테이블마다 틱당 최대 20 × 1000 = 2만 행이고, 나머지는 매시간 같은
+      양씩 줄어든다. 두 레플리카는 첫 실행이 어긋나 대개 다른 시각에 지우고, 겹치더라도 아웃박스 purge와 같은 노출(락 대기, 드문 데드락 → 다음
+      틱 재시도)로 수용한다. **purge는 트랜잭션 밖에서 돌아야 한다** — 각 `DELETE … LIMIT`이 자기 트랜잭션의 처음이자 유일한 문장이다.
+      `purgeOnce`나 여러 배치를 한 `@Transactional`로 감싸거나 DELETE 앞에 읽기를 넣으면, `innodb_snapshot_isolation`이 켜진 MariaDB에서 두
+      레플리카가 겹칠 때 기다리던 쪽이 커밋 시 ER_CHECKREAD 1020을 받을 수 있고, 락도 배치마다가 아니라 끝까지 쥔다(코드와 결정 #40의 1020
+      관찰에서 추론, 미측정). **롤아웃 전 확인 목록(실행하지 않음, 미확인):** ① MariaDB 12.3에서 세 문장의 `EXPLAIN DELETE …` — 레저는
+      `idx_agent_ask_turn_status_updated_at`의 range(`(status, updated_at)`, 상태별 둘), 감사 테이블은 `created_at` 인덱스의 range여야 한다.
+      range가 아니면 배치를 줄여서는 고쳐지지 않는다 — `LIMIT`은 지우는 행만 묶으므로, 대상 행이 드문 전체 스캔은 `LIMIT 1`이어도 많은 살아 있는
+      행을 훑고 REPEATABLE READ에서 잠그며, 대상이 없으면 테이블 전체를 훑는다. 그때는 인덱스·문장(인덱스 힌트 등)을 고친다. ② 두 세션이 같은
+      범위를 동시에 지울 때의 실제 락 대기(지터는 겹칠 확률만 줄인다). ③ 연속 배치 계약 — 한 호출이 batch 이하만 지우고 실제로 지운 수를
+      돌려주며, 루프가 짧은 배치까지 비워 가는지. 이것은 H2에서 증명되지 않았다(아래). MariaDB는 `ORDER BY` 없는 `DELETE … LIMIT`을 statement
+      기반 binlog에서 unsafe로 표시하지만, 저장소의 MariaDB 설정은 `binlog_format=ROW`라 해당 없다(아웃박스 purge와 같은 노출).
+    - **H2 스펙의 한계(2026-10-17, 스펙 실행으로 확인):** 스펙은 H2 2.4.240(`MODE=MariaDB`, 테이블은 Hibernate가 생성)에서 돈다. Hibernate가 보낸
+      그대로의 문장(`DELETE FROM agent_ask_turn WHERE status IN ('COMPLETED', 'ABANDONED') AND updated_at < ? LIMIT ?`, `TIMESTAMP` 컷오프와
+      `INTEGER` 2를 바인딩)에 정확한 수를 단언해 돌린 `AgentAskTurnRepositoryTest`에서, H2는 첫 호출만 맞게 셌다. 컷오프를 지난 `COMPLETED` 3행:
+      `[보고 2, 남은 1, 보고 0, 남은 0]`(기대 `[2, 1, 1, 0]`) — 두 번째 호출이 마지막 행을 지우면서 0을 보고했다. `COMPLETED` 3 + `ABANDONED` 3행:
+      `[(2, 남은 4), (2, 남은 1), (0, 0), (0, 0)]`(기대 `[(2, 4), (2, 2), (2, 0), (0, 0)]`) — 두 번째 호출이 `LIMIT 2`에서 3행을 지우며 2를
+      보고했다. 테스트 트랜잭션 안에서도, 호출마다 커밋해도, 같은 Hibernate 경로로 `VARCHAR` 사본 테이블에 실행해도 같았다. 같은 jar에서 JDBC로
+      직접 실행한 같은 문장은 맞게 셌다는 리뷰 관찰이 있어 원인은 밝히지 못했다(미확인). 그래서 레저 스펙은 첫 호출의 수와 남은 행만 정확히 보고,
+      그 뒤 호출은 H2에서도 참인 성질만 본다 — 보고한 수가 0~limit이고, 남은 대상 행이 늘지 않다가 0이 되며, 대상이 아닌 행은 남는다. **따라서
+      연속 배치 계약(호출마다 batch 이하를 지우고 참 수를 돌려주며, 루프가 그 수로 끝까지 비우는 것)은 스펙으로 증명되지 않았다.** 스케줄러
+      스펙은 수를 MockK로 주므로 루프만 본다. 롤아웃 전에 MariaDB에서 실제 JPA·드라이버 경로로 확인한다(위 ③). H2에서는 스케줄러 루프가 일찍
+      멈추거나 한 배치에 limit보다 많이 지울 수 있고, MariaDB가 어떻게 세는지는 확인하지 않았다(미확인). 상태: 유지. 근거: `service/agent/AGENTS.md`(`AgentRetentionScheduler.kt`), `repository/agent/AGENTS.md`,
+      `repository/mcp/AGENTS.md`, `configurations/AGENTS.md`(`AppConfig.kt`), `application-prod.yaml`, `AgentRetentionSchedulerTest`,
+      `AppConfigBindingTest`, `AgentAskTurnRepositoryTest`, `AgentTurnHistoryRepositoryImplTest`, `McpToolCallHistoryRepositoryImplTest`.
 
 ## 빌드·런타임
 
@@ -565,6 +648,18 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `infrastructure/src/main/kotlin/dev/notypie/impl/command/ApplicationMessageDispatcher.kt`(`isChannelRefused`),
   `repository/outbox/{OutboundMessagePort,OutboundMessageCodec}.kt`, `repository/outbox/schema/OutboxSchemaVersion.kt`(V6),
   git-ignored `.omc/plans/b2-not-in-channel-slash-replies.md`(선택지 A~D와 아키텍트 검토 반영)
+- 에이전트 보존 정리와 스윕 look-ahead(#43·#40 ⑤): `application/src/main/kotlin/dev/notypie/application/service/agent/{AgentRetentionScheduler,AgentAskThreadStarter}.kt`,
+  `configurations/AppConfig.kt`(`Agent.Retention`, 루트 `init`), `application-prod.yaml`(`slack.app.agent.retention`),
+  `infrastructure/src/main/kotlin/dev/notypie/repository/agent/{AgentAskTurnRepository,JpaAgentTurnHistoryRepository,AgentTurnHistoryRepository}.kt`,
+  `repository/mcp/{JpaMcpToolCallHistoryRepository,McpToolCallHistoryRepository}.kt`, `db/migration/V10__…`·`V13__…`·`V26__…`(인덱스),
+  `domain/.../command/intent/CommandIntent.kt`(`AgentUsageReport.MAX_DAYS`), `application/src/main/resources/k8s/deployment.yaml`(`Recreate`),
+  `repository/outbox/schema/OutboxSchemaVersion.kt`(`SUPPORTED`), 스펙 `AgentRetentionSchedulerTest`·`AgentAskThreadStarterTest`·
+  `AppConfigBindingTest`·`ApplicationContextSmokeTest`·`AgentAskTurnRepositoryTest`·`AgentTurnHistoryRepositoryImplTest`·
+  `McpToolCallHistoryRepositoryImplTest`(2026-10-15, 미커밋 작업 트리 `feature/agent-retention-sweep`); H2 2.4.240 `DELETE … LIMIT`의 갱신 수는
+  `AgentAskTurnRepositoryTest`에 정확한 수를 단언해 돌린 실행의 실패 출력과 Hibernate SQL·바인딩 로그로 확인(2026-10-17); 리뷰 반영(지터,
+  상한, 상태 분류 스펙) 2026-10-19; Codex 교차 리뷰 반영(2026-10-19): `service/agent/AgentUsageReportService.kt`(`since` 한 번, 쿼리 셋),
+  `common/TransactionTemplateExt.kt`(`detachedTemplate` = `PROPAGATION_NOT_SUPPORTED`), `resources/cdc/k8s/yamls/mariadb/mariadb-config.yaml`·
+  `resources/cdc/docker-compose/mariadb/my.cnf`(`binlog_format=ROW`)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

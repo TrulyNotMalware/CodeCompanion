@@ -9,6 +9,7 @@ import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
+import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase
@@ -164,6 +165,25 @@ class AgentTurnHistoryRepositoryImplTest
 
                         repository.countByOutcomeSince(since = inside.plusDays(1L)).shouldBeEmpty()
                         repository.topRequestersSince(since = inside.plusDays(1L), limit = 5).shouldBeEmpty()
+                    }
+                }
+            }
+
+            given("turns created on both sides of a retention cutoff") {
+                `when`("they are deleted in batches") {
+                    then("only turns created before the cutoff go, at most limit per call") {
+                        listOf(since.minusDays(30L), since.minusNanos(1_000L), since, inside).forEach { createdAt ->
+                            persistAt(row = createAgentTurnHistorySchema(), createdAt = createdAt)
+                        }
+                        entityManager.clear()
+
+                        repository.deleteOlderThan(olderThan = since, limit = 1) shouldBe 1
+                        repository.deleteOlderThan(olderThan = since, limit = 10) shouldBe 1
+                        repository.deleteOlderThan(olderThan = since, limit = 10) shouldBe 0
+                        jdbcTemplate.queryForList(
+                            "SELECT created_at FROM agent_turn_history ORDER BY created_at",
+                            LocalDateTime::class.java,
+                        ) shouldContainExactly listOf(since, inside)
                     }
                 }
             }

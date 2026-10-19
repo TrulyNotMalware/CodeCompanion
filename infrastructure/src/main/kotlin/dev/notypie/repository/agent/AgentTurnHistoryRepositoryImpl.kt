@@ -28,4 +28,7 @@ class AgentTurnHistoryRepositoryImpl(
 
     override fun topRequestersSince(since: LocalDateTime, limit: Int): List<RequesterTurnUsage> =
         jpaAgentTurnHistoryRepository.topRequestersSince(since = since, pageable = PageRequest.of(0, limit))
+
+    override fun deleteOlderThan(olderThan: LocalDateTime, limit: Int): Int =
+        jpaAgentTurnHistoryRepository.deleteOlderThan(olderThan = olderThan, limit = limit)
 }

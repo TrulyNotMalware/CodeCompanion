@@ -37,4 +37,6 @@ interface AgentTurnHistoryRepository {
     fun countByOutcomeSince(since: LocalDateTime): List<AgentTurnOutcomeUsage>
 
     fun topRequestersSince(since: LocalDateTime, limit: Int): List<RequesterTurnUsage>
+
+    fun deleteOlderThan(olderThan: LocalDateTime, limit: Int): Int
 }
