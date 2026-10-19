@@ -41,10 +41,10 @@ class TokenCipher(
     fun encrypt(plaintext: String, userId: String): String {
         val associatedData = associatedDataOf(userId = userId)
         val iv = ByteArray(IV_BYTES).also { random.nextBytes(it) }
-        val cipher = Cipher.getInstance(TRANSFORMATION)
+        val cipher: Cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
         cipher.updateAAD(associatedData)
-        val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
+        val ciphertext: ByteArray = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         return "$BOUND_VERSION.${encoder.encodeToString(iv)}.${encoder.encodeToString(ciphertext)}"
     }
 
@@ -58,9 +58,9 @@ class TokenCipher(
                 UNBOUND_VERSION -> false
                 else -> throw IllegalArgumentException(UNSUPPORTED_FORMAT)
             }
-        val iv = decoder.decode(segments[1])
+        val iv: ByteArray = decoder.decode(segments[1])
         require(iv.size == IV_BYTES) { UNSUPPORTED_FORMAT }
-        val cipher = Cipher.getInstance(TRANSFORMATION)
+        val cipher: Cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
         if (bound) cipher.updateAAD(associatedData)
         return try {

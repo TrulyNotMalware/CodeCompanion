@@ -1088,6 +1088,7 @@ class CalendarConnectionServiceTest :
                         .eventsAt(level = Level.INFO)
                         .single { it.formattedMessage.contains("retrying once") }
                         .throwableProxy
+                        .shouldNotBeNull()
                         .className shouldBe ObjectOptimisticLockingFailureException::class.java.name
                     val stored =
                         store.inNewTransaction {

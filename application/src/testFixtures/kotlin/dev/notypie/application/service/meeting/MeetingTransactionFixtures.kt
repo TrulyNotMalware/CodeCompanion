@@ -11,6 +11,7 @@ import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
+import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepositoryImpl
 import dev.notypie.repository.calendar.JpaGoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.JpaMeetingCalendarEventRepository
@@ -142,7 +143,7 @@ class MeetingJpaStore(
             jpaMeetingCalendarEventRepository = jpaMeetingCalendarEventRepository,
             transactionManager = transactionManager,
         )
-    val calendarConnectionRepository =
+    val calendarConnectionRepository: GoogleCalendarConnectionRepository =
         GoogleCalendarConnectionRepositoryImpl(
             jpaGoogleCalendarConnectionRepository = jpaGoogleCalendarConnectionRepository,
         )

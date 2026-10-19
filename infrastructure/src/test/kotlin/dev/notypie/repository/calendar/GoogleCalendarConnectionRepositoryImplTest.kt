@@ -322,7 +322,7 @@ class GoogleCalendarConnectionRepositoryImplTest
                         )
 
                     then("the delete fails its version check and the reconnected row survives") {
-                        winner.isSuccess shouldBe true
+                        winner.getOrThrow()
                         loser.exceptionOrNull().shouldBeInstanceOf<ObjectOptimisticLockingFailureException>()
                         repository.find(userId = "U_RACE_DEL").shouldNotBeNull().encryptedRefreshToken shouldBe
                             "v2.winner"

@@ -36,11 +36,11 @@ fun createTestTokenCipher(seed: Int = 7): TokenCipher =
 
 fun createLegacyEncryptedToken(plaintext: String, seed: Int = 7): String {
     val iv = ByteArray(12) { (it + 1).toByte() }
-    val cipher =
+    val cipher: Cipher =
         Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(Cipher.ENCRYPT_MODE, SecretKeySpec(testTokenKey(seed = seed), "AES"), GCMParameterSpec(128, iv))
         }
-    val encoder = Base64.getUrlEncoder().withoutPadding()
+    val encoder: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
     return "v1.${encoder.encodeToString(
         iv,
     )}.${encoder.encodeToString(cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8)))}"
