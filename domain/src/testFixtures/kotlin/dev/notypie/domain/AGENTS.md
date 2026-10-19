@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain
 
@@ -10,7 +10,7 @@ builder in this build defaults to, and one subpackage per domain lane.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Constants.kt` | `TEST_APP_ID` (`A…`), `TEST_USER_ID` (`U…`), `TEST_USER_NAME`, `TEST_CHANNEL_ID` (`C…`), `TEST_CHANNEL_NAME`, `TEST_TOKEN`, `TEST_TEAM_ID` (`T…`), `TEST_TEAM_DOMAIN`, `TEST_BOT_ID` (`B…`), `TEST_BOT_TOKEN` (`xoxb-test…` placeholder), `TEST_BASE_URL` (`hooks.example.com`), `TEST_LIST_HANDLE` (`$TEST_BASE_URL/T1/1/list`, the `/meetup list` reply handle a submission or Cancel click carries), `TEST_MESSAGE_TS`, `TEST_THREAD_TS`, `UNKNOWN_SUB_COMMAND_IDENTIFIER` |
+| `Constants.kt` | `TEST_APP_ID` (`A…`), `TEST_USER_ID` (`U…`), `TEST_USER_NAME`, `TEST_CHANNEL_ID` (`C…`), `TEST_CHANNEL_NAME`, `TEST_TOKEN`, `TEST_TEAM_ID` (`T…`), `TEST_TEAM_DOMAIN`, `TEST_BOT_ID` (`B…`), `TEST_BOT_TOKEN` (`xoxb-test…` placeholder), `TEST_BASE_URL` (`hooks.example.com`), `TEST_LIST_HANDLE` (`$TEST_BASE_URL/T1/1/list`, the `/meetup list` reply handle a submission or Cancel click carries), `TEST_SLACK_RESPONSE_URL` (a real-shaped `https://hooks.slack.com/actions/…` reply URL, for the redaction specs that assert `hooks.slack.com` never prints), `TEST_MESSAGE_TS`, `TEST_THREAD_TS`, `UNKNOWN_SUB_COMMAND_IDENTIFIER` |
 
 ## Subdirectories
 | Directory | Purpose |

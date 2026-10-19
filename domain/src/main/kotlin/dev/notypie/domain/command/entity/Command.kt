@@ -59,6 +59,7 @@ abstract class Command<T : SubCommandDefinition>(
 
     private fun replyToSlashFailure(exception: Exception) {
         if (commandData.payload !is SlashInvocation) return
+        intents.clear()
         val markdown =
             if (exception is SubCommandParseException) {
                 subCommandHelp(exception = exception)

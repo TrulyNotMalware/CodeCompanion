@@ -20,6 +20,8 @@ import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.findSubCommandByIdentifier
 import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -287,6 +289,78 @@ class CommandTest :
 
                 then("the generic reply names no command") {
                     markdown shouldBe "Something went wrong handling that command. Please try again."
+                }
+            }
+        }
+
+        given("a command whose context queues an intent and then throws") {
+            val queued = CommandIntent.CalendarStatus(userId = TEST_USER_ID)
+
+            fun queueingThenThrowing(commandData: InboundCommand): Command<NoSubCommands> =
+                object : Command<NoSubCommands>(
+                    idempotencyKey = UUID.randomUUID(),
+                    commandData = commandData,
+                ) {
+                    override val slashCommandName: String = "/probe"
+
+                    override fun parseContext(
+                        subCommand: SubCommand<NoSubCommands>,
+                    ): CommandContext<out NoSubCommands> =
+                        object : ReactionContext<NoSubCommands>(
+                            commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
+                            subCommand = subCommand,
+                            intents = intents,
+                        ) {
+                            override fun parseCommandType() = CommandType.SIMPLE
+
+                            override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
+
+                            override fun runCommand(): CommandOutput = queueThenThrow()
+
+                            override fun handleInteraction(interaction: InboundInteraction): CommandOutput =
+                                queueThenThrow()
+
+                            private fun queueThenThrow(): Nothing {
+                                addIntent(intent = queued)
+                                throw IllegalStateException("failed after queueing")
+                            }
+                        }
+
+                    override fun findSubCommandDefinition(): NoSubCommands = NoSubCommands()
+                }
+
+            `when`("it answers a slash command") {
+                val command = queueingThenThrowing(commandData = createSlashInboundCommand())
+                val output = command.handleEvent()
+
+                then("the queued intent is discarded and the requester gets only the error reply") {
+                    output.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
+                    val ephemeral = command.drainIntents().single().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        "Something went wrong handling `/probe`. Please try again."
+                }
+            }
+
+            `when`("it answers a mention") {
+                val command = queueingThenThrowing(commandData = createMentionInboundCommand())
+                val output = command.handleEvent()
+
+                then("the queued intent stays and no error reply is added, as before") {
+                    output.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
+                    command.drainIntents() shouldBe listOf(queued)
+                }
+            }
+
+            `when`("it answers an interaction") {
+                val command =
+                    queueingThenThrowing(
+                        commandData = createInteractionResponseInboundCommand(interaction = createInboundInteraction()),
+                    )
+                val output = command.handleEvent()
+
+                then("the queued intent stays and no error reply is added, as before") {
+                    output.commandDetailType shouldBe CommandDetailType.ERROR_RESPONSE
+                    command.drainIntents() shouldBe listOf(queued)
                 }
             }
         }

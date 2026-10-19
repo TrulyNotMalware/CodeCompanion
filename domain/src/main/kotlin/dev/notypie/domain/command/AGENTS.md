@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
 
 # domain/command
 
@@ -48,10 +48,13 @@ queue and hands the effects to the infrastructure resolver/stager.
 - `CommandContext` and `Command.parseContext` / `findSubCommandDefinition` are `internal` on purpose.
   Keep new context plumbing `internal` unless the application layer genuinely needs it.
 - `Command.handleEvent()` catches `Exception` (a `try`, not `runCatching`) and converts it into
-  `CommandOutput.fail(..., ERROR_RESPONSE, ...)`, and for a slash payload adds a requester ephemeral (usage for a
-  bad subcommand, a generic line otherwise; `entity/AGENTS.md`). An `InterruptedException` is rethrown after the
-  interrupt flag is restored, and an `Error` propagates. Error effects are still drained and delivered — do
-  not early-return on failure paths in a way that skips `addOutbound`.
+  `CommandOutput.fail(..., ERROR_RESPONSE, ...)`, and for a slash payload first discards whatever the context had
+  already queued, then adds a requester ephemeral (usage for a bad subcommand, a generic line otherwise;
+  `entity/AGENTS.md`) — a failed slash command hands on all of its queued effects or only the error notice (2026-10-15). An
+  `InterruptedException` is rethrown after the interrupt flag is restored, and an `Error` propagates. Error effects
+  are still drained and delivered — do not early-return on failure paths in a way that skips `addOutbound`, and a
+  slash context that must report a partial result returns it (`createErrorResponse`) instead of throwing, worded so
+  it does not ask the user to redo what already took effect.
 - `drainIntents()` returns a defensive copy and clears the queue, so it is safe under retry. Intents are
   deliberately **not** re-queued after a publish failure — retries belong upstream (outbox relay, Kafka,
   Slack replay) under the shared `idempotencyKey`.

@@ -65,7 +65,8 @@ _type: pattern · updated: 2026-10-19_
    `catch (exception: Exception)`으로 예외를 `CommandOutput.fail(commandDetailType = ERROR_RESPONSE, reason =
    exception.toString())`로 바꾸고(`InterruptedException`은 플래그 복원 후 재throw, `Error`는 전파), `CommandExecutor`가 이 출력을 명령 클래스·`commandId`·`idempotencyKey`·`kind`·`actorId`·
    사유와 함께 WARN으로 남긴다(토큰은 남기지 않음). 2026-10-08부터 슬래시 명령이면 `handleEvent()`가 요청자 ephemeral을
-   intent 큐에 넣는다: `SubCommandParseException`은 "Unknown subcommand `토큰`." + 명령의 usage 줄(또는 그 서브커맨드의
+   intent 큐에 넣는다(2026-10-15부터는 그 전에 컨텍스트가 쌓은 효과를 버린다 — 결정 #44):
+   `SubCommandParseException`은 "Unknown subcommand `토큰`." + 명령의 usage 줄(또는 그 서브커맨드의
    usage), 그 밖은 "Something went wrong handling `/명령`. Please try again.". 인터랙션(`SlackInteractionHandlerImpl`은
    `result.takeIf { it.ok }`)과 멘션은 여전히 사용자에게 답이 없다(멘션은 HTTP 컨트롤러도 WARN을 남김). 무엇이 틀렸는지
    알려야 할 실패는 예외를 던지지 말고 `createErrorResponse`로 만든다.

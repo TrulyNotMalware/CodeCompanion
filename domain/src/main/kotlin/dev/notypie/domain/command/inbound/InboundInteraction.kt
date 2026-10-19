@@ -10,7 +10,9 @@ value class TriggerHandle(
 @JvmInline
 value class ReplyHandle(
     val raw: String,
-)
+) {
+    override fun toString(): String = "ReplyHandle(redacted)"
+}
 
 @JvmInline
 value class MessageHandle(

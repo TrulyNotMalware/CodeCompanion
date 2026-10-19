@@ -7,6 +7,8 @@ interface IntentQueue {
 
     fun drainSnapshot(): List<CommandEffect>
 
+    fun clear()
+
     fun isEmpty(): Boolean
 
     val size: Int
@@ -24,6 +26,8 @@ internal class DefaultIntentQueue : IntentQueue {
         queue.clear()
         return drained
     }
+
+    override fun clear() = queue.clear()
 
     override fun isEmpty(): Boolean = queue.isEmpty()
 
