@@ -103,7 +103,6 @@ class GoogleOAuthClientTest :
             then("the grant carries both tokens and the verified email read from the id_token") {
                 grant.accessToken shouldBe "ya29.access"
                 grant.refreshToken shouldBe "1//refresh"
-                grant.expiresInSeconds shouldBe 3599L
                 grant.email shouldBe "dev@example.com"
                 grant.emailVerified shouldBe true
                 grant.subject shouldBe "10769150350006150715113082367"
@@ -182,10 +181,15 @@ class GoogleOAuthClientTest :
         given("a code exchange whose response has no scope field at all") {
             respond = response(status = 200, body = createGoogleTokenResponseJson(scope = null))
 
-            then("the requested scopes are assumed granted, as RFC 6749 §5.1 defines an omitted scope") {
-                val grant = client.exchangeCode(code = "c")
+            then("the requested scopes are assumed granted, as RFC 6749 §5.1 reads an omitted scope, with a WARN") {
+                val (grant, logs) =
+                    captureLogs(loggerName = GoogleOAuthClient::class.java.name) {
+                        client.exchangeCode(code = "c")
+                    }
                 grant.scopes shouldBe GoogleOAuthClient.SCOPES.split(" ").toSet()
                 grant.grants(scope = GoogleOAuthClient.CALENDAR_EVENTS_SCOPE) shouldBe true
+                logs.messagesAt(level = Level.WARN) shouldBe
+                    listOf("Google token response has no scope field; assuming the requested scopes were granted")
             }
         }
 

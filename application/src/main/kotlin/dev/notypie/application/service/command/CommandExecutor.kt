@@ -1,6 +1,6 @@
 package dev.notypie.application.service.command
 
-import dev.notypie.application.exception.stripControlCharacters
+import dev.notypie.application.common.neutralizeControlCharacters
 import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.dto.response.CommandOutput
@@ -29,7 +29,7 @@ class CommandExecutor(
             log.warn {
                 "Command ${command::class.simpleName ?: "anonymous"} failed: commandId=${command.commandId} " +
                     "idempotencyKey=${command.idempotencyKey} kind=${command.commandData.kind} " +
-                    "actorId=${command.commandData.actorId} reason=${output.errorReason.stripControlCharacters()}"
+                    "actorId=${command.commandData.actorId} reason=${output.errorReason.neutralizeControlCharacters()}"
             }
         }
 

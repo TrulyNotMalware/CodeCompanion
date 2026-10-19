@@ -1661,6 +1661,7 @@ class CalendarSyncServiceTest :
         given("Google rate-limits the first of two due rows") {
             listOf(
                 null to Duration.ofMinutes(2L),
+                Duration.ZERO to Duration.ofMinutes(2L),
                 Duration.ofSeconds(7L) to Duration.ofMinutes(2L),
                 Duration.ofSeconds(600L) to Duration.ofSeconds(600L),
             ).forEach { (retryAfter, expectedDelay) ->

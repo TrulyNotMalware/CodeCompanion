@@ -36,6 +36,8 @@ import org.springframework.context.ApplicationContext
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Clock
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class CalendarConfigurationTest :
     BehaviorSpec({
@@ -220,6 +222,27 @@ class CalendarConfigurationTest :
                                 .last()
                                 .message shouldContain "GOOGLE_OAUTH_REDIRECT_URI"
                         }
+                }
+            }
+        }
+
+        given("the Google token revoke executor") {
+            `when`("two revokes are submitted and neither has finished") {
+                val executor = CalendarConfiguration(appConfig = AppConfig()).googleTokenRevocationExecutor()
+                val started = CountDownLatch(2)
+                val release = CountDownLatch(1)
+                repeat(2) {
+                    executor.execute {
+                        started.countDown()
+                        release.await(10L, TimeUnit.SECONDS)
+                    }
+                }
+                val bothStarted = started.await(5L, TimeUnit.SECONDS)
+                release.countDown()
+                executor.shutdown()
+
+                then("both run at once instead of the second waiting in the queue until it fills") {
+                    bothStarted shouldBe true
                 }
             }
         }
