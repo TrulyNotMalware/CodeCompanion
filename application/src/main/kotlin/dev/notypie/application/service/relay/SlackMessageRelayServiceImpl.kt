@@ -1,5 +1,6 @@
 package dev.notypie.application.service.relay
 
+import dev.notypie.application.common.runInTx
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.configurations.relayQueueCapacity
 import dev.notypie.common.runCatchingExceptions
@@ -383,8 +384,8 @@ class SlackMessageRelayServiceImpl(
             ?.let { row -> row.status == status.name && row.attemptCount == claim.attempt } == true
 
     private fun completeAndChain(claim: OutboxClaim, status: MessageStatus, next: OutboundEnvelope?): Int =
-        checkNotNull(
-            statusTransaction.execute {
+        statusTransaction
+            .runInTx {
                 val completed =
                     outboxRepository.completeClaim(
                         eventId = claim.row.eventId,
@@ -394,8 +395,7 @@ class SlackMessageRelayServiceImpl(
                     )
                 if (completed == 1 && next != null) outboxRepository.save(nextRow(row = claim.row, next = next))
                 completed
-            },
-        )
+            }.getOrThrow()
 
     private fun nextRow(row: OutboxMessage, next: OutboundEnvelope): OutboxMessage =
         outboundMessagePort.toRow(

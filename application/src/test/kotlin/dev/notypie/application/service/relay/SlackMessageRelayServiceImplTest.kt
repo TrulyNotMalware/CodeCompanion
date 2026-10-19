@@ -715,6 +715,45 @@ class SlackMessageRelayServiceImplTest :
                 }
             }
 
+            `when`("the status write throws an Error and the rollback itself fails") {
+                val row = createOutboxRow(eventId = UUID.randomUUID().toString())
+                val thrown = StackOverflowError("deep")
+                val rollbackFailure = TransactionSystemException("rollback failed")
+                val eventPublisher = mockk<ApplicationEventPublisher>(relaxed = true)
+                val outboxRepository = mockk<MessageOutboxRepository>()
+                outboxRepository.stubClaimLifecycle()
+                every {
+                    outboxRepository.completeClaim(eventId = any(), attemptCount = any(), status = any(), now = any())
+                } throws thrown
+                val service =
+                    createRelayService(
+                        outboxRepository = outboxRepository,
+                        applicationEventPublisher = eventPublisher,
+                        transactionManager =
+                            createStubTransactionManager().also { manager ->
+                                every { manager.rollback(any()) } throws rollbackFailure
+                            },
+                    )
+
+                then("the same Error escapes after one attempt instead of being retried as the rollback failure") {
+                    val escaped =
+                        shouldThrow<StackOverflowError> {
+                            service.dispatchClaimed(claim = OutboxClaim(row = row, attempt = 1))
+                        }
+                    escaped shouldBeSameInstanceAs thrown
+                    escaped.suppressed.single() shouldBeSameInstanceAs rollbackFailure
+                    verify(exactly = 1) {
+                        outboxRepository.completeClaim(
+                            eventId = any(),
+                            attemptCount = any(),
+                            status = any(),
+                            now = any(),
+                        )
+                    }
+                    verify(exactly = 0) { eventPublisher.publishEvent(ofType<OutboxUpdateEvent>()) }
+                }
+            }
+
             `when`("renewing the claim throws an Exception") {
                 val row = createOutboxRow(eventId = UUID.randomUUID().toString())
                 val messageDispatcher = mockk<MessageDispatcher>()

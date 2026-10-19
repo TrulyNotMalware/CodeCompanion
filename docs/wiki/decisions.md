@@ -517,7 +517,7 @@ _type: decision · updated: 2026-10-19_
     #20.
 48. **경계는 `Exception`만 잡고 `Error`는 전파한다 — 행 단위 루프도 예외가 아니다 (2026-10-15).** 스케줄러 틱·행 루프·리스너와
     전송 가장자리·MCP 도구 본문과 감사 쓰기는 `containFailure` / `runCatchingExceptions`(`infrastructure/.../common`)를 쓰고,
-    `runInTx`는 안쪽·바깥쪽 모두 `catch (Exception)`(롤백 실패 `TransactionSystemException`에 `Error`가 들어 있으면 그 `Error`를 다시 던짐),
+    `runInTx`는 안쪽·바깥쪽 모두 `catch (Exception)`(액션의 `Error`를 기록해 롤백이 어떤 예외로 실패해도 그 `Error`를 다시 던짐; relay 상태 기록도 `runInTx` 경유),
     `RetryService`는 `RetryException`의 원인이 `Error`면 그것을 던지고 정책은 `excludes(Error)`로 원인 체인에 `Error`가 있는 실패를 재시도하지 않는다. 이유:
     OOM은 `-XX:+ExitOnOutOfMemoryError`로 이미 JVM을 끝내고, `LinkageError`는 배포 전체의 문제라 행 격리가 얻는 것이 없으며,
     `Error`를 `Result.failure`로 바꾸면 사용자 거절 문구·`FAILED` 감사·재시도 복구로 위장된다. 대가: 데이터에 따라 결정적으로

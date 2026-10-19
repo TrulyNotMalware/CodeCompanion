@@ -92,8 +92,11 @@ _type: pattern · updated: 2026-10-19_
    `CveCollector`는 토픽마다 `containFailure`로 격리한다. `CommandExecutor`는 로그 후 재throw하고 인텐트를 재큐잉하지
    않는다 — 재시도는 `idempotencyKey` 아래 상류(아웃박스 릴레이, Kafka, Slack 재전송)가 맡는다.
    `ApplicationMessageDispatcher`는 Slack `ok=false`를 예외가 아니라 `failOutput(reason)`으로 되돌리고 WARN을 남긴다.
-   롤백 자체가 실패해 `TransactionSystemException`이 나면 그 `applicationException`이 `Error`일 때 그 `Error`를 다시
-   던진다(롤백 실패는 suppressed로 붙여서, 2026-10-19).
+   액션이 던진 `Error`는 콜백에서 기록해 두었다가 롤백 자체가 어떤 예외로 실패하더라도(JPA는 번역된 `DataAccessException` 또는
+   `TransactionSystemException`) 그 `Error`를 다시 던진다(롤백 실패는 suppressed로, 2026-10-19). relay의 상태 기록(`writeTerminal`)도
+   `runInTx`를 거쳐 재시도 정책이 `Error`를 그대로 보게 한다. 다른 raw `TransactionTemplate.execute`(캘린더 store, ops 리포트 등)는
+   이 경우 Spring이 ERROR("Application exception overridden by rollback exception")를 남기고 롤백 예외를 던지며, 그것이
+   `catch (Exception)`에 잡히는 곳에서는 `Error`가 격하된다 — 수용(이중 장애이고 로그는 남는다).
 6. **`Error`는 삼키지 않는다(2026-10-15, 결정 #48).** 경계(스케줄러 틱, 행 단위 루프, 리스너·전송 가장자리, MCP 도구 본문과
    감사 쓰기)는 `infrastructure/.../common/ExceptionBoundary.kt`의 두 헬퍼로 `Exception`만 잡는다: 부수효과 블록은
    `containFailure(onFailure) { }`, `Result`가 필요한 곳은 `runCatchingExceptions { }`. 둘 다 `InterruptedException`은 플래그를
@@ -116,9 +119,9 @@ _type: pattern · updated: 2026-10-19_
    - **`/standup setup` 리스너, `views.open`:** 동기 리스너의 `Error`는 명령 트랜잭션을 롤백하고 HTTP 요청까지 올라가 500이 된다
      (사용자에게 거절 DM·열기 실패 DM이 가지 않는다; 코드 추적, 미실행).
 
-   `Throwable`/`Error`를 이름으로 잡는 곳은 같은 인스턴스를 정리·로그 후 다시 던지는 네 곳(`SlackRequestVerificationFilter`,
+   `Throwable`/`Error`를 이름으로 잡는 곳은 같은 인스턴스를 정리·로그 후 다시 던지는 다섯 곳(`SlackRequestVerificationFilter`,
    `SlackInteractionHandlerImpl`의 수동 트랜잭션, `SlackUserProfileResolver`의 in-flight future,
-   `SocketModeReceiver.logErrorThenRethrow`)과 위 CDC 리스너의 번역 한 곳뿐이다. 순수 파싱(`UUID.fromString`, enum 조회, JSON
+   `SocketModeReceiver.logErrorThenRethrow`, `runInTx`의 기록 후 재던짐)과 위 CDC 리스너의 번역 한 곳뿐이다. 순수 파싱(`UUID.fromString`, enum 조회, JSON
    엿보기)과 워치독의 `stream.close()` `runCatching`은 그대로 둔다.
 
 ## 재시도: `RetryService` / `RetryOptions`

@@ -127,5 +127,22 @@ class TransactionTemplateExtTest :
                     escaped.suppressed.single() shouldBeSameInstanceAs rollbackFailure
                 }
             }
+
+            `when`("the action throws an Error and the rollback fails with a translated runtime exception") {
+                val rollbackFailure = IllegalStateException("rollback failed")
+                val manager =
+                    mockk<PlatformTransactionManager> {
+                        every { getTransaction(any()) } returns mockk<TransactionStatus>(relaxed = true)
+                        every { rollback(any()) } throws rollbackFailure
+                    }
+                val thrown = StackOverflowError("deep")
+                val escaped =
+                    shouldThrow<StackOverflowError> { TransactionTemplate(manager).runInTx<Unit> { throw thrown } }
+
+                then("the Error is still the one that propagates, whatever the rollback threw") {
+                    escaped shouldBeSameInstanceAs thrown
+                    escaped.suppressed.single() shouldBeSameInstanceAs rollbackFailure
+                }
+            }
         }
     })
