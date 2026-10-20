@@ -100,6 +100,20 @@ fun createRichTextBlock(vararg elements: Element) =
             ),
     )
 
+fun createRichTextQuoteBlock(vararg elements: Element) =
+    Block(
+        type = "rich_text",
+        blockId = "block_1",
+        elements =
+            listOf(
+                Element(
+                    type = "rich_text_quote",
+                    userId = null,
+                    elements = elements.toList(),
+                ),
+            ),
+    )
+
 fun createWorkflowAppMentionJson(botUserId: String): String =
     """
     {

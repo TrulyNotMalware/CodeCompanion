@@ -15,7 +15,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
-import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.askRefusedNotice
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -49,16 +49,17 @@ class AskSlashServiceImplTest :
             `when`("the asker's role resolves to AI_USER") {
                 val command = executedFor(commandData = commandData, role = UserRole.AI_USER)
 
-                then("exactly one AskCommand over that command data runs and posts the question to the channel") {
+                then("exactly one AskCommand runs and posts the question to the channel with the ask-refused notice") {
                     command.shouldBeInstanceOf<AskCommand>().commandData shouldBe commandData
                     command.handleEvent().ok shouldBe true
                     command.drainIntents().single() shouldBe
                         createAgentQuestionMessage(
                             prompt = "why is CI red?",
                             fallback =
-                                channelRefusedNotice(
+                                askRefusedNotice(
                                     channel = ConversationTarget(id = TEST_CHANNEL_ID),
                                     recipient = UserRef(id = TEST_USER_ID),
+                                    prompt = "why is CI red?",
                                 ),
                         )
                 }

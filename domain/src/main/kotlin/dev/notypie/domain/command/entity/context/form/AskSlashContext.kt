@@ -15,7 +15,7 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
-import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.askRefusedNotice
 import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.common.escapeMarkup
 
@@ -59,7 +59,7 @@ internal class AskSlashContext(
                             channelName = channelName,
                         ),
                     detailType = commandDetailType,
-                    fallback = channelRefusedNotice(channel = channel, recipient = requester),
+                    fallback = askRefusedNotice(channel = channel, recipient = requester, prompt = prompt),
                 ),
         )
         return CommandOutput.success(

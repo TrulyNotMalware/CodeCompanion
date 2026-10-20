@@ -13,10 +13,13 @@ import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
-import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.askRefusedNotice
 import dev.notypie.domain.command.outbound.directFallbackOf
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
@@ -70,8 +73,21 @@ class AskCommandTest :
                     effects.single() shouldBe
                         createAgentQuestionMessage(
                             prompt = "what is kotlin?",
-                            fallback = channelRefusedNotice(channel = channel, recipient = requester),
+                            fallback =
+                                askRefusedNotice(channel = channel, recipient = requester, prompt = "what is kotlin?"),
                         )
+                }
+
+                then("the fallback for a refused post tells the requester it went unanswered and quotes the question") {
+                    val notice =
+                        effects
+                            .single()
+                            .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                            .fallback
+                            .shouldNotBeNull()
+                    notice.recipient shouldBe requester
+                    notice.content.markdown shouldContain "so it was *not* answered"
+                    notice.content.markdown shouldEndWith "\n\n> what is kotlin?"
                 }
             }
 

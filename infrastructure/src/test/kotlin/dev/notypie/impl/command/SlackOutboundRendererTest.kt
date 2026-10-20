@@ -420,6 +420,28 @@ class SlackOutboundRendererTest :
                     lines.sumOf { line -> line.count { character -> character == 'x' } } shouldBe 4_000
                 }
             }
+
+            `when`("render is called on a question broken by Unicode line and paragraph separators") {
+                val body = slot<String>()
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = capture(body),
+                        threadTs = any(),
+                    )
+                } returns stubEvent
+
+                renderer.render(
+                    message = createAgentQuestionMessage(prompt = "a\u2028b\u2029c\u0085d\r\ne"),
+                    basicInfo = basicInfo,
+                )
+
+                then("every piece is quoted on its own line and no separator is left in the section text") {
+                    body.captured shouldBe "<@${basicInfo.publisherId}> asked:\n> a\n> b\n> c\n> d\n> e"
+                }
+            }
         }
 
         given("an Ephemeral with a recipient") {

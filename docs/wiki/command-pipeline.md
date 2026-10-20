@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-19_
+_type: architecture · updated: 2026-10-20_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -98,6 +98,10 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `fallback: DirectReply?`(요청자 `UserRef` + `Text`)를 붙이고, relay가 채널 단위 영구 거절(`isChannelRefused()`)일 때만 그 DM을
   `next` 행으로 싣는다(폴백을 품은 원래 행이 V6이고 실제로 실리는 DM 행은 V2, `ReplaceMessage.fallback`과 같은 CAS). 본문이 있는 답장은 원문 앞에 한 줄을 붙인 사본, 채널에 있어야 하는
   것(`/ask` 질문, `/meetup` 폼, `/meetup list`)은 안내문만이다. `Command.replyToSlashFailure`의 공통 오류 ephemeral도 같다.
+- **폴백 문구는 대화 종류를 가른다(2026-10-20, 결정 #49)**: `ConversationTarget.kind()`(id 첫 글자 `D`/`G`/그 외)로 DM·그 밖의 대화에는 `<#…>` 대신
+  "그 대화에는 쓸 수 없다, 봇이 있는 채널에서 다시"로 말한다 — 봇 DM으로는 안내하지 않는다(운영 메시지 탭은 읽기 전용, 앱은 `app_mention`만 받는다).
+  `/ask` 질문의 폴백은 `askRefusedNotice`가 "답하지 않았다"와 질문 인용(1,500자 상한)을 함께 보낸다 — 거절된 질문 행은 전달 이벤트가 없어 턴이
+  시작되지 않기 때문이다.
 - **잔존 누수**: `ApprovalContents.commandDetailType`은 표현 모델에 남은 라우팅 enum이다(Refactor.md §4.4가
   `interactionValue` 문자열은 걷어냈지만 필드는 남김). `Approval` 렌더 시 버튼 값의 라우팅 타입이 여기서 나온다.
 

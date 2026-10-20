@@ -106,8 +106,9 @@ Commands are gated by per-user roles. Roles are cumulative — `user` ⊂ `ai_us
 
 Replies to mention commands (`help`, `status`, `usage`, role and CVE management) are ephemeral — visible only to the person who sent the command.
 Slash replies are ephemeral too, but slash commands can be run in channels the bot has not joined; when Slack refuses the reply there, the bot
-sends it to you as a direct message instead. The `/ask` question, the `/meetup` form and the `/meetup list` list are not re-sent — you get a
-notice asking you to invite the bot to the channel and run the command again.
+sends it to you as a direct message instead. The `/meetup` form and the `/meetup list` list are not re-sent — you get a notice asking you to
+invite the bot to the channel and run the command again; an `/ask` question comes back quoted with a note that it was not answered. When the
+refused conversation is a DM, the notice says to run the command again in a channel the bot has joined; for a group DM, to add the bot or use such a channel.
 
 Slash commands reach the app by URL, not by name: `/meetup` posts to `/api/slash/meet` and every other command to
 `/api/slash/<command>`, as declared in [`docs/slack-app-manifest.yaml`](docs/slack-app-manifest.yaml).
@@ -284,8 +285,9 @@ CodeCompanion/
 
 멘션 명령(`help`, `status`, `usage`, 역할·CVE 관리)의 답장은 ephemeral 메시지로, 명령을 보낸 사람에게만 보입니다.
 슬래시 명령의 답장도 ephemeral이지만, 슬래시 명령은 봇이 들어가 있지 않은 채널에서도 쓸 수 있어 Slack이 그 채널에 답장을 거절하면
-봇이 대신 DM으로 보냅니다. `/ask` 질문, `/meetup` 폼, `/meetup list` 목록은 다시 보내지 않고 봇을 채널에 초대한 뒤 다시 실행하라는 안내만
-보냅니다.
+봇이 대신 DM으로 보냅니다. `/meetup` 폼, `/meetup list` 목록은 다시 보내지 않고 봇을 채널에 초대한 뒤 다시 실행하라는 안내만 보내고,
+`/ask` 질문은 답하지 않았다는 안내와 함께 질문 원문을 돌려보냅니다. 거절된 곳이 DM이면 봇이 있는 채널에서 다시 실행하라고, 그룹 DM이면 봇을 추가하거나
+봇이 있는 채널을 쓰라고 안내합니다.
 
 슬래시 명령은 이름이 아니라 URL로 앱에 도달합니다. `/meetup`은 `/api/slash/meet`로, 나머지 명령은
 `/api/slash/<명령>`으로 보내며, [`docs/slack-app-manifest.yaml`](docs/slack-app-manifest.yaml)에 모두 선언되어 있습니다.

@@ -1,6 +1,6 @@
 # 개발 환경과 배포 파이프라인
 
-_type: guide · updated: 2026-10-15_
+_type: guide · updated: 2026-10-20_
 
 > JDK 25 · Gradle 9.8.1 툴체인, 프로파일 배선, 로컬 실행 레시피, 수동 마이그레이션·시크릿 관례, `main` 머지 → OKE 배포 경로.
 
@@ -206,6 +206,12 @@ MCP 도구 호출까지 확인하는 레시피다. codex 공급자로 끝까지 
   [`scripts/AGENTS.md`](../../scripts/AGENTS.md)가 원본이다.
 - 2026-10-08 확인(사이드카 이미지 `claude-sidecar:main-dca99f3`, `PROVIDER=codex`): `CLAUDE.md` 마운트 없이 `@bot ask` 턴이
   끝까지 돌았고, 사이드카가 다른 컨테이너에서 MCP 도구 `get_ai_usage`·`list_meetings`를 호출했다.
+- 2026-10-20 확인(같은 사이드카 이미지, 앱은 main `27f0e035`): 개발 앱(TermiBot)에 `/ask`가 등록돼 있지 않았다 — Socket Mode 앱이라 Request URL 없이
+  Slash Commands에 이름만 만들면 된다(`should_escape` 끔, 재설치 없음). 개발 봇 토큰의 스코프는 `docs/slack-app-manifest.yaml`과 다르다: `chat:write.public`이
+  있어 **봇이 없는 공개 채널에도 게시가 성공**하므로 결정 #42의 `not_in_channel` 경로는 개발 앱으로 재현되지 않고(비공개 채널·DM은 `channel_not_found`),
+  `im:write`는 없다. 사이드카 볼륨의 codex `auth.json`은 만료된다(`sdk_error "workspace routing discovery unauthorized (401)"`): 호스트 `~/.codex/auth.json`을
+  `docker cp`로 `/var/lib/claude-sidecar/codex/auth.json`에 넣고 `sidecar:sidecar` 600으로 맞추면 재기동 없이 다음 턴부터 된다. 슬래시 명령은 Web API로 보낼 수
+  없어 브라우저에서 입력해야 한다. 실측 전체는 git-ignored `.omc/handoffs/2026-10-20-live-slack.md`.
 
 ### F. Google Calendar 연동 — 로컬 OAuth 클라이언트 준비
 
@@ -406,7 +412,7 @@ could not be checked" 페이지로 끝난다(코드에서 추론, 미측정). 2�
   (`slack.app.agent.sidecar.*`, `spring.kafka.bootstrap-servers`)
 - agent-sidecar `main`(외부 저장소): `Dockerfile`(uid 10001, `/var/lib/claude-sidecar`, `CLAUDE_MD_PATH`), `sidecar/config.py`
   (`turn_timeout_sec` 90, `mcp_server_name` 기본 `domain-tools`), `_merge_system_prompt`(`dca99f3` 기준 `CLAUDE_MD_PATH`는 파일이
-  있을 때만 읽는다 — 2026-10-07 기록의 "못 읽으면 턴 거부"를 대체). 2026-10-07·10-08 로컬 라이브 실행
+  있을 때만 읽는다 — 2026-10-07 기록의 "못 읽으면 턴 거부"를 대체). 2026-10-07·10-08·10-20 로컬 라이브 실행
 
 ## 관련 페이지
 
