@@ -29,3 +29,5 @@ fun String.takeEntitySafe(maxLength: Int): String {
 }
 
 fun String.splitLineBreaks(): List<String> = split(regex = LINE_BREAKS)
+
+fun String.isBlankAcrossLineBreaks(): Boolean = splitLineBreaks().all { line -> line.isBlank() }

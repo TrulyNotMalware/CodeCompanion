@@ -1,7 +1,6 @@
 package dev.notypie.repository.outbox
 
 import dev.notypie.domain.command.dto.CommandBasicInfo
-import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import dev.notypie.repository.outbox.schema.OutboxSchemaVersion
@@ -35,35 +34,7 @@ class CodecOutboundMessagePort : OutboundMessagePort {
             transport = transport.name,
             payload = OutboundMessageCodec.encode(envelope = envelope),
             createdAt = LocalDateTime.now(),
-            schemaVersion = schemaVersionOf(message = message, continuation = continuation),
+            schemaVersion = OutboxSchemaVersion.V7,
         )
     }
 }
-
-private fun schemaVersionOf(message: OutboundMessage, continuation: List<OutboundMessage>): Int {
-    val chainVersion = if (continuation.isEmpty()) OutboxSchemaVersion.V2 else OutboxSchemaVersion.V3
-    return maxOf(chainVersion, (listOf(message) + continuation).maxOf { part -> part.requiredSchemaVersion() })
-}
-
-private fun OutboundMessage.requiredSchemaVersion(): Int =
-    when (this) {
-        is OutboundMessage.ChannelMessage ->
-            when {
-                fallback != null -> OutboxSchemaVersion.V6
-                content is MessageContent.AgentQuestion -> OutboxSchemaVersion.V5
-                else -> OutboxSchemaVersion.V2
-            }
-
-        is OutboundMessage.Ephemeral -> if (fallback != null) OutboxSchemaVersion.V6 else OutboxSchemaVersion.V2
-
-        is OutboundMessage.ReplaceMessage ->
-            fallback?.let { ephemeral -> maxOf(OutboxSchemaVersion.V4, ephemeral.requiredSchemaVersion()) }
-                ?: OutboxSchemaVersion.V2
-
-        is OutboundMessage.DirectMessage,
-        is OutboundMessage.UpdateMessage,
-        is OutboundMessage.OpenModal,
-        is OutboundMessage.Approval,
-        is OutboundMessage.Notice,
-        -> OutboxSchemaVersion.V2
-    }

@@ -257,7 +257,7 @@ _type: decision · updated: 2026-10-20_
       행이면 그 뒤의 행은 포기 시점까지 막힌다(81개면 남은 19자리로 뒤의 행에 닿는다); 넓힌 스윕은 그 사이 앞의 행이 다른 곳에서 끝났다면
       20건 넘게 offer할 수 있다(executor의 bounded 큐가 넘치는 것을 거절한다); look-ahead는 포기 기한을 늦추지 않으므로 늦게 닿은 읽을 수 있는
       턴은 이미 1시간이 지나 포기될 수 있다.
-      지금은 잠복한 문제였다 — 이 바이너리가 쓰는 최고 버전이 V6이고 `SUPPORTED`가 V2~V6이라 읽을 수 없는 행은 미래 V7 행을 남긴 롤백이나
+      지금은 잠복한 문제였다 — 이 바이너리가 쓰는 최고 버전이 V6이고 `SUPPORTED`가 V2~V6이라 읽을 수 없는 행은 미래 V7 행을 남긴 롤백(2026-10-20 결정 #50으로 V7이 생겨 이제 실제 롤백 비용이다)이나
       디코드할 수 없는 payload(`OutboundMessageCodecException`, 같은 코덱이 썼으므로 드물다)에서 생기고,
       prod는 지금 `strategy: Recreate`라 혼합 플릿이 없다 — 다만 그 블록은 V20 전환용 임시 설정이다(`k8s/deployment.yaml` 주석: "For this release only",
       후속 PR이 지운다). 그 뒤에는 롤링 배포마다 잠깐 혼합 플릿이 생기므로, 아래 touch 기각의 근거가 실제 상황이 된다. **기각: `updated_at` touch**(B-1 계획의 "touch 없음" 결정을 유지) — 읽을 수 있는지는 행이 아니라
@@ -455,6 +455,7 @@ _type: decision · updated: 2026-10-20_
     (`SlashCommandRequestBody`, `InteractionPayload`, `ActionEventPayloadContents`)가 `responseUrl`을 문자열로 든다. ④ 인접한 다른 값:
     `InboundCommand.appToken`·`CommandBasicInfo.appToken`은 Slack 요청 본문의 `token`(슬랙이 deprecated한 verification token)이고, 두
     data class의 생성된 `toString`이 그대로 찍는다(`CommandExecutor`의 WARN은 일부러 빼 둔다). 운영은 서명 검증을 쓰므로 위험은 낮다.
+    (2026-10-20 해소 → 결정 #50: ①~③은 가렸고, ④는 필드째 지우며 아웃박스 스키마를 V7로 올렸다.)
     상태: 유지. 근거: `domain/.../command/outbound/AGENTS.md`, `domain/.../command/inbound/AGENTS.md`.
 
 46. **Google refresh token 암호문은 그 행의 슬랙 사용자에 묶는다 — `v2` = AES-GCM + AAD `slack_user_id` (2026-10-15).**
@@ -500,6 +501,52 @@ _type: decision · updated: 2026-10-20_
     받아들여졌다(`db/migration/AGENTS.md`, `.omc/artifacts/mariadb-verify-2026-10-20/`). 상태: 유지.
     근거: `V28__add_google_calendar_connection_version.sql` 헤더, `repository/calendar/AGENTS.md`, `GoogleCalendarConnectionRepositoryImplTest`
     (두 스레드 경합), `CalendarConnectionServiceTest`(실제 JPA 경합 뒤 재시도).
+50. **결정 #45가 남긴 노출을 닫는다 — 응답 핸들은 출력에서 가리고, 쓰이지 않던 Slack verification token은 필드째 지우며 아웃박스
+    스키마를 V7로 올린다 (2026-10-20).** #45의 "남은 노출" ①~④에 대한 처리다. ① `InboundSubmission.RescheduleMeeting`/`AddParticipant`는
+    `listHandleRaw: String` 대신 `listHandle: ResponseReplaceHandle?`(`toString`이 가려진 값)를 든다. 인프라 매퍼(`SlackInboundMapper`)가
+    `routingExtras[2]`에서 만들고(공백이면 `null` — 도메인 `replaceHandleOrNull`과 같은 규칙이고, 그 함수는 `internal`로 둔다)
+    `ParsedSubmissions`는 그대로 넘긴다. 매퍼는 이 두 제출의 `InboundInteraction.routingExtras`에서 그 자리(`[2]`)만 빼고
+    넘기므로 interaction을 찍어도 URL이 없다 — 제출 라우팅은 `submission`만 보고 이 두 타입의 `routingExtras`를 읽는 도메인 코드는 없다.
+    ② `OpenViewPayloadContents.toString()`은 `viewJson=redacted`(재조정·참가자 추가 뷰는 목록 URL을 `private_metadata`에 URL 인코딩해 든다).
+    ③ `ActionEventPayloadContents`는 `responseUrl=redacted`, `InteractionPayload`는 `responseUrl`·`routingExtras`·`privateMetadata`를
+    `redacted`로 찍는다(뒤의 둘은 제출에서 같은 목록 URL을 평문·인코딩으로 든다). `SlashCommandRequestBody.responseUrl`은 읽는 곳이 없어
+    필드를 지웠다. 세 `toString`은 손으로 쓴 것이라 새 필드를 자동으로 찍지 않는다(빠질 뿐 새지는 않는다). ④ 사용자 결정으로
+    verification token을 지운다: `InboundCommand.appToken`, `CommandBasicInfo.appToken`(`forOutbound` 포함; 호출처 없던 `withNewKey`는 지웠다), `CommandOutput.token`과
+    그 `FIXME`, 세 매퍼의 대입, 읽는 곳이 없어진 Slack DTO의 `token`(`SlashCommandRequestBody`, `InteractionPayload`,
+    `SlackEventCallBackRequest`). 읽는 곳이 없었음은 검색으로 확인했다(`CommandOutput.token`을 채우던 `ApprovalCallbackContext`·
+    `RequestMeetingContextResult`도 읽지는 않았다). 들어오는 본문에는 `token`이 그대로 있다 — 슬래시 폼과 멘션 본문은 공용 `jsonMapper`
+    (jackson-databind 3.2.3, `FAIL_ON_UNKNOWN_PROPERTIES` 기본 false)가 모르는 키로 버리고, 인터랙션은 Slack SDK가 파싱한 페이로드에서
+    우리 파서가 복사하지 않을 뿐이다. `UrlVerificationRequest.token`과 `AppConfig.api.appToken`(Socket Mode `xapp-` 토큰)은 다른 값이라 그대로다.
+    - **왜 V7인가(사용자 결정 A, 2026-10-20).** `CommandBasicInfo`는 모든 아웃박스 행의 `basicInfo`로 인코딩되고, 인바운드에서 온 행은
+      `extractBasicInfo`가 복사한 verification token을 `outbox_message.payload`(DB)와 CDC를 거쳐 Kafka에까지 실어 왔다 — 필드를 지우면
+      `toString`과 저장 노출이 함께 닫힌다. 그러나 V7 이전 바이너리는 `appToken`을 non-null 생성자 인자로 요구해 새 행을 하나도 디코드하지
+      못하므로(미지원 버전 가드가 없다면 렌더 실패 → `FAILURE`로 잃는다), "읽을 수 있는 가장 오래된 버전" 규칙대로 **모든 행**을 V7로
+      찍는다 — 행별 선택(V2~V6)은 상수로 접혔고, V8이 필요한 shape가 생기면 V7을 바닥으로 되살린다. `SUPPORTED`는 V2~V7이고, V7
+      바이너리는 `appToken`이 든 이전 행을 모르는 키로 무시하고 읽는다. Flyway 마이그레이션은 없다(다음 번호는 그대로 V29) — 페이로드
+      형식만 바뀌며, `schema_version` 값을 고정하는 DB 제약이나 Debezium 설정은 없다(커넥터는 `outbox_message` 행 전체를 캡처한다).
+      부수 효과: `IdempotencyCreator`가 해시하는 `InboundCommand` JSON에서 토큰이 빠져 같은 요청의 키가 배포 전후로 다르다(키에 1초 창이
+      섞이므로 배포를 사이에 둔 비교는 원래 맞지 않는다).
+    - **기각:** B — 도메인에서는 지우고 코덱이 상수 `"appToken":""`을 계속 쓰는 shim(mix-in + 가상 속성 writer): 버전을 올리지 않아
+      롤백이 안전하지만 죽은 키와 코덱 전용 장치가 남는다. C — `CommandBasicInfo.appToken`만 남겨 늘 `""`로 둔다: 형식은 그대로(값만
+      바뀜)라 가장 작지만 죽은 필드가 도메인에 남고 제거를 다음 PR로 미룬다.
+    - **대가와 롤아웃:** 배포 뒤 V7 이전 바이너리로 롤백하면(배포 워크플로의 `rollout undo` 포함) 그 바이너리는 배포 뒤에 쓰인 **모든**
+      행을 `IN_PROGRESS`로 쥔다(발송 예산 미차감, 회수마다 ERROR). V7 바이너리가 돌아오면 스윕이 이어 보내지만, 24시간 안에 돌아오지 않으면
+      `FAILURE`로 잃는다. 그 바이너리의 `/ask` 재개 스윕은 V7 질문 행을 읽을 수 없는 행으로 보류하다 포기 조건(5회/1시간)에서 안내 없이
+      `ABANDONED`로 끝낸다. 지금은 `strategy: Recreate`라 혼합 플릿이 없지만, 그 블록을 지운 뒤의 두 레플리카 롤아웃에서는 구 레플리카가
+      새 행을 같은 방식으로 쥐고 새 레플리카의 스윕이 회수한다. V6과 다른 점은 범위다(V6은 폴백이 붙은 행만, V7은 모든 행). 규칙:
+      **V7을 넘는 롤백은 하지 않는다. 해야 하면 먼저 쓰기를 멈추고 아웃박스를 비우고(`PENDING`·`IN_PROGRESS` 0), V7 질문 행에 매달린 미완료
+      `/ask` 턴(`agent_ask_turn` `PENDING`·`IN_PROGRESS`)도 끝낸다** — 질문 행이 이미 `SUCCESS`여도 턴이 남아 있으면 구 바이너리의 재개 스윕이 그
+      행을 읽지 못해 포기 조건(5회/1시간)에서 안내 없이 `ABANDONED`로 끝내므로, 아웃박스만 비운 drain은 통과해도 턴을 잃는다. 예외는 규칙으로 막을 수
+      없다: 배포 워크플로는 롤아웃·readiness 실패 시 이전 리비전으로 자동 `rollout undo`한다(`.github/workflows/deploy_action.yaml`). readiness는
+      트래픽만 막으므로 V7 파드의 `@Scheduled` 생산자(스탠드업·리마인더·CVE 발송)가 이미 V7 행을 썼을 수 있다. 그때는 V7 빌드를 다시 배포해(fix forward) 보류된 행을 회수하는데, 기한은 아웃박스 행의
+      `give-up-after-hours`(기본 24시간)가 아니라 **미완료 `/ask` 턴의 1시간**이 먼저 온다. 남은 것은 두 쿼리로 확인한다: `SELECT count(*) FROM
+      outbox_message WHERE schema_version = 7 AND status IN ('PENDING','IN_PROGRESS')`와 `SELECT count(*) FROM agent_ask_turn t JOIN outbox_message o
+      ON o.event_id = t.event_id WHERE o.schema_version = 7 AND t.status IN ('PENDING','IN_PROGRESS')`. 열 기본값 `DEFAULT 2`는 그대로 둔다(네이티브 INSERT가 없다); 대신
+      `OutboxMessage` 생성자의 Kotlin 기본값(V2)을 없애 행을 만드는 코드가 버전을 반드시 고르게 했다. 가린 `toString`의 비용은
+      #45와 같다(로그·디버거에서 원값이 보이지 않는다).
+    상태: 유지. 근거: `repository/outbox/schema/AGENTS.md`(`OutboxSchemaVersion`), `repository/outbox/AGENTS.md`(`OutboundMessagePort`),
+    `impl/command/AGENTS.md`(`SlackInboundMapper`), `impl/command/slack/AGENTS.md`, `impl/command/event/AGENTS.md`,
+    `domain/.../command/inbound/AGENTS.md`, `domain/.../command/dto/AGENTS.md`.
 
 ## 빌드·런타임
 
@@ -566,6 +613,8 @@ _type: decision · updated: 2026-10-20_
     넓히고 `U…` 채널 + `thread_ts` 게시를 라이브로 확인해야 한다. 인용 분할: Slack은 U+2028/U+2029를 줄바꿈으로 렌더하고 그 뒤 텍스트는 `>` 밖으로
     나오지만 Kotlin `lines()`는 CR/LF만 자른다 → `askedBy`·`wrappedForQuote`·멘션 매퍼의 인용 복원·`askRefusedNotice`는 `domain/common/SafeText.kt`의 `splitLineBreaks()`(`Regex("\\R")`, LS·PS·NEL·VT·FF 포함)로 나눈다.
     Slack 클라이언트는 슬래시 텍스트의 LS/PS를 보내기 전에 LF로 바꾸므로 UI 경로로는 재현되지 않고 API로 게시된 멘션 텍스트만 남는 경로다(심층 방어).
+    빈 프롬프트 판정(`AgentChatContext`·`AskSlashContext`)도 같은 `\R` 분할을 쓰는 `isBlankAcrossLineBreaks()`로 맞춘다 — `isBlank()`는
+    NEL(U+0085, `Cc`)을 공백으로 보지 않아 NEL만 있는 프롬프트가 통과했다(2026-10-20). 제로폭 등 `Cf` 문자는 여전히 비어 있지 않은 것으로 본다.
 
 ## CI/CD와 공급망
 
@@ -824,6 +873,15 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
 - 대화 종류별 거절 문구·`/ask` 거절 안내·유니코드 줄바꿈 인용(#49): `domain/src/main/kotlin/dev/notypie/domain/command/outbound/{OutboundTargets,DirectReply}.kt`(`ConversationKind`, `kind()`, `askRefusedNotice`), `domain/common/SafeText.kt`(`splitLineBreaks`, `takeEntitySafe`),
   `domain/.../entity/context/form/AskSlashContext.kt`, `infrastructure/.../impl/command/OutboundRenderer.kt`(`askedBy`), `impl/command/slack/SlackMentionMapper.kt`;
   실측 기록 `.omc/handoffs/2026-10-20-live-slack.md`(git-ignored)
+- 남은 응답 핸들 노출·verification token 삭제·아웃박스 V7(#50): `domain/src/main/kotlin/dev/notypie/domain/command/inbound/{InboundCommand,InboundInteraction}.kt`,
+  `dto/CommandBasicInfo.kt`, `dto/response/CommandOutput.kt`, `entity/context/form/ParsedSubmissions.kt`, `infrastructure/.../impl/command/SlackInboundMapper.kt`
+  (`listHandle()`, `carriesListHandle()`), `SlackInteractionRequestParser.kt`, `impl/command/slack/{InteractionPayload,SlashCommandRequestBody,SlackEventCallBackRequest,SlackMentionMapper}.kt`,
+  `impl/command/event/SlackEventPayloads.kt`, `repository/outbox/{OutboundMessagePort,schema/OutboxSchemaVersion}.kt`, `application/.../common/SlackRequestParser.kt`
+  (`jsonMapper.convertValue`), Debezium 커넥터 설정 `resources/cdc/docker-compose/debezium/connect_mariadb.sh`(열 필터 없음), 스펙
+  `OutboundMessageCodecTest`(고정 V6 행)·`OutboxMessageTest`·`ViewSubmissionChannelRoutingRegressionTest`·`SlackInteractionRequestParserTest`·
+  `SlackApiEventConstructorTest`·`SlackControllersTest`·`SlackMentionEventHandlerImplTest`·`OutboxChainJpaTransactionTest`, 미지원 버전 보류는
+  기존 `SlackMessageRelayServiceImplTest`("schema version this binary cannot read")·`OutboxPayloadRendererTest`·`AgentAskThreadStarterTest`;
+  선택지 A/B/C와 사용자 결정(2026-10-20, 세션 기록)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

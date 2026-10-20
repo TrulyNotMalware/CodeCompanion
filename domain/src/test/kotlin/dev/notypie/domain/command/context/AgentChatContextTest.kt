@@ -89,34 +89,36 @@ class AgentChatContextTest :
             }
         }
 
-        given("AgentChatContext with a blank prompt") {
-            val intentQueue = createIntentQueue()
-            val basicInfo = createCommandBasicInfo()
+        mapOf("only spaces" to "   ", "only a NEL (U+0085)" to "\u0085").forEach { (label, prompt) ->
+            given("AgentChatContext with a blank prompt of $label") {
+                val intentQueue = createIntentQueue()
+                val basicInfo = createCommandBasicInfo()
 
-            val context =
-                AgentChatContext(
-                    prompt = "   ",
-                    threadId = TEST_THREAD_TS,
-                    requesterName = TEST_USER_NAME,
-                    channelName = TEST_CHANNEL_NAME,
-                    commandBasicInfo = basicInfo,
-                    intents = intentQueue,
-                )
+                val context =
+                    AgentChatContext(
+                        prompt = prompt,
+                        threadId = TEST_THREAD_TS,
+                        requesterName = TEST_USER_NAME,
+                        channelName = TEST_CHANNEL_NAME,
+                        commandBasicInfo = basicInfo,
+                        intents = intentQueue,
+                    )
 
-            `when`("runCommand") {
-                val result = context.runCommand()
+                `when`("runCommand") {
+                    val result = context.runCommand()
 
-                then("should return a failed CommandOutput") {
-                    result.ok shouldBe false
-                }
+                    then("should return a failed CommandOutput") {
+                        result.ok shouldBe false
+                    }
 
-                then("should emit a guidance ephemeral instead of an AgentConverse intent") {
-                    val intents = intentQueue.snapshot()
-                    intents.size shouldBe 1
-                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
-                    ephemeral.target.id shouldBe basicInfo.channel
-                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
-                        AgentChatContext.EMPTY_PROMPT_MESSAGE
+                    then("should emit a guidance ephemeral instead of an AgentConverse intent") {
+                        val intents = intentQueue.snapshot()
+                        intents.size shouldBe 1
+                        val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                        ephemeral.target.id shouldBe basicInfo.channel
+                        ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                            AgentChatContext.EMPTY_PROMPT_MESSAGE
+                    }
                 }
             }
         }

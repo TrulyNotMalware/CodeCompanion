@@ -26,7 +26,6 @@ class CveQuerySlashServiceImplTest :
         fun commandDataWith(subCommands: List<String> = emptyList()): InboundCommand =
             InboundCommand(
                 appId = "A123",
-                appToken = "t",
                 actorId = "U_LATEST",
                 actorName = "latest",
                 channel = "C_CMD",

@@ -58,7 +58,6 @@ fun SlackEventCallBackRequest.toMentionInboundCommand(
 
     return InboundCommand(
         appId = appId,
-        appToken = token,
         actorId = event.userId.orEmpty(),
         actorName = actorName,
         channel = event.channel,

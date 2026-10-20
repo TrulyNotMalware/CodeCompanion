@@ -4,7 +4,6 @@ import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_TEAM_ID
-import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -24,7 +23,6 @@ fun createMentionInboundCommand(
     commandTokens: List<String> = listOf("help"),
     hasCommandStructure: Boolean = true,
     appId: String = TEST_APP_ID,
-    appToken: String = TEST_TOKEN,
     actorId: String = TEST_USER_ID,
     actorName: String = TEST_USER_NAME,
     channel: String = TEST_CHANNEL_ID,
@@ -35,7 +33,6 @@ fun createMentionInboundCommand(
 ): InboundCommand =
     InboundCommand(
         appId = appId,
-        appToken = appToken,
         actorId = actorId,
         actorName = actorName,
         channel = channel,
@@ -58,7 +55,6 @@ fun createInteractionInboundCommand(
     form: List<InboundField> = emptyList(),
     idempotencyKey: UUID = UUID.randomUUID(),
     appId: String = TEST_APP_ID,
-    appToken: String = TEST_TOKEN,
     actorId: String = TEST_USER_ID,
     actorName: String = TEST_USER_NAME,
     channel: String = TEST_CHANNEL_ID,
@@ -72,7 +68,6 @@ fun createInteractionInboundCommand(
                 idempotencyKey = idempotencyKey,
             ),
         appId = appId,
-        appToken = appToken,
         actorId = actorId,
         actorName = actorName,
         channel = channel,
@@ -81,7 +76,6 @@ fun createInteractionInboundCommand(
 fun createInteractionResponseInboundCommand(
     interaction: InboundInteraction,
     appId: String = TEST_APP_ID,
-    appToken: String = TEST_TOKEN,
     actorId: String = TEST_USER_ID,
     actorName: String = TEST_USER_NAME,
     channel: String = TEST_CHANNEL_ID,
@@ -89,7 +83,6 @@ fun createInteractionResponseInboundCommand(
 ): InboundCommand =
     InboundCommand(
         appId = appId,
-        appToken = appToken,
         actorId = actorId,
         actorName = actorName,
         channel = channel,
@@ -102,7 +95,6 @@ fun createSlashInboundCommand(
     subCommands: List<String> = emptyList(),
     triggerId: String = "",
     appId: String = TEST_APP_ID,
-    appToken: String = TEST_TOKEN,
     actorId: String = TEST_USER_ID,
     actorName: String = TEST_USER_NAME,
     channel: String = TEST_CHANNEL_ID,
@@ -110,7 +102,6 @@ fun createSlashInboundCommand(
 ): InboundCommand =
     InboundCommand(
         appId = appId,
-        appToken = appToken,
         actorId = actorId,
         actorName = actorName,
         channel = channel,

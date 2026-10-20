@@ -1,6 +1,7 @@
 package dev.notypie.application.service.agent
 
 import dev.notypie.application.configurations.AppConfig
+import dev.notypie.application.service.relay.purgeInBatches
 import dev.notypie.common.containFailure
 import dev.notypie.repository.agent.AgentAskTurnRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
@@ -17,7 +18,6 @@ private val log = KotlinLogging.logger {}
 internal const val AGENT_RETENTION_PERIOD_MILLIS = 3_600_000L
 internal const val AGENT_RETENTION_FIRST_RUN_MIN_MILLIS = 600_000L
 internal const val AGENT_RETENTION_FIRST_RUN_MAX_MILLIS = 1_200_000L
-internal const val AGENT_RETENTION_MAX_BATCHES_PER_TICK = 20
 
 @Component
 class AgentRetentionScheduler(
@@ -43,31 +43,33 @@ class AgentRetentionScheduler(
     fun purgeOnce(): Int {
         val now = LocalDateTime.now(clock)
         val askTurns =
-            purgeTable(table = "agent_ask_turn", olderThan = now.minus(askTurnRetention)) { olderThan ->
-                askTurnRepository.deleteFinishedOlderThan(olderThan = olderThan, limit = batchSize)
+            purgeTable(table = "agent_ask_turn", olderThan = now.minus(askTurnRetention)) { olderThan, limit ->
+                askTurnRepository.deleteFinishedOlderThan(olderThan = olderThan, limit = limit)
             }
         val turnHistory =
-            purgeTable(table = "agent_turn_history", olderThan = now.minus(historyRetention)) { olderThan ->
-                agentTurnHistoryRepository.deleteOlderThan(olderThan = olderThan, limit = batchSize)
+            purgeTable(table = "agent_turn_history", olderThan = now.minus(historyRetention)) { olderThan, limit ->
+                agentTurnHistoryRepository.deleteOlderThan(olderThan = olderThan, limit = limit)
             }
         val toolCallHistory =
-            purgeTable(table = "mcp_tool_call_history", olderThan = now.minus(historyRetention)) { olderThan ->
-                mcpToolCallHistoryRepository.deleteOlderThan(olderThan = olderThan, limit = batchSize)
+            purgeTable(table = "mcp_tool_call_history", olderThan = now.minus(historyRetention)) { olderThan, limit ->
+                mcpToolCallHistoryRepository.deleteOlderThan(olderThan = olderThan, limit = limit)
             }
         return askTurns + turnHistory + toolCallHistory
     }
 
-    private fun purgeTable(table: String, olderThan: LocalDateTime, deleteBatch: (LocalDateTime) -> Int): Int {
+    private fun purgeTable(
+        table: String,
+        olderThan: LocalDateTime,
+        deleteBatch: (olderThan: LocalDateTime, limit: Int) -> Int,
+    ): Int {
         var total = 0
         containFailure(
             onFailure = { exception ->
                 log.error(exception) { "Agent retention purge of $table failed after $total rows" }
             },
         ) {
-            for (batch in 1..AGENT_RETENTION_MAX_BATCHES_PER_TICK) {
-                val deleted = deleteBatch(olderThan)
-                total += deleted
-                if (deleted < batchSize) break
+            purgeInBatches(batchSize = batchSize) { limit ->
+                deleteBatch(olderThan, limit).also { deleted -> total += deleted }
             }
         }
         if (total > 0) log.info { "Agent retention purged $total rows of $table older than $olderThan" }

@@ -52,7 +52,7 @@ class OutboxMessage(
         nullable = false,
         columnDefinition = "INT NOT NULL DEFAULT ${OutboxSchemaVersion.V2}",
     )
-    val schemaVersion: Int = OutboxSchemaVersion.V2,
+    val schemaVersion: Int,
     @field:JsonProperty("attempt_count")
     @field:Column(
         name = "attempt_count",

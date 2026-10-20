@@ -150,5 +150,14 @@ class AskCommandTest :
                     effects.ephemeral().content shouldBe MessageContent.Text(headline = null, markdown = usage)
                 }
             }
+
+            `when`("the text is only a NEL (U+0085)") {
+                val (result, effects) = run(text = "\u0085", actorRole = UserRole.AI_USER)
+
+                then("it fails with the same usage line instead of posting an empty question") {
+                    result.ok shouldBe false
+                    effects.ephemeral().content shouldBe MessageContent.Text(headline = null, markdown = usage)
+                }
+            }
         }
     })

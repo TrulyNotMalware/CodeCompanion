@@ -13,6 +13,9 @@ import dev.notypie.templates.dto.LayoutBlocks
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.clearMocks
 import io.mockk.every
@@ -286,6 +289,13 @@ class SlackApiEventConstructorTest :
                 then("idempotencyKey and type match given parameters") {
                     result.idempotencyKey shouldBe idempotencyKey
                     result.type shouldBe CommandDetailType.REPLACE_TEXT
+                }
+
+                then("printing the payload, or the event that carries it, names the payload but hides the URL") {
+                    result.payload.toString() shouldStartWith "ActionEventPayloadContents("
+                    result.payload.toString() shouldContain "responseUrl=redacted"
+                    result.payload.toString() shouldNotContain responseUrl
+                    result.toString() shouldNotContain responseUrl
                 }
             }
         }

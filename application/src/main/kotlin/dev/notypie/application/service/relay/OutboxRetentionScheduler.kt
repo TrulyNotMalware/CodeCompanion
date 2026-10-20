@@ -12,6 +12,18 @@ import java.time.LocalDateTime
 
 private val log = KotlinLogging.logger {}
 
+internal const val RETENTION_MAX_BATCHES_PER_TICK = 20
+
+internal fun purgeInBatches(batchSize: Int, deleteBatch: (limit: Int) -> Int): Int {
+    var total = 0
+    for (batch in 1..RETENTION_MAX_BATCHES_PER_TICK) {
+        val deleted = deleteBatch(batchSize)
+        total += deleted
+        if (deleted < batchSize) break
+    }
+    return total
+}
+
 @Component
 class OutboxRetentionScheduler(
     private val outboxRepository: MessageOutboxRepository,
@@ -28,17 +40,11 @@ class OutboxRetentionScheduler(
 
     fun purgeOnce(): Int {
         val cutoff = LocalDateTime.now(clock).minus(retention)
-        var total = 0
-        for (batch in 1..MAX_BATCHES_PER_TICK) {
-            val deleted = outboxRepository.deleteTerminalOlderThan(olderThan = cutoff, limit = batchSize)
-            total += deleted
-            if (deleted < batchSize) break
-        }
+        val total =
+            purgeInBatches(batchSize = batchSize) { limit ->
+                outboxRepository.deleteTerminalOlderThan(olderThan = cutoff, limit = limit)
+            }
         if (total > 0) log.info { "Outbox retention purged $total terminal rows older than $cutoff" }
         return total
-    }
-
-    private companion object {
-        const val MAX_BATCHES_PER_TICK = 20
     }
 }

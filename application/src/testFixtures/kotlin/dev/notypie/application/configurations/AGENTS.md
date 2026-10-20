@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-20 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/configurations
 
@@ -12,7 +12,7 @@ agent retention, for the retention purge spec.
 | File | Description |
 |------|-------------|
 | `AppConfigBinding.kt` | `@EnableConfigurationProperties(AppConfig::class) class AppConfigBinding` for `ApplicationContextRunner` specs: binds `slack.app.*` from the runner's properties. Not a `@Configuration`, so `ApplicationContextSmokeTest`'s component scan does not pick it up |
-| `AppConfigCreator.kt` | `createAppConfigWithSecrets(slackToken, slackAppToken, signingSecret, mcpSigningSecret, githubToken, nvdApiKey, sidecarBearerSecret)` — an `AppConfig` with every secret-bearing field set to a distinct fixture value, for the masking spec; `createAgentRetentionAppConfig(askTurnDays = 14, historyDays = 180, batchSize = 1000)` — an `AppConfig` whose `agent.retention` carries those values, for `AgentRetentionSchedulerTest` (2026-10-19) |
+| `AppConfigCreator.kt` | `createAppConfigWithSecrets(slackToken, slackAppToken, signingSecret, mcpSigningSecret, githubToken, nvdApiKey, sidecarBearerSecret)` — an `AppConfig` with every secret-bearing field set to a distinct fixture value, for the masking spec; `createAgentRetentionAppConfig(askTurnDays = 14, historyDays = 180, batchSize = 1000)` — an `AppConfig` whose `agent.retention` carries those values, for `AgentRetentionSchedulerTest` (2026-10-19); `createOutboxRetentionAppConfig(days = 7L, batchSize = 50)` builds `outbox.retention` the same way (2026-10-20) |
 | `CveTopicConfigCreator.kt` | `createCveTopicConfigDefinition(key = "cve-java", displayName = "Java CVE", category = CVE, sourceType = NVD_CVE, sourceConfig = """{"cpe":"oracle:jdk"}""", deliveryMode = IMMEDIATE, active = true)` |
 
 ## For AI Agents

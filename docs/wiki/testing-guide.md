@@ -72,6 +72,9 @@ _type: guide · updated: 2026-10-20_
 - **Kotest 컨테이너 스코프는 테스트 트랜잭션 바깥에서 실행된다.** `given` 블록의 `saveAndFlush`는 롤백되지 않고
   스펙 간에 하나의 H2를 공유한다. 그래서 `JpaCveTopicRepositoryTest`는 `topicKey`를 블록마다 고유하게 만들고
   `countActive()`를 `baseline + 2`처럼 델타로 단언한다. 전역 정확 일치(`shouldBe 3`)는 다른 스펙 순서에 따라 깨진다.
+  같은 이유로 픽스처의 외래키 기본값(`createCveEventSchema`의 `topicId`, 구독·전달 픽스처의 `topicId`·`eventId`)은 IDENTITY가 절대
+  주지 않는 `0`이다 — `1`이면 깨끗한 H2에서 첫 토픽이 id 1을 받아 다른 블록의 행이 그 토픽에 붙고, `JpaCveEventRepositoryTest`가
+  단독 실행에서만 실패했다(2026-10-20).
 - 리포지토리 스펙은 **레인마다 쌍**이다: `Jpa*RepositoryTest`(H2, 쿼리·CAS 의미)와 `*RepositoryImplTest`(MockK한
   `Jpa*` + 손으로 만든 어댑터, 매핑). 동시성 주장(`claimPending`, `insertIgnore`, `resetStuck`)은 **지는 쪽 경로**도
   스펙이 있어야 한다.

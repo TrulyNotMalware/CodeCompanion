@@ -1,6 +1,7 @@
 package dev.notypie.domain.command.inbound
 
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 
 @JvmInline
 value class TriggerHandle(
@@ -98,14 +99,14 @@ sealed interface InboundSubmission {
         val requesterId: String,
         val date: String,
         val time: String,
-        val listHandleRaw: String,
+        val listHandle: ResponseReplaceHandle?,
     ) : InboundSubmission
 
     data class AddParticipant(
         val meetingUidRaw: String,
         val requesterId: String,
         val participantUserIdsRaw: String,
-        val listHandleRaw: String,
+        val listHandle: ResponseReplaceHandle?,
     ) : InboundSubmission
 
     data class DeclineReason(

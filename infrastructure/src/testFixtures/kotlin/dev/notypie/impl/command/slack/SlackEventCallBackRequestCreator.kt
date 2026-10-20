@@ -4,11 +4,9 @@ import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_MESSAGE_TS
 import dev.notypie.domain.TEST_TEAM_ID
-import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 
 fun createSlackEventCallBackRequest(
-    token: String = TEST_TOKEN,
     teamId: String = TEST_TEAM_ID,
     apiAppId: String = TEST_APP_ID,
     type: String = "event_callback",
@@ -19,7 +17,6 @@ fun createSlackEventCallBackRequest(
     event: EventCallbackData = createEventCallbackData(),
     authorizations: List<Authorization> = listOf(createAuthorization()),
 ) = SlackEventCallBackRequest(
-    token = token,
     teamId = teamId,
     apiAppId = apiAppId,
     type = type,
@@ -128,10 +125,10 @@ fun createWorkflowAppMentionJson(botUserId: String): String =
     }
     """.trimIndent()
 
-fun createRichAppMentionJson(botUserId: String): String =
+fun createRichAppMentionJson(botUserId: String, token: String = "t"): String =
     """
     {
-      "token": "t", "team_id": "T1", "api_app_id": "A1", "type": "event_callback",
+      "token": "$token", "team_id": "T1", "api_app_id": "A1", "type": "event_callback",
       "event_id": "Ev1", "event_time": "1", "is_ext_shared_channel": false, "event_context": "c",
       "authorizations": [{"enterprise_id": null, "team_id": "T1", "user_id": "$botUserId",
         "is_bot": true, "is_enterprise_install": false}],

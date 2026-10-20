@@ -74,7 +74,7 @@ fun createCveTopic(
 fun createCveSubscriptionSchema(
     id: Long = 0L,
     userId: String = "U_SUBSCRIBER",
-    topicId: Long = 1L,
+    topicId: Long = 0L,
 ): CveSubscriptionSchema =
     CveSubscriptionSchema(
         id = id,
@@ -84,7 +84,7 @@ fun createCveSubscriptionSchema(
 
 fun createCveDeliverySchema(
     id: Long = 0L,
-    eventId: Long = 1L,
+    eventId: Long = 0L,
     userId: String = "U_SUBSCRIBER",
     status: CveDeliveryStatus = CveDeliveryStatus.SENT,
 ): CveDeliverySchema =

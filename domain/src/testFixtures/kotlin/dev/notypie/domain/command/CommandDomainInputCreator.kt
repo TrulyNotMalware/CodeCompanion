@@ -4,7 +4,6 @@ import dev.notypie.domain.TEST_APP_ID
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_MESSAGE_TS
-import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.authorization.UserRole
@@ -44,13 +43,11 @@ import java.util.UUID
 
 fun createCommandBasicInfo(
     appId: String = TEST_APP_ID,
-    appToken: String = TEST_TOKEN,
     publisherId: String = TEST_USER_ID,
     channel: String = TEST_CHANNEL_ID,
     idempotencyKey: UUID = UUID.randomUUID(),
 ) = CommandBasicInfo(
     appId = appId,
-    appToken = appToken,
     publisherId = publisherId,
     channel = channel,
     idempotencyKey = idempotencyKey,

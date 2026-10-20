@@ -12,5 +12,7 @@ object OutboxSchemaVersion {
 
     const val V6: Int = 6
 
-    val SUPPORTED: Set<Int> = setOf(V2, V3, V4, V5, V6)
+    const val V7: Int = 7
+
+    val SUPPORTED: Set<Int> = setOf(V2, V3, V4, V5, V6, V7)
 }

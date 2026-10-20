@@ -39,7 +39,6 @@ class CveSubscriptionSlashServiceImplTest :
         val commandData =
             InboundCommand(
                 appId = "A123",
-                appToken = "t",
                 actorId = "U_SUB",
                 actorName = "sub",
                 channel = "C_CMD",

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-20 -->
 
 # infrastructure/repository
 
@@ -33,10 +33,11 @@ subpackage of `@Entity` classes.
   precisely so the domain stays annotation-free. `OpenModal` and `DirectMessage` are deliberately
   **unregistered**: neither is outbox-bound, so encoding or decoding one fails fast with an unresolved
   type id instead of silently round-tripping. Do not "complete" the subtype list.
-- **`OutboxSchemaVersion` is the compatibility gate.** Writers stamp `CURRENT`; readers validate against
+- **`OutboxSchemaVersion` is the compatibility gate.** Writers stamp the oldest version that reads the row (V7 on
+  every row since 2026-10-20, see `outbox/schema/AGENTS.md`); readers validate against
   `SUPPORTED` before decoding, so a relay binary that cannot parse a shape leaves the row `IN_PROGRESS` unsent
   (no send budget spent, ERROR log, reclaimed by the sweep until a binary that reads it sends it or the 24 h
-  bound ends it) rather than sending a malformed request or failing it. Bump `CURRENT` **and** extend
+  bound ends it) rather than sending a malformed request or failing it. Stamp a new version **and** extend
   `SUPPORTED` for a new shape; remove a version from `SUPPORTED` only after a guaranteed-drained
   migration window.
 - **Status transitions are atomic CAS, not read-then-write.** `claimPending`'s `WHERE status = 'PENDING'`

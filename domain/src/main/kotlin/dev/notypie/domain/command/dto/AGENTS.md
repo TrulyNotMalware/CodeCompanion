@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-20 -->
 
 # domain/command/dto
 
@@ -11,7 +11,7 @@ two sub-packages: the Block Kit-neutral modal content DTOs (`modals/`) and the c
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CommandBasicInfo.kt` | `CommandBasicInfo(appId, appToken, publisherId, channel, idempotencyKey)`; `forOutbound(publisherId, channel, appId = "", idempotencyKey = random)` for bot-initiated sends (blank `appToken` by design); `internal fun withNewKey()` — no callers |
+| `CommandBasicInfo.kt` | `CommandBasicInfo(appId, publisherId, channel, idempotencyKey)`; `forOutbound(publisherId, channel, appId = "", idempotencyKey = random)` for bot-initiated sends. It is encoded into every outbox row's `basicInfo`, so a field added or removed here is an outbox format change (`appToken` was removed on 2026-10-20 with schema V7, `docs/wiki/decisions.md` #50) |
 | `UrlVerificationRequest.kt` | `internal data class` (`type`, `channel`, `token`, `challenge`) — unreferenced anywhere in the repo |
 
 ## Subdirectories
@@ -25,13 +25,11 @@ two sub-packages: the Block Kit-neutral modal content DTOs (`modals/`) and the c
 ### Working In This Directory
 - Inbound path: `InboundCommand.extractBasicInfo(idempotencyKey)` builds it with `publisherId = actorId`.
   Outbound path: `forOutbound(...)` (15 call sites — scheduler DMs, channel summaries, fallback
-  ephemerals) with a fresh random key unless one is supplied. Use `forOutbound` rather than the
-  constructor so the blank-token convention stays in one place.
-- `appToken` is the per-request token that arrives on inbound Slack payloads. Outbound calls
-  authenticate with the bot token configured on the API client, so `forOutbound` leaves it blank —
-  never add a non-blank-token check to an outbound path.
+  ephemerals) with a fresh random key unless one is supplied.
+- There is no per-request token: outbound calls authenticate with the bot token configured on the API client, and
+  the Slack verification token that inbound bodies still carry is dropped at the infrastructure DTOs (#50).
 - `idempotencyKey` is the one key the whole effect chain shares (command → intents → events → outbox
-  rows). `withNewKey()` exists to fork it but nothing calls it; delete or use deliberately.
+  rows).
 - `UrlVerificationRequest` is dead: the Slack URL-verification handshake does not pass through the
   domain. Remove it or leave it, but do not build on it.
 

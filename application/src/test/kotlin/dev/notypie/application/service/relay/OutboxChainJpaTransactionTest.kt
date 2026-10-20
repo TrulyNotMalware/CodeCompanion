@@ -123,7 +123,7 @@ class OutboxChainJpaTransactionTest :
 
                 then("the first SUCCESS commits with exactly one PENDING row that carries the second part") {
                     jdbc.outboxColumn(eventId = headId, column = "status") shouldBe MessageStatus.SUCCESS.name
-                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V3
+                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V7
                     secondPayload.message shouldBe parts[1]
                     secondPayload.continuation shouldBe listOf(parts[2])
                 }
@@ -185,7 +185,7 @@ class OutboxChainJpaTransactionTest :
                 lane.poller.pollPending()
 
                 then("the replacement ends FAILURE and its fallback is staged once and sent next") {
-                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V4
+                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V7
                     jdbc.outboxColumn(eventId = headId, column = "status") shouldBe MessageStatus.FAILURE.name
                     fallbackRows.size shouldBe 1
                     OutboundMessageCodec.decode(json = payloadOf(eventId = fallbackRows.single())).message shouldBe
@@ -232,11 +232,11 @@ class OutboxChainJpaTransactionTest :
                 lane.poller.pollPending()
 
                 then("the question ends FAILURE, and the notice is staged once as a plain row and sent to the DM") {
-                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V6
+                    jdbc.outboxColumn(eventId = headId, column = "schema_version") shouldBe OutboxSchemaVersion.V7
                     jdbc.outboxColumn(eventId = headId, column = "status") shouldBe MessageStatus.FAILURE.name
                     fallbackRows.size shouldBe 1
                     val fallbackId = fallbackRows.single()
-                    jdbc.outboxColumn(eventId = fallbackId, column = "schema_version") shouldBe OutboxSchemaVersion.V2
+                    jdbc.outboxColumn(eventId = fallbackId, column = "schema_version") shouldBe OutboxSchemaVersion.V7
                     OutboundMessageCodec.decode(json = payloadOf(eventId = fallbackId)).message shouldBe directReply
                     lane.sent shouldBe listOf(question, directReply)
                     lane.sentTo shouldBe listOf(basicInfo.channel, requester.id)

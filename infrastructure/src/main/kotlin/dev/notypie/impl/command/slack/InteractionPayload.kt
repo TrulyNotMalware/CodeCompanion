@@ -12,7 +12,6 @@ data class InteractionPayload(
     val idempotencyKey: String,
     val apiAppId: String,
     val botId: String,
-    val token: String,
     val container: Container,
     val channel: Channel,
     val responseUrl: String,
@@ -20,7 +19,14 @@ data class InteractionPayload(
     val currentAction: States,
     val routingExtras: List<String> = emptyList(),
     val privateMetadata: String? = null,
-)
+) {
+    override fun toString(): String =
+        "InteractionPayload(type=$type, team=$team, user=$user, triggerId=$triggerId, isEnterprise=$isEnterprise, " +
+            "enterprise=$enterprise, idempotencyKey=$idempotencyKey, apiAppId=$apiAppId, botId=$botId, " +
+            "container=$container, channel=$channel, responseUrl=redacted, states=$states, " +
+            "currentAction=$currentAction, routingExtras=${if (routingExtras.isEmpty()) "[]" else "redacted"}, " +
+            "privateMetadata=${privateMetadata?.let { "redacted" }})"
+}
 
 fun InteractionPayload.isCompleted(): Boolean =
     currentAction.type.isPrimary &&

@@ -16,6 +16,9 @@ import dev.notypie.templates.ButtonType
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import java.util.UUID
 
 class SlackInteractionRequestParserTest :
@@ -36,7 +39,6 @@ class SlackInteractionRequestParserTest :
 
                 then("should parse basic fields correctly") {
                     result.apiAppId shouldBe TEST_APP_ID
-                    result.token shouldBe TEST_TOKEN
                     result.channel.id shouldBe TEST_CHANNEL_ID
                     result.channel.name shouldBe TEST_CHANNEL_NAME
                     result.team.id shouldBe TEST_TEAM_ID
@@ -44,6 +46,15 @@ class SlackInteractionRequestParserTest :
                     result.user.id shouldBe TEST_USER_ID
                     result.user.userName shouldBe TEST_USER_NAME
                     result.responseUrl shouldBe TEST_BASE_URL
+                }
+
+                then("a body carrying the verification token parses, and printing hides the response URL") {
+                    payload shouldContain "\"token\": \"$TEST_TOKEN\""
+                    val printed = result.toString()
+                    printed shouldStartWith "InteractionPayload("
+                    printed shouldContain "responseUrl=redacted"
+                    printed shouldNotContain TEST_BASE_URL
+                    printed shouldNotContain TEST_TOKEN
                 }
 
                 then("should parse command detail type from message text") {

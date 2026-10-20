@@ -34,7 +34,7 @@ _type: architecture · updated: 2026-10-20_
    `outboxRepository.save(...)`로 **직접** 저장하되, 반드시 `transactionTemplate.runInTx { }` 안에서 CAS 갱신과 한
    트랜잭션으로 묶는다. 구현: `StandupSchedulingService`, `DailyAgendaSchedulingService`,
    `MeetingReminderSchedulingService`, `StandupSummaryService`, `CveNotificationDispatcher`. 커맨드 컨텍스트는
-   `CommandBasicInfo.forOutbound(publisherId, channel)`로 합성한다(`appToken` 공란: 봇 토큰으로 인증). DM은
+   `CommandBasicInfo.forOutbound(publisherId, channel)`로 합성한다(전송은 봇 토큰으로 인증한다). DM은
    별도 타입이 아니라 `channel = userId`인 `ChannelMessage`/`Approval`로 표현한다.
    - `runInTx`(`TransactionTemplateExt.kt`)는 `Exception`을 `Result.failure`로 바꾸고 rollback-only를 찍는다(`Error`는 롤백 뒤 전파). 호출자는
      `Result`를 보고 실패 감사(`markDispatchFailed` 등)를 **별도 트랜잭션**에서 기록한다.
@@ -86,8 +86,8 @@ _type: architecture · updated: 2026-10-20_
   Jackson 주석 없이 유지하고 다형성은 코덱 쪽 mix-in으로 처리한다. `OpenModal`·`DirectMessage`는 의도적으로
   미등록이라 인코딩/디코딩 시 fail-fast 한다.
 - `transport`는 문자열 컬럼(Debezium CDC가 enum을 null로 전달). 오늘은 `SLACK`뿐; 추가 = enum 상수 + 렌더러 등록.
-- `schema_version`: 행은 그것을 읽을 수 있는 가장 오래된 버전으로 찍는다. 일반 행은 V2, `continuation`이 있는
-  연쇄의 머리 행은 V3(2026-10-02)이고 읽기는 `SUPPORTED`(= {V2, V3, V4, V5, V6})만 허용(`OutboxPayloadRenderer.render`의
+- `schema_version`: 행은 그것을 읽을 수 있는 가장 오래된 버전으로 찍는다. 2026-10-20 이전에는 일반 행이 V2, `continuation`이 있는
+  연쇄의 머리 행은 V3(2026-10-02)이고 읽기는 `SUPPORTED`(= {V2, V3, V4, V5, V6, V7})만 허용(`OutboxPayloadRenderer.render`의
   `require`). Jackson 3은 모르는 필드를 무시하므로 V3을 모르는 바이너리가 머리 행을 V2로 읽으면 첫 조각만 보내고
   나머지를 조용히 버린다. V3이면 미지원 스키마 보류 가드(`544ae409`)는 있지만 V3을 읽지 못하는 바이너리는 머리 행을
   `IN_PROGRESS`로 두고(행마다 24시간 포기 기한 안에 V3을 읽는 바이너리가 돌아오면 스윕이 이어 보냄), 가드 이전 바이너리(main)는
@@ -98,7 +98,13 @@ _type: architecture · updated: 2026-10-20_
   `Ephemeral`/`ChannelMessage`에 `fallback: DirectReply`(봇이 없는 채널의 DM 폴백, 결정 #42)가 있는 행은 V6(2026-10-14). 스탬프는 머리와
   continuation의 모든 조각이 필요로 하는 **가장 높은** 버전이다 — 이전의 first-match `when`은 V5 질문에 폴백이 붙어도 V5로 찍었을 것이고,
   continuation 안의 `ReplaceMessage.fallback`을 V3으로 찍던 공백(2026-10-11 캘린더 리뷰 후속 목록의 A8)도 같은 버그였다. 거의 모든 슬래시 답장 행이 V6이므로 V6을 모르는
-  바이너리는 그 행을 보류한다(롤아웃 중 구 레플리카, 롤백).
+  바이너리는 그 행을 보류한다(롤아웃 중 구 레플리카, 롤백). **V7(2026-10-20, 결정 #50)부터는 모든 행이 V7이다** — 봉투의
+  `basicInfo`에서 `appToken`을 지웠고, V7 이전 바이너리는 그 필드를 non-null 생성자 인자로 요구해 새 행을 하나도 디코드하지 못한다.
+  shape 하나가 아니라 공통 필드가 빠졌으므로 행별 선택은 상수 V7로 접혔다(V8이 필요한 shape가 생기면 V7을 바닥으로 행별 선택을
+  되살린다). 반대 방향은 문제없다 — V7 바이너리는 `appToken`을 담은 이전 행을 모르는 키로 무시하고 읽는다. 대가: 배포 뒤 이전
+  바이너리로 롤백하면(또는 두 레플리카 롤아웃의 구 레플리카는) 배포 뒤에 쓰인 **모든** 행을 `IN_PROGRESS`로 쥐고, V7 바이너리가
+  돌아오지 않으면 24시간 상한에서 `FAILURE`가 된다; 이미 `SUCCESS`인 V7 질문 행에 매달린 미완료 `/ask` 턴은 그 바이너리의 재개 스윕이
+  읽지 못해 1시간 뒤 `ABANDONED`가 된다 — V7을 넘는 롤백은 하지 않거나, 하려면 먼저 아웃박스와 미완료 `/ask` 턴을 모두 비운다(결정 #50).
 - 상태(`MessageStatus`): 새 행은 `PENDING`. 폴링·CDC·복구 스윕 모두 `claimPending`/`reclaimStuck`으로
   `IN_PROGRESS`를 잡고, dispatch 결과를 `completeClaim`으로 `SUCCESS`/`FAILURE`에 기록한다. `INIT`은 어디서도
   쓰이지 않는다. `FAILURE` 행을 다시 읽는 코드는 없다(재구동은 수동).
