@@ -1,4 +1,4 @@
-<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-20 -->
 
 # CodeCompanion
 
@@ -106,7 +106,7 @@ Tests run on JUnit Platform with `-Xmx` from the `testMaxHeap` Gradle property (
 - Slack Java SDK 1.52.0 — `slack-api-client`, `slack-api-model`, `slack-app-backend`
 - Jackson 3 (`tools.jackson`, BOM 3.2.3) — serialization, application/infrastructure only
 - Spring AI 2.0.1 (BOM) — MCP server as four modules, not the webmvc starter (streamable HTTP on `/mcp`)
-- Kotest 6.2.5 + MockK 1.14.11 — testing
+- Kotest 6.2.6 + MockK 1.14.11 — testing
 - ktlint 14.2.0 — formatting/lint gate
 
 ### External Services

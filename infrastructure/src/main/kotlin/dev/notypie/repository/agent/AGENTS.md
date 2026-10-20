@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-20 -->
 
 # infrastructure/repository/agent
 
@@ -77,8 +77,9 @@ by compare-and-set statements, so a turn that has not reached an outcome can be 
   as a range scan on `idx_agent_ask_turn_status_updated_at` (with a filesort). A stale owner's `finish` after
   another run took the turn changed 0 rows in a transaction that had not read yet and failed with error 1020 in
   one that had; either way that transaction rolls back. A duplicate `event_id` insert fails with 1062. Not run on
-  MariaDB: anything through JPA and Connector/J (the entity mapping on the `VARCHAR(16)` status column,
-  `recordDelivered`'s duplicate-key translation).
+  MariaDB through JPA and Connector/J: the entity mapping on the script's `VARCHAR(16)` status column and
+  `recordDelivered`'s duplicate-key translation (the retention purge's native deletes did run through that path, on a
+  Hibernate-generated table, 2026-10-20 — below).
 - **These `*Impl`s are not `open` and carry no `@Transactional`**, unlike every other lane; each
   `save` runs in Spring Data's own transaction. Follow the `open class` + `@Transactional` shape from
   `repository/cve` if a method ever needs two statements to commit together.
@@ -93,19 +94,34 @@ by compare-and-set statements, so a turn that has not reached an outcome can be 
   and checks that exactly the finished ones are deleted: a new constant does not compile until it is classified.
 - **Run each purge statement outside any surrounding transaction** (2026-10-19). Each `DELETE … LIMIT` must be the
   first and only statement of its own transaction (the repository method's `@Transactional`). Wrapping several batches
-  or the whole purge in one transaction, or reading before the delete, holds every batch's locks to the end and, on
-  MariaDB with `innodb_snapshot_isolation`, can make the replica that waited fail with ER_CHECKREAD 1020 at commit
-  when both replicas purge the same range (inferred from the 1020 cases above, not measured).
-- **Not yet run on MariaDB (pre-rollout checklist):**
-  1. `EXPLAIN DELETE …` for the three purge statements. The ledger one must be a range on
-     `idx_agent_ask_turn_status_updated_at` (two status ranges), each history one a range on its `created_at` index.
-     `LIMIT` bounds the rows deleted, not the rows scanned or locked: a full scan under REPEATABLE READ examines and locks
-     the live `PENDING` / `IN_PROGRESS` rows it passes even with `LIMIT 1`, and walks the whole table when nothing matches.
-     A smaller `batch-size` does not fix that; the index or the statement does.
-  2. Two sessions deleting the same range at once: the lock waits actually observed (the scheduler's startup jitter only
-     lowers the chance of overlap).
+  or the whole purge in one transaction holds every batch's locks to the end. Reading before the delete, on MariaDB
+  with `innodb_snapshot_isolation`, makes the `DELETE` itself fail with ER_CHECKREAD 1020 (at the statement, not at
+  commit; 0 rows) when it reaches a target row that another transaction updated and committed after that read
+  (measured 2026-10-20). In the tested overlap — a read-before-delete transaction on `agent_turn_history` while another
+  session purged the same range — there was no 1020: the rows the other side deleted were skipped. Finished ledger rows
+  and audit rows are never updated, so no code path today reaches the update case; keep the rule anyway.
+- **Measured on MariaDB 12.3.3 (2026-10-20, local; scripts and output in the maintainer's
+  `.omc/artifacts/mariadb-verify-2026-10-20/`):**
+  1. `EXPLAIN DELETE …` for the three purge statements is a range on `idx_agent_ask_turn_status_updated_at` (two status
+     ranges) and on each history table's `created_at` index, with few, no and many target rows among 20,000; a
+     rolled-back `ANALYZE DELETE` examined 10 / 0 / 1000 rows (it stops at `LIMIT`; no full scan when nothing matches).
+     Should a plan ever stop being a range, a smaller `batch-size` does not help: `LIMIT` bounds the rows deleted, not
+     the rows scanned or locked under REPEATABLE READ — fix the index or the statement.
+  2. Two sessions purging the same range of the ledger (`mariadb` client, autocommit `DELETE … LIMIT 1000` loops): the
+     second waits on the first's row locks for as long as the first batch stays open, then continues; the batches'
+     `ROW_COUNT()` values (each at most 1000) of both sessions add up to the eligible rows exactly, there was no
+     deadlock, and the ineligible rows stay — old `PENDING` / `IN_PROGRESS` rows among them, so the status guard holds
+     on MariaDB. The scheduler's startup jitter only lowers the chance of that overlap.
   3. The successive-batch contract the scheduler relies on — each call deletes at most `limit` rows and returns the true
-     count, so the loop drains a backlog and stops on the first short batch. **The H2 specs do not prove it** (next bullet);
+     count, so the loop drains a backlog and stops on the first short batch — on the real path (scheduler → Spring Data
+     native query → Hibernate → MariaDB Connector/J), with `batch-size` 3 and 7 / 6 / 8 eligible rows: the ROW binlog
+     shows per-transaction deletes of `[3, 3, 1]`, `[3, 3]` and `[3, 3, 2]` (never more than `limit`), the tick's logged
+     totals 7 / 6 / 8 equal the rows deleted, and the backlog drained. The per-call return values were not logged, so a
+     wrong count that still sums correctly (`[3, 4, 0]` for `[3, 3, 1]`) is not ruled out on this path. The old
+     `PENDING` / `IN_PROGRESS` rows seeded for that run were turned `ABANDONED` by the resume sweep before the tick, so
+     this run did not exercise the status guard (check 2 did). That app ran on the tables Hibernate generated locally
+     (`status` an `enum` column); the application on the `V26` script's table (`VARCHAR(16)`) is still unverified
+     (`db/migration/AGENTS.md`). The H2 specs still cannot prove the contract (next bullet), and
      `AgentRetentionSchedulerTest` feeds the counts from MockK.
 
   A `DELETE … LIMIT` without `ORDER BY` is flagged unsafe for statement-based binlog; the repository's MariaDB configs set
@@ -121,7 +137,8 @@ by compare-and-set statements, so a turn that has not reached an outcome can be 
   the statement on the same jar counted correctly in review). So the ledger specs assert the first call exactly and, for
   later calls, only what holds even under that miscount: each reported count is within `0..limit`, the eligible rows left
   never increase and reach zero, and ineligible rows stay. A later call deleting more than `limit`, or returning a wrong
-  count, would still pass; that part of the contract is for the MariaDB check above. MariaDB's counting was not checked.
+  count, would still pass. The same Hibernate path counted correctly on MariaDB (check 3 above); the cause of the H2
+  miscount is still unidentified.
 - `turnId` in `mcp_tool_call_history` joins `agent_turn_history.idempotency_key`; keep the 36-char string
   form when touching either side. Migrations: `V9` (`agent_session`), `V10` (`agent_turn_history`), `V26`
   (`agent_ask_turn`).

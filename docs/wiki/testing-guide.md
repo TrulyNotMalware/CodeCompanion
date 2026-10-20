@@ -1,6 +1,6 @@
 # 테스트 가이드
 
-_type: guide · updated: 2026-10-13_
+_type: guide · updated: 2026-10-20_
 
 > Spring 없는 Kotest `BehaviorSpec` + MockK를 기본으로, `testFixtures` 팩토리와 가드 테스트로 리팩토링을 지키는
 > 이 프로젝트만의 테스트 관례.
@@ -100,7 +100,7 @@ _type: guide · updated: 2026-10-13_
 
 - 루트 `build.gradle.kts`가 모든 `Test` 태스크에 `-Xmx<testMaxHeap>`(기본 `4g`, CI 프리셋 `2g`), `-XX:+EnableDynamicAgentLoading`,
   `--add-opens java.base/java.lang`·`java.base/java.util`(MockK 요구)을 건다. 모듈에서 덮어쓰지 않는다.
-  버전은 `extra["kotestVersion"] = "6.2.5"`, `extra["mockkVersion"] = "1.14.11"`.
+  버전은 `extra["kotestVersion"] = "6.2.6"`, `extra["mockkVersion"] = "1.14.11"`.
 - CI(`.github/workflows/simple_test_action.yaml`)는 `feature/*` 계열 푸시와 `main` 대상 모든 PR에서 **바뀐 모듈과 그 의존
   모듈**을 돌린다(`infrastructure` → infrastructure + application, `domain`·`*.gradle.kts`·`gradle/**`·`gradle-config/**` → 전체 `test`). `**/*.md`는
   push 트리거에서만 제외된다(PR 트리거는 필터 없음, 문서만 바뀐 PR은 모듈 0개로 끝남). 테스트 전에 `./gradle-config/apply.sh ci`로
