@@ -10,7 +10,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
-import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.askRefusedNotice
 import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.impl.command.OutboundRenderer
 import dev.notypie.impl.command.SlackApiEventConstructor
@@ -32,6 +32,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import java.time.LocalDateTime
+
+private const val ASK_PROMPT: String = "why is CI red?"
 
 class OutboxPayloadRendererTest :
     BehaviorSpec({
@@ -111,7 +113,7 @@ class OutboxPayloadRendererTest :
             val channel = ConversationTarget(id = basicInfo.channel)
             val list = MessageContent.Text(headline = "CodeCompanion — standup", markdown = "Active standup routines")
             val copy = directFallbackOf(channel = channel, recipient = requester, content = list)
-            val notice = channelRefusedNotice(channel = channel, recipient = requester)
+            val notice = askRefusedNotice(channel = channel, recipient = requester, prompt = ASK_PROMPT)
 
             fun directReplyTo(reply: DirectReply): FallbackPlan =
                 FallbackPlan(
@@ -150,8 +152,8 @@ class OutboxPayloadRendererTest :
                 }
             }
 
-            `when`("an /ask question with the neutral notice is rendered") {
-                val question = createAgentQuestionMessage(fallback = notice)
+            `when`("an /ask question with the ask-refused notice is rendered") {
+                val question = createAgentQuestionMessage(prompt = ASK_PROMPT, fallback = notice)
                 val result = payloadRenderer.render(row = port.toRow(message = question, basicInfo = basicInfo))
 
                 then("the notice is a plain DM to the recipient: no ask detail type, so no turn can start from it") {
@@ -178,7 +180,7 @@ class OutboxPayloadRendererTest :
                             SlackApiEventConstructor(botToken = TEST_BOT_TOKEN, templateBuilder = templateBuilder),
                     )
                 val slackRows = OutboxPayloadRenderer(renderers = mapOf(Transport.SLACK to realRenderer))
-                val question = createAgentQuestionMessage(fallback = notice)
+                val question = createAgentQuestionMessage(prompt = ASK_PROMPT, fallback = notice)
                 val questionRow = slackRows.render(row = port.toRow(message = question, basicInfo = basicInfo))
                 val staged = questionRow.fallback.shouldNotBeNull().envelope
                 val noticeRow =

@@ -4,6 +4,7 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
+import dev.notypie.domain.common.splitLineBreaks
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.escapeMrkdwn
@@ -156,7 +157,7 @@ class SlackOutboundRenderer(
     private fun MessageContent.AgentQuestion.askedBy(publisherId: String): String =
         prompt
             .escapeMrkdwn()
-            .lines()
+            .splitLineBreaks()
             .flatMap { line -> line.wrappedForQuote() }
             .joinToString(separator = "\n", prefix = "<@$publisherId> asked:\n") { line -> "> $line" }
             .truncateSectionText(limit = SlackBlockLimits.MESSAGE_BODY_BUDGET)
@@ -167,5 +168,5 @@ class SlackOutboundRenderer(
             maxSections = Int.MAX_VALUE,
             balanceCodeFences = false,
             budget = MAX_QUOTED_LINE_LENGTH,
-        ).flatMap { chunk -> chunk.lines() }
+        ).flatMap { chunk -> chunk.splitLineBreaks() }
 }

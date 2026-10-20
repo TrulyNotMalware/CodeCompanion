@@ -17,7 +17,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.domain.command.outbound.UserRef
-import dev.notypie.domain.command.outbound.channelRefusedNotice
+import dev.notypie.domain.command.outbound.askRefusedNotice
 import dev.notypie.impl.command.OutboundRenderer
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.impl.command.event.createPostEventPayloadContents
@@ -212,8 +212,9 @@ class OutboxChainJpaTransactionTest :
         given("an /ask question staged with the notice for a channel Slack refuses") {
             val requester = UserRef(id = basicInfo.publisherId)
             val channel = ConversationTarget(id = basicInfo.channel)
-            val notice = channelRefusedNotice(channel = channel, recipient = requester)
-            val question = createAgentQuestionMessage(channel = basicInfo.channel, fallback = notice)
+            val prompt = "Why is the build slow?"
+            val notice = askRefusedNotice(channel = channel, recipient = requester, prompt = prompt)
+            val question = createAgentQuestionMessage(prompt = prompt, channel = basicInfo.channel, fallback = notice)
             val directReply =
                 OutboundMessage.ChannelMessage(target = ConversationTarget(id = requester.id), content = notice.content)
 

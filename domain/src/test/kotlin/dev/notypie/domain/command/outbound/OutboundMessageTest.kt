@@ -10,6 +10,7 @@ import dev.notypie.domain.command.intent.CommandIntent
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import java.time.LocalDateTime
@@ -352,12 +353,181 @@ class OutboundMessageTest :
                 val text = MessageContent.Text(headline = null, markdown = "body")
                 val notice = channelRefusedNotice(channel = hostile, recipient = requester)
                 val copy = directFallbackOf(channel = hostile, recipient = requester, content = text)
+                val askNotice = askRefusedNotice(channel = hostile, recipient = requester, prompt = "body")
 
-                then("both helpers escape the id, so the channel mention stays one closed token") {
+                then("every helper escapes the id, so the channel mention stays one closed token") {
                     val escaped = "C1&gt; &lt;https://evil.example|Re-authorize &amp; go"
                     notice.content.markdown shouldStartWith
                         "I couldn't reply in <#$escaped>: the post there was refused."
                     copy.content.markdown shouldBe "_(Sent here because my reply in <#$escaped> was refused.)_\nbody"
+                    askNotice.content.markdown shouldStartWith
+                        "I couldn't post your question in <#$escaped>: the post there was refused,"
+                }
+            }
+
+            `when`("the refused conversation is a direct message the bot is not in") {
+                val direct = ConversationTarget(id = "D_REFUSED")
+                val text = MessageContent.Text(headline = null, markdown = "body")
+                val notice = channelRefusedNotice(channel = direct, recipient = requester)
+                val copy = directFallbackOf(channel = direct, recipient = requester, content = text)
+
+                then("both helpers speak of that direct message and never render the id as a mention") {
+                    notice.content.markdown shouldBe
+                        "I couldn't reply in that direct message: I can only post in conversations I'm part of. " +
+                        "Run the command again in a channel I've joined."
+                    copy.content.markdown shouldBe "_(Sent here because I can't post in that direct message.)_\nbody"
+                }
+            }
+
+            `when`("the refused conversation has a G id (a group DM or a legacy private channel) the bot is not in") {
+                val group = ConversationTarget(id = "G_REFUSED")
+                val text = MessageContent.Text(headline = null, markdown = "body")
+                val notice = channelRefusedNotice(channel = group, recipient = requester)
+                val copy = directFallbackOf(channel = group, recipient = requester, content = text)
+
+                then("both helpers speak of that conversation and never render the id as a mention") {
+                    notice.content.markdown shouldBe
+                        "I couldn't reply in that conversation: I can only post in conversations I'm part of. " +
+                        "Add me to it, or run the command again in a channel I've joined."
+                    copy.content.markdown shouldBe "_(Sent here because I can't post in that conversation.)_\nbody"
+                }
+            }
+        }
+
+        given("conversation ids classified by their first character") {
+            `when`("kind() reads each id") {
+                then("D is DIRECT, G is GROUP, and anything else, lower-case d and g included, is CHANNEL") {
+                    ConversationTarget(id = "D012ABCDEFG").kind() shouldBe ConversationKind.DIRECT
+                    ConversationTarget(id = "G012ABCDEFG").kind() shouldBe ConversationKind.GROUP
+                    ConversationTarget(id = "C012ABCDEFG").kind() shouldBe ConversationKind.CHANNEL
+                    ConversationTarget(id = "d012abcdefg").kind() shouldBe ConversationKind.CHANNEL
+                    ConversationTarget(id = "g012abcdefg").kind() shouldBe ConversationKind.CHANNEL
+                    ConversationTarget(id = "").kind() shouldBe ConversationKind.CHANNEL
+                }
+            }
+        }
+
+        given("the notice for an /ask question whose post was refused") {
+            val requester = UserRef(id = "U_REQUESTER")
+            val prompt = "why is CI red?"
+
+            `when`("the question was asked in a channel") {
+                val notice =
+                    askRefusedNotice(
+                        channel = ConversationTarget(id = "C_REFUSED"),
+                        recipient = requester,
+                        prompt = prompt,
+                    )
+
+                then("it names the channel, says the question was not answered, and quotes the question") {
+                    notice shouldBe
+                        DirectReply(
+                            recipient = requester,
+                            content =
+                                MessageContent.Text(
+                                    headline = null,
+                                    markdown =
+                                        "I couldn't post your question in <#C_REFUSED>: the post there was refused, " +
+                                            "so it was *not* answered. If I'm not a member of that channel, " +
+                                            "invite me and ask again, or ask in a channel I've joined." +
+                                            "\n\n> why is CI red?",
+                                ),
+                        )
+                }
+            }
+
+            `when`("the question was asked in a direct message") {
+                val notice =
+                    askRefusedNotice(
+                        channel = ConversationTarget(id = "D_REFUSED"),
+                        recipient = requester,
+                        prompt = prompt,
+                    )
+
+                then("it speaks of that direct message without a mention and quotes the question") {
+                    notice.content.markdown shouldBe
+                        "I couldn't post your question in that direct message, so it was *not* answered. " +
+                        "I can only post in conversations I'm part of: ask again in a channel I've joined." +
+                        "\n\n> why is CI red?"
+                }
+            }
+
+            `when`("the question was asked in a conversation with a G id") {
+                val notice =
+                    askRefusedNotice(
+                        channel = ConversationTarget(id = "G_REFUSED"),
+                        recipient = requester,
+                        prompt = prompt,
+                    )
+
+                then("it speaks of that conversation without a mention and quotes the question") {
+                    notice.content.markdown shouldBe
+                        "I couldn't post your question in that conversation, so it was *not* answered. " +
+                        "Add me to it and ask again, or ask in a channel I've joined." +
+                        "\n\n> why is CI red?"
+                }
+            }
+
+            `when`("the question spans lines broken by LF, a line separator and CRLF") {
+                val notice =
+                    askRefusedNotice(
+                        channel = ConversationTarget(id = "C_REFUSED"),
+                        recipient = requester,
+                        prompt = "first\nsecond\u2028third\r\nfourth",
+                    )
+
+                then("every line is quoted on its own and no separator is left inside the quote") {
+                    notice.content.markdown shouldEndWith "\n\n> first\n> second\n> third\n> fourth"
+                    notice.content.markdown shouldNotContain "\u2028"
+                    notice.content.markdown shouldNotContain "\r"
+                }
+            }
+
+            `when`("the question carries mrkdwn control characters") {
+                val notice =
+                    askRefusedNotice(
+                        channel = ConversationTarget(id = "C_REFUSED"),
+                        recipient = requester,
+                        prompt = "<!channel> & <https://evil.example|Re-authorize>",
+                    )
+
+                then("the quoted question is escaped, so it can neither ping the channel nor forge a link") {
+                    notice.content.markdown shouldEndWith
+                        "\n\n> &lt;!channel&gt; &amp; &lt;https://evil.example|Re-authorize&gt;"
+                }
+            }
+
+            `when`("the escaped question is at or beyond the quote budget") {
+                fun quotedPart(prompt: String): String =
+                    askRefusedNotice(
+                        channel = ConversationTarget(id = "C_REFUSED"),
+                        recipient = requester,
+                        prompt = prompt,
+                    ).content
+                        .markdown
+                        .substringAfter(delimiter = "\n\n")
+
+                then("a question at the budget is quoted whole") {
+                    quotedPart(prompt = "x".repeat(n = 1_500)) shouldBe "> " + "x".repeat(n = 1_500)
+                }
+
+                then("a longer question is cut to the budget and marked with an ellipsis") {
+                    quotedPart(prompt = "x".repeat(n = 2_000)) shouldBe "> " + "x".repeat(n = 1_500) + "…"
+                }
+
+                then("the cut drops an escape entity it would split instead of leaving part of it") {
+                    quotedPart(prompt = "x".repeat(n = 1_498) + "&" + "y".repeat(n = 10)) shouldBe
+                        "> " + "x".repeat(n = 1_498) + "…"
+                }
+
+                then("an escape entity that ends exactly at the budget is kept whole before the ellipsis") {
+                    quotedPart(prompt = "x".repeat(n = 1_495) + "&" + "y".repeat(n = 10)) shouldBe
+                        "> " + "x".repeat(n = 1_495) + "&amp;…"
+                }
+
+                then("the cut never leaves half of a surrogate pair") {
+                    quotedPart(prompt = "x".repeat(n = 1_499) + "\uD83D\uDE00" + "y") shouldBe
+                        "> " + "x".repeat(n = 1_499) + "…"
                 }
             }
         }

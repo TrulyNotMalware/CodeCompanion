@@ -1,6 +1,6 @@
 package dev.notypie.templates
 
-import dev.notypie.domain.common.takeSurrogateSafe
+import dev.notypie.domain.common.takeEntitySafe
 
 object SlackBlockLimits {
     const val SECTION_TEXT_MAX_LENGTH: Int = 3_000
@@ -22,8 +22,6 @@ private const val CODE_FENCE = "```"
 private const val FENCE_REOPEN = "$CODE_FENCE\n"
 private const val FENCE_CLOSE = "\n$CODE_FENCE"
 private const val TRUNCATION_SUFFIX = "\n${SlackBlockLimits.TRUNCATION_MARKER}"
-
-private const val MAX_ENTITY_LENGTH = 5
 
 internal fun splitSectionText(
     text: String,
@@ -123,13 +121,4 @@ private fun String.countFences(): Int {
     return count
 }
 
-private fun String.takeSafely(limit: Int): String {
-    if (length <= limit) return this
-    val cut = takeSurrogateSafe(maxLength = limit)
-    val ampersand = cut.lastIndexOf('&')
-    return if (ampersand >= 0 && ampersand > cut.length - MAX_ENTITY_LENGTH && cut.indexOf(';', ampersand) < 0) {
-        cut.substring(0, ampersand)
-    } else {
-        cut
-    }
-}
+private fun String.takeSafely(limit: Int): String = takeEntitySafe(maxLength = limit)

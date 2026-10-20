@@ -78,6 +78,34 @@ class SlackMentionMapperTest :
             }
         }
 
+        given("a rich_text_quote whose text carries a Unicode line separator") {
+            `when`("the blocks are restored as mention text") {
+                val text =
+                    listOf(createRichTextQuoteBlock(createTextElement(text = "first\u2028second")))
+                        .restoreMentionText(botId = botId)
+
+                then("each side of the separator is restored as its own quoted line") {
+                    text shouldBe "> first\n> second"
+                }
+            }
+
+            `when`("a line break of any kind ends the quote") {
+                val trailingBreaks = listOf("\n", "\r", "\r\n", "\u000B", "\u000C", "\u0085", "\u2028", "\u2029")
+
+                fun restoredQuote(text: String): String =
+                    listOf(createRichTextQuoteBlock(createTextElement(text = text))).restoreMentionText(botId = botId)
+
+                then("each one is trimmed, so the quote restores as one line with no empty quote line after it") {
+                    trailingBreaks.map { lineBreak -> restoredQuote(text = "first$lineBreak") } shouldBe
+                        trailingBreaks.map { "> first" }
+                }
+
+                then("a run of mixed trailing breaks is trimmed as a whole") {
+                    restoredQuote(text = "first\u2028\u2029\r\n") shouldBe "> first"
+                }
+            }
+        }
+
         given("a rich_text mention mixing user mentions and command text") {
             `when`("flattened") {
                 val mention =

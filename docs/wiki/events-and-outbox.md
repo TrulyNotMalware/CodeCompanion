@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-10-15_
+_type: architecture · updated: 2026-10-20_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -272,6 +272,8 @@ _type: architecture · updated: 2026-10-15_
   레저 행이 남아 ask 스윕(60초)이 턴을 이어 간다. 레저 쓰기를 상태 기록 트랜잭션에 넣지 않은 이유, lease, 스윕, 남은 한계는
   [결정 #40](decisions.md)에 있다. 순서가 요점이므로 발행을 `writeTerminal` 뒤로 옮기거나, 성공 이벤트에 합치거나, 비동기로
   돌리지 않는다.
+- 거절로 `FAILURE`가 된 질문 행에는 전달 이벤트가 없으므로 턴도 레저 행도 생기지 않는다 — 요청자에게는 질문을 인용한 안내 DM(`askRefusedNotice`)만
+  간다(2026-10-20 실측, 결정 #49). 폴백이 질문 자체를 DM에 실어 턴을 잇는 안은 #49의 후속 후보다.
 - 성공 이벤트 `MessagePublishSuccessEvent`의 소비자는 이제 `StandupSummaryService` 하나다(`main` `8446f9d8`에서는 `/ask`도 들었다).
 - **relay의 시간 예산에 얹히는 것:** 리스너는 `renewClaim` → `completeClaim` 창 안에서 돌므로 ask 질문 행은 그 창이 길어진다.
   정상 경로는 커넥션 획득 2회(재조회, 레저 insert), 행을 넣은 첫 전달을 턴 executor가 거절하면 `REQUIRES_NEW` 안내로 1회 더, 최악은

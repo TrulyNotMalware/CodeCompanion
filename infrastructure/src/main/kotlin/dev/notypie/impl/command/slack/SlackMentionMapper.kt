@@ -4,6 +4,7 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.InboundKind
 import dev.notypie.domain.command.inbound.MentionInvocation
 import dev.notypie.domain.command.inbound.MessageHandle
+import dev.notypie.domain.common.splitLineBreaks
 
 private const val BLOCK_TYPE_RICH_TEXT = "rich_text"
 private const val ELEMENT_TYPE_TEXT_SECTION = "rich_text_section"
@@ -21,6 +22,8 @@ private const val ELEMENT_TYPE_DATE = "date"
 private const val LIST_STYLE_ORDERED = "ordered"
 private const val CODE_FENCE = "```"
 private const val COMMAND_DELIMITER = " "
+private val LINE_BREAK_CHARS: CharArray =
+    charArrayOf('\n', '\r', '\u000B', '\u000C', '\u0085', '\u2028', '\u2029')
 
 fun SlackEventCallBackRequest.toMentionInboundCommand(
     appId: String,
@@ -86,8 +89,8 @@ private fun Element.restoreContainer(botId: String): String =
 
         ELEMENT_TYPE_QUOTE ->
             restoreInline(botId = botId)
-                .trimEnd('\n')
-                .lines()
+                .trimEnd(chars = LINE_BREAK_CHARS)
+                .splitLineBreaks()
                 .joinToString(separator = "\n") { "> $it" }
 
         ELEMENT_TYPE_LIST ->

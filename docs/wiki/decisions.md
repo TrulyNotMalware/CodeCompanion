@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-19_
+_type: decision · updated: 2026-10-20_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -537,6 +537,22 @@ _type: decision · updated: 2026-10-19_
     기각: 행 루프만 `Error`를 격리(대안 B) — 위 이유. 상태: 유지. 근거: `infrastructure/src/main/kotlin/dev/notypie/common/AGENTS.md`,
     [error-handling-and-validation.md](error-handling-and-validation.md), `service/relay/AGENTS.md`.
 
+49. **거절 폴백 문구는 대화 종류(DM·그룹 DM·채널)를 가르고, `/ask` 질문이 거절되면 "답하지 않았다"와 질문 원문을 함께 보내며, 인용은 유니코드 줄바꿈 전부에서 나눈다 (2026-10-20).**
+    2026-10-20 라이브 실측(`.omc/handoffs/2026-10-20-live-slack.md`): 봇이 없는 비공개 채널과 1:1 DM은 `channel_not_found`로 거절되고 폴백 DM은
+    도착하지만, `<#D…>`를 Slack이 상대 이름으로 렌더해 "I couldn't reply in TrulyMalware … invite me"가 됐다. `/ask`는 질문 행이 `FAILURE`가 되면
+    `MessageDeliveredEvent`가 없어 `AgentAskThreadStarter`가 턴을 시작하지 않으므로(전달 훅 절) 요청자는 답도 질문 원문도 못 본다.
+    해법: `ConversationTarget.kind()`가 id 첫 글자로 `DIRECT`(`D`)·`GROUP`(`G`)·`CHANNEL`을 가르고, `channelRefusedNotice`·`directFallbackOf`는
+    DIRECT·GROUP에서 `<#…>` 없이 "그 대화에는 쓸 수 없다 — 봇이 있는 채널에서 다시"로 말한다. 어떤 문구도 봇 DM으로 안내하지 않는다 —
+    운영 매니페스트는 메시지 탭이 읽기 전용(`messages_tab_read_only_enabled`)이고 앱은 `app_mention`만 구독하므로 "여기서 물어보라"는 성립하지 않는다
+    (code-reviewer가 잡음; 개발 앱은 DM 탭이 열려 있어 라이브에서 못 걸렀다). `G` id는 그룹 DM과 옛 비공개 채널을 모두 가리키므로 GROUP 문구는
+    "that conversation"이다. `/ask`의 폴백은 `askRefusedNotice`가 "답하지 않았다"를 명시하고 질문을 `>` 인용(이스케이프, 1,500자 상한 —
+    `takeEntitySafe`로 엔티티·서로게이트를 자르지 않음)으로 돌려준다 — 요청자가 봇이 있는 채널에 붙여넣을 수 있게. 한계: 새 워크스페이스의
+    그룹 DM은 `C` id를 받을 수 있어 채널 문구가 나간다(슬래시 `channel_name`의 `mpdm-` 접두사로 가를 수 있지만 호출처 14곳의 시그니처라 보류).
+    기각(후속 후보): 폴백이 `AgentQuestion` 자체를 요청자 DM에 실어 턴을 DM 스레드에서 잇는 안 — `DirectReply.content`를 `Text`에서 `MessageContent`로
+    넓히고 `U…` 채널 + `thread_ts` 게시를 라이브로 확인해야 한다. 인용 분할: Slack은 U+2028/U+2029를 줄바꿈으로 렌더하고 그 뒤 텍스트는 `>` 밖으로
+    나오지만 Kotlin `lines()`는 CR/LF만 자른다 → `askedBy`·`wrappedForQuote`·멘션 매퍼의 인용 복원·`askRefusedNotice`는 `domain/common/SafeText.kt`의 `splitLineBreaks()`(`Regex("\\R")`, LS·PS·NEL·VT·FF 포함)로 나눈다.
+    Slack 클라이언트는 슬래시 텍스트의 LS/PS를 보내기 전에 LF로 바꾸므로 UI 경로로는 재현되지 않고 API로 게시된 멘션 텍스트만 남는 경로다(심층 방어).
+
 ## CI/CD와 공급망
 
 27. **문서만 바뀐 변경은 프로덕션에 절대 배포되지 않는다.** deploy 트리거와 lint·test의 push 트리거는 `!**/*.md`로 경로
@@ -789,6 +805,9 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `DebeziumLogTailingProcessorTest`(실제 `KafkaMessageListenerContainer` + `MockConsumer`: DLT 두 건·재시도 없음·컨테이너 유지),
   `McpToolGateTest`, `ExceptionBoundaryTest`, `RetryServiceTest`, `SlackMessageRelayServiceImplTest`(실제 풀 스레드의 핸들러 동일성),
   `SocketModeReceiverTest`; 변이 검사 7건(2026-10-15, 헬퍼가 `Throwable`을 잡게·모든 경계를 `runCatching`으로·L2 분기 제거 등)
+- 대화 종류별 거절 문구·`/ask` 거절 안내·유니코드 줄바꿈 인용(#49): `domain/src/main/kotlin/dev/notypie/domain/command/outbound/{OutboundTargets,DirectReply}.kt`(`ConversationKind`, `kind()`, `askRefusedNotice`), `domain/common/SafeText.kt`(`splitLineBreaks`, `takeEntitySafe`),
+  `domain/.../entity/context/form/AskSlashContext.kt`, `infrastructure/.../impl/command/OutboundRenderer.kt`(`askedBy`), `impl/command/slack/SlackMentionMapper.kt`;
+  실측 기록 `.omc/handoffs/2026-10-20-live-slack.md`(git-ignored)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

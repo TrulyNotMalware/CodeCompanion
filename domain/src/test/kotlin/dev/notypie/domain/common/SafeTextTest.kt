@@ -54,4 +54,90 @@ class SafeTextTest :
                 }
             }
         }
+
+        given("takeEntitySafe") {
+            `when`("the text fits the limit") {
+                then("it is returned unchanged, even when it ends in what looks like part of an entity") {
+                    "a &amp; b".takeEntitySafe(maxLength = 9) shouldBe "a &amp; b"
+                    "ab &am".takeEntitySafe(maxLength = 6) shouldBe "ab &am"
+                }
+            }
+
+            `when`("the limit falls inside an escape entity") {
+                then("the partial entity is dropped") {
+                    "ab&amp;cd".takeEntitySafe(maxLength = 5) shouldBe "ab"
+                }
+            }
+
+            `when`("a whole escape entity ends exactly at the limit") {
+                then("the entity is kept") {
+                    "ab&amp;cd".takeEntitySafe(maxLength = 7) shouldBe "ab&amp;"
+                }
+            }
+
+            `when`("a shorter escape entity ends exactly at the limit, its ampersand inside the entity window") {
+                then("the semicolon after the ampersand marks it whole, so it is kept") {
+                    "ab&lt;cd".takeEntitySafe(maxLength = 6) shouldBe "ab&lt;"
+                }
+            }
+
+            `when`("an ampersand without a semicolon sits exactly one entity length before the limit") {
+                then("it lies outside the entity window, so it is plain text and is kept") {
+                    "ab&cdefg".takeEntitySafe(maxLength = 7) shouldBe "ab&cdef"
+                }
+            }
+
+            `when`("the limit falls right after an ampersand") {
+                then("the lone ampersand is dropped") {
+                    "ab&amp;".takeEntitySafe(maxLength = 3) shouldBe "ab"
+                }
+            }
+
+            `when`("an ampersand lies further back than one entity length and has no semicolon after it") {
+                then("it is plain text, not a cut entity, and is kept") {
+                    "R&D notes".takeEntitySafe(maxLength = 7) shouldBe "R&D not"
+                }
+            }
+
+            `when`("the limit falls between the two halves of an emoji") {
+                then("the lone high surrogate is dropped") {
+                    "ab\uD83D\uDE00c".takeEntitySafe(maxLength = 3) shouldBe "ab"
+                }
+            }
+        }
+
+        given("splitLineBreaks") {
+            `when`("two words are separated by each kind of line break") {
+                then("LF, CR, CRLF, U+2028, U+2029, U+0085, U+000B and U+000C each split them into two lines") {
+                    val lineBreaks =
+                        listOf("\n", "\r", "\r\n", "\u2028", "\u2029", "\u0085", "\u000B", "\u000C")
+                    lineBreaks.map { lineBreak -> "a${lineBreak}b".splitLineBreaks() } shouldBe
+                        lineBreaks.map { listOf("a", "b") }
+                }
+            }
+
+            `when`("the text carries two CRLF breaks in a row") {
+                then("each CRLF is one break, not two, so only one empty line lies between them") {
+                    "a\r\n\r\nb".splitLineBreaks() shouldBe listOf("a", "", "b")
+                }
+            }
+
+            `when`("the text ends with a line break") {
+                then("the trailing empty element is kept") {
+                    "a\n".splitLineBreaks() shouldBe listOf("a", "")
+                }
+            }
+
+            `when`("the text has no line break") {
+                then("it stays one element") {
+                    "plain text".splitLineBreaks() shouldBe listOf("plain text")
+                }
+            }
+
+            `when`("the text is empty") {
+                then("the result is one empty element") {
+                    "".splitLineBreaks() shouldBe listOf("")
+                }
+            }
+        }
     })
