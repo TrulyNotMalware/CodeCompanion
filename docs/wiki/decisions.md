@@ -285,8 +285,9 @@ _type: decision · updated: 2026-10-20_
       (`innodb_snapshot_isolation` ON)의 빈 DB에 V26을 두 번 적용했고(두 번째는 변화 없음), `mariadb` 클라이언트의 prepared statement로
       다섯 문장의 이기는 경로·지는 경로, `GREATEST` 바닥, 고아 컷오프의 1마이크로초 경계, 바인딩한 `LIMIT`을 실행했다. lease를 잃은
       소유자의 `finish`는 그 트랜잭션이 아직 읽지 않았으면 0행, 읽은 뒤면 오류 1020이고 어느 쪽이든 롤백이다. JPA·Connector/J를 거친
-      경로(V26 테이블 위의 엔티티 매핑, `recordDelivered`의 중복 키 변환)는 MariaDB에서 실행해 보지 않았다(미확인). `@Scheduled`가 실제로 도는 것(스모크는 등록만 확인), CDC 경로 종단, 레플리카 두 개의 동시 동작, 실제 사이드카의
-      429 반복도 실행해 보지 않았다(미확인).
+      경로(V26 테이블 위의 엔티티 매핑, `recordDelivered`의 중복 키 변환)는 MariaDB에서 실행해 보지 않았다(미확인). CDC 경로 종단, 레플리카 두 개의 동시 동작, 실제 사이드카의
+      429 반복도 실행해 보지 않았다(미확인). `@Scheduled`의 실제 발화는 2026-10-20 로컬 MariaDB(Hibernate가 만든 테이블)에서 봤다 — 재개
+      스윕이 기동 약 1분 뒤 돌아, 원본 질문 행이 없는 오래된 `PENDING`·`IN_PROGRESS` 행을 `ABANDONED`로 바꿨다(WARN 로그, 새 아웃박스 행 없음).
 41. **`/calendar connect`는 동의한 Google 계정의 검증된 이메일이 요청한 슬랙 사용자의 이메일과 같을 때만 연결한다
     (2026-10-13).** state는 슬랙 사용자에 묶이고 브라우저에는 묶이지 않는다. 그래서 요청자가 자기 동의 링크를 남에게 열게 하면 그
     사람의 Google 계정이 요청자의 슬랙 사용자에 연결되고, 요청자는 상대의 캘린더에 미팅을 써 넣으며 확인 DM과 `status`에서 상대의
@@ -396,14 +397,25 @@ _type: decision · updated: 2026-10-20_
     - **운영:** 오래 돈 DB의 첫 실행은 쌓인 행을 한 번에 다 지우지 못한다 — 테이블마다 틱당 최대 20 × 1000 = 2만 행이고, 나머지는 매시간 같은
       양씩 줄어든다. 두 레플리카는 첫 실행이 어긋나 대개 다른 시각에 지우고, 겹치더라도 아웃박스 purge와 같은 노출(락 대기, 드문 데드락 → 다음
       틱 재시도)로 수용한다. **purge는 트랜잭션 밖에서 돌아야 한다** — 각 `DELETE … LIMIT`이 자기 트랜잭션의 처음이자 유일한 문장이다.
-      `purgeOnce`나 여러 배치를 한 `@Transactional`로 감싸거나 DELETE 앞에 읽기를 넣으면, `innodb_snapshot_isolation`이 켜진 MariaDB에서 두
-      레플리카가 겹칠 때 기다리던 쪽이 커밋 시 ER_CHECKREAD 1020을 받을 수 있고, 락도 배치마다가 아니라 끝까지 쥔다(코드와 결정 #40의 1020
-      관찰에서 추론, 미측정). **롤아웃 전 확인 목록(실행하지 않음, 미확인):** ① MariaDB 12.3에서 세 문장의 `EXPLAIN DELETE …` — 레저는
-      `idx_agent_ask_turn_status_updated_at`의 range(`(status, updated_at)`, 상태별 둘), 감사 테이블은 `created_at` 인덱스의 range여야 한다.
-      range가 아니면 배치를 줄여서는 고쳐지지 않는다 — `LIMIT`은 지우는 행만 묶으므로, 대상 행이 드문 전체 스캔은 `LIMIT 1`이어도 많은 살아 있는
-      행을 훑고 REPEATABLE READ에서 잠그며, 대상이 없으면 테이블 전체를 훑는다. 그때는 인덱스·문장(인덱스 힌트 등)을 고친다. ② 두 세션이 같은
-      범위를 동시에 지울 때의 실제 락 대기(지터는 겹칠 확률만 줄인다). ③ 연속 배치 계약 — 한 호출이 batch 이하만 지우고 실제로 지운 수를
-      돌려주며, 루프가 짧은 배치까지 비워 가는지. 이것은 H2에서 증명되지 않았다(아래). MariaDB는 `ORDER BY` 없는 `DELETE … LIMIT`을 statement
+      `purgeOnce`나 여러 배치를 한 `@Transactional`로 감싸면 락을 배치마다가 아니라 끝까지 쥔다. DELETE 앞에 읽기를 넣으면
+      `innodb_snapshot_isolation`이 켜진 MariaDB에서, 그 읽기 뒤 다른 트랜잭션이 **갱신**하고 커밋한 대상 행을 DELETE가 만날 때 그 문장이
+      ER_CHECKREAD 1020으로 실패한다 — 커밋 때가 아니라 DELETE 문에서, 0행(2026-10-20 실측; 그전 문구 "기다리던 쪽이 커밋 시 1020"은 결정 #40의
+      관찰에서 한 추론이었다). **MariaDB 실측(2026-10-20, 로컬 12.3.3, 스크립트·출력 `.omc/artifacts/mariadb-verify-2026-10-20/`):**
+      ① 세 문장의 `EXPLAIN DELETE …`는 테이블당 2만 행에서 대상이 적을 때·없을 때·많을 때 모두 레저는 `idx_agent_ask_turn_status_updated_at`의
+      range(상태별 둘), 감사 테이블은 `created_at` 인덱스의 range였고, 롤백한 `ANALYZE DELETE`가 실제로 훑은 행은 10·0·1000(`LIMIT`에서
+      멈춤)이었다 — 대상이 없을 때 전체 스캔은 없다. 계획이 range가 아니게 되면 배치를 줄여서는 고쳐지지 않는다 — `LIMIT`은 지우는 행만 묶고
+      REPEATABLE READ에서 훑고 잠그는 행은 묶지 않으므로, 그때는 인덱스·문장(인덱스 힌트 등)을 고친다. ② 한 세션이 1000행 배치를 3초 쥔 동안
+      다른 세션의 autocommit 루프는 앞 세션이 락을 놓을 때까지(약 2초) 기다린 뒤 이어 지웠고, 두 세션 배치들의 `ROW_COUNT()`(각 1000 이하)
+      합계가 대상 10,136행과 같았다(데드락·오류 없음). 대상 아닌 행은 모두 남았고 그중에 오래된 `PENDING`·`IN_PROGRESS` 행이 있으므로 상태
+      조건도 MariaDB에서 지켜졌다. 실험한 겹침(감사 테이블에서 DELETE 앞에 읽기를 넣은 트랜잭션과 같은 범위를 지우는 다른 세션)에서는 1020 없이
+      상대가 지운 행을 건너뛰었다 — 1020은 위의 '읽은 뒤 갱신된 행'에서만 났고, 끝난 레저 행과 감사 행은 갱신되지 않으므로 지금 코드에는 그
+      경로가 없다. 규칙은 그대로 둔다(락 보유 시간, 읽기를 끼워 넣는 변경을 막는다). ③ 연속 배치 계약 — 실제 앱(스케줄러 → Spring Data 네이티브
+      쿼리 → Hibernate → MariaDB Connector/J)을 `batch-size` 3으로 띄워 대상 7·6·8행을 넣자 ROW binlog의 트랜잭션별 삭제 수가
+      `[3, 3, 1]`·`[3, 3]`·`[3, 3, 2]`(한 번도 limit 초과 없음), 틱 로그의 합계 7·6·8이 실제 삭제 수와 같았고 쌓인 행이 다 비워졌다. 호출별
+      반환값은 기록하지 않았으므로 합만 맞는 잘못된 수(`[3, 3, 1]`을 `[3, 4, 0]`으로 보고)는 이 경로에서 배제되지 않았다. 이 실행에 넣은 오래된
+      `PENDING`·`IN_PROGRESS` 행은 틱 전에 재개 스윕이 `ABANDONED`로 바꿔(위 결정 #40에 적은 관찰과 같은 일) 상태 조건은 이 실행에서 검증되지
+      않았다(②가 검증). 앱은 Hibernate가 만든 로컬 테이블 위에서 돌았고, V26 스크립트로 만든 테이블 위의 실행은 여전히 미확인이다(위 결정 #40의
+      같은 항목). MariaDB는 `ORDER BY` 없는 `DELETE … LIMIT`을 statement
       기반 binlog에서 unsafe로 표시하지만, 저장소의 MariaDB 설정은 `binlog_format=ROW`라 해당 없다(아웃박스 purge와 같은 노출).
     - **H2 스펙의 한계(2026-10-17, 스펙 실행으로 확인):** 스펙은 H2 2.4.240(`MODE=MariaDB`, 테이블은 Hibernate가 생성)에서 돈다. Hibernate가 보낸
       그대로의 문장(`DELETE FROM agent_ask_turn WHERE status IN ('COMPLETED', 'ABANDONED') AND updated_at < ? LIMIT ?`, `TIMESTAMP` 컷오프와
@@ -414,8 +426,8 @@ _type: decision · updated: 2026-10-20_
       직접 실행한 같은 문장은 맞게 셌다는 리뷰 관찰이 있어 원인은 밝히지 못했다(미확인). 그래서 레저 스펙은 첫 호출의 수와 남은 행만 정확히 보고,
       그 뒤 호출은 H2에서도 참인 성질만 본다 — 보고한 수가 0~limit이고, 남은 대상 행이 늘지 않다가 0이 되며, 대상이 아닌 행은 남는다. **따라서
       연속 배치 계약(호출마다 batch 이하를 지우고 참 수를 돌려주며, 루프가 그 수로 끝까지 비우는 것)은 스펙으로 증명되지 않았다.** 스케줄러
-      스펙은 수를 MockK로 주므로 루프만 본다. 롤아웃 전에 MariaDB에서 실제 JPA·드라이버 경로로 확인한다(위 ③). H2에서는 스케줄러 루프가 일찍
-      멈추거나 한 배치에 limit보다 많이 지울 수 있고, MariaDB가 어떻게 세는지는 확인하지 않았다(미확인). 상태: 유지. 근거: `service/agent/AGENTS.md`(`AgentRetentionScheduler.kt`), `repository/agent/AGENTS.md`,
+      스펙은 수를 MockK로 주므로 루프만 본다. MariaDB의 실제 JPA·드라이버 경로에서는 배치마다 limit 이하로 지우고 합계가 실제 삭제 수와
+      같았다(위 ③, 2026-10-20; 호출별 반환값은 기록하지 않음). H2 오계수의 원인은 위와 같이 여전히 미확인이다. H2에서는 스케줄러 루프가 일찍 멈추거나 한 배치에 limit보다 많이 지울 수 있다. 상태: 유지. 근거: `service/agent/AGENTS.md`(`AgentRetentionScheduler.kt`), `repository/agent/AGENTS.md`,
       `repository/mcp/AGENTS.md`, `configurations/AGENTS.md`(`AppConfig.kt`), `application-prod.yaml`, `AgentRetentionSchedulerTest`,
       `AppConfigBindingTest`, `AgentAskTurnRepositoryTest`, `AgentTurnHistoryRepositoryImplTest`, `McpToolCallHistoryRepositoryImplTest`.
 45. **응답 핸들은 `toString()`에서 원값을 가린다 (2026-10-15).** `ResponseReplaceHandle`과 `ReplyHandle`(둘 다 Slack
@@ -483,7 +495,9 @@ _type: decision · updated: 2026-10-20_
     기각: 그대로 두고 문서화(트리아지 권고) — 남는 피해가 고아 grant 하나지만 1020 전제가 어디에도 적혀 있지 않았고 비용이 컬럼 하나다.
     운영: V28(`ALTER TABLE … ADD COLUMN IF NOT EXISTS version BIGINT NOT NULL DEFAULT 0`, V27과 같은 5초 `lock_wait_timeout` 온라인 형식,
     재실행 가능)은 **새 바이너리 배포 전에** 적용한다 — 엔티티가 컬럼을 매핑하므로 없으면 연결 조회가 모두 실패한다. 이전 바이너리는
-    컬럼을 무시하므로 롤백에도 그대로 둬도 된다. MariaDB에서는 아직 실행하지 않았다(미확인, V27과 같은 절차로 확인 예정). 상태: 유지.
+    컬럼을 무시하므로 롤백에도 그대로 둬도 된다. MariaDB 12.3.3에서 실행했다(2026-10-20, 로컬 일회용 스키마): 첫 실행 성공(기존 행
+    `version` = 0), 재실행은 note 1060, 테이블을 읽은 트랜잭션 뒤에서는 약 5초(5.1초) 기다린 뒤 하루가 아니라 그때 1205로 포기, 같은 `ADD COLUMN`은 `ALGORITHM=INSTANT`로도
+    받아들여졌다(`db/migration/AGENTS.md`, `.omc/artifacts/mariadb-verify-2026-10-20/`). 상태: 유지.
     근거: `V28__add_google_calendar_connection_version.sql` 헤더, `repository/calendar/AGENTS.md`, `GoogleCalendarConnectionRepositoryImplTest`
     (두 스레드 경합), `CalendarConnectionServiceTest`(실제 JPA 경합 뒤 재시도).
 
@@ -777,7 +791,9 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `AgentAskTurnRepositoryTest`에 정확한 수를 단언해 돌린 실행의 실패 출력과 Hibernate SQL·바인딩 로그로 확인(2026-10-17); 리뷰 반영(지터,
   상한, 상태 분류 스펙) 2026-10-19; Codex 교차 리뷰 반영(2026-10-19): `service/agent/AgentUsageReportService.kt`(`since` 한 번, 쿼리 셋),
   `common/TransactionTemplateExt.kt`(`detachedTemplate` = `PROPAGATION_NOT_SUPPORTED`), `resources/cdc/k8s/yamls/mariadb/mariadb-config.yaml`·
-  `resources/cdc/docker-compose/mariadb/my.cnf`(`binlog_format=ROW`)
+  `resources/cdc/docker-compose/mariadb/my.cnf`(`binlog_format=ROW`); MariaDB 실측(2026-10-20, 로컬 12.3.3): 일회용 스키마의
+  `EXPLAIN`/`ANALYZE DELETE`, 두 `mariadb` 세션의 동시 삭제·1020 대조 실험, `batch-size` 3으로 띄운 앱의 틱 로그와 `mariadb-binlog` 트랜잭션별
+  삭제 수(`.omc/artifacts/mariadb-verify-2026-10-20/REPORT.md`)
 - 원자적 슬래시 실패·응답 핸들 마스킹(#44·#45): `domain/src/main/kotlin/dev/notypie/domain/command/entity/Command.kt`
   (`replyToSlashFailure`), `intent/IntentQueue.kt`(`clear`), `outbound/InteractionHandles.kt`, `inbound/InboundInteraction.kt`,
   `entity/event/Event.kt`, `infrastructure/.../impl/command/{OutboundRenderer,SlackOutboundStager}.kt`, `impl/command/event/SlackEventPayloads.kt`,

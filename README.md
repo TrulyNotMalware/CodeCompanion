@@ -27,7 +27,7 @@ CodeCompanion is a Slack bot built with Kotlin and Spring Boot for side-project 
 - **AI / MCP**: Spring AI `2.0.1` (BOM; MCP server modules `spring-ai-autoconfigure-mcp-server-webmvc`, `spring-ai-mcp`, `spring-ai-mcp-annotations`, `mcp-spring-webmvc`)
 - **Serialization**: Jackson 3 (`tools.jackson`, BOM `3.2.3`)
 - **Logging**: kotlin-logging `8.0.4`
-- **Testing**: Kotest `6.2.5` (`BehaviorSpec`) + MockK `1.14.11`, with `EmbeddedKafka` and H2 for self-contained integration tests
+- **Testing**: Kotest `6.2.6` (`BehaviorSpec`) + MockK `1.14.11`, with `EmbeddedKafka` and H2 for self-contained integration tests
 
 ## Architecture
 CodeCompanion follows a DDD-inspired, three-module layering. Dependencies flow **application → infrastructure → domain** (and **application → domain**). The `domain` module is framework-free Kotlin — no Spring, no Jakarta, no JPA. It is also **transport-agnostic**: `domain/command` carries zero Slack types. Inbound requests are normalized into a neutral model (`InboundCommand` / `InboundInteraction`) and outbound results are expressed as transport-neutral `OutboundMessage`s, so a future adapter (e.g. Discord) can be added without touching the domain.
@@ -207,7 +207,7 @@ CodeCompanion은 사이드 프로젝트 팀을 위한 Kotlin · Spring Boot 기�
 - **AI / MCP**: Spring AI `2.0.1` (BOM, MCP 서버 모듈 `spring-ai-autoconfigure-mcp-server-webmvc`, `spring-ai-mcp`, `spring-ai-mcp-annotations`, `mcp-spring-webmvc`)
 - **직렬화**: Jackson 3 (`tools.jackson`, BOM `3.2.3`)
 - **로깅**: kotlin-logging `8.0.4`
-- **테스트**: Kotest `6.2.5` (`BehaviorSpec`) + MockK `1.14.11`, `EmbeddedKafka`·H2 기반의 자족적 통합 테스트
+- **테스트**: Kotest `6.2.6` (`BehaviorSpec`) + MockK `1.14.11`, `EmbeddedKafka`·H2 기반의 자족적 통합 테스트
 
 ## 아키텍처
 CodeCompanion은 DDD 기반의 3개 모듈 계층 구조를 따릅니다. 의존성은 **application → infrastructure → domain** (및 **application → domain**) 방향으로만 흐릅니다. `domain` 모듈은 프레임워크에 의존하지 않는 순수 Kotlin입니다 — Spring·Jakarta·JPA 없음. 또한 **전송 계층에 비의존적(transport-agnostic)**입니다: `domain/command`에는 Slack 타입이 전혀 없습니다. 인바운드 요청은 중립 모델(`InboundCommand` / `InboundInteraction`)로 정규화되고, 아웃바운드 결과는 전송 중립적인 `OutboundMessage`로 표현되므로, 도메인을 건드리지 않고도 향후 어댑터(예: Discord)를 추가할 수 있습니다.
