@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-21 -->
 
 # application/service
 
@@ -21,7 +21,7 @@ that the relay lane dispatches.
 | `cve/` | CVE collection, AI summarization, subscription, query, notification (see `cve/AGENTS.md`) |
 | `relay/` | Transactional-outbox relay: Debezium CDC listener, polling fallback, payload rendering (see `relay/AGENTS.md`) |
 | `ops/` | `OpsStatusService` — backs `@bot status` (see `ops/AGENTS.md`) |
-| `calendar/` | `/calendar connect \| disconnect \| status` — per-user Google OAuth connection, callback completion, async token revoke, disabled responder — and the Google Calendar mirror: the `MeetingCalendarMirror` hooks the meeting lane calls in its write transactions, the access-token cache and the 60 s `CalendarSyncScheduler` / `CalendarSyncService` that inserts, patches and deletes events (see `calendar/AGENTS.md`) |
+| `calendar/` | `/calendar connect \| disconnect \| status` — per-user Google OAuth connection, callback completion, async token revoke, disabled responder — and the Google Calendar mirror: the `MeetingCalendarMirror` hooks the meeting lane calls in its write transactions, the access-token cache and the 60 s `CalendarSyncScheduler` / `CalendarSyncService` that inserts, patches and deletes events; the hourly `GoogleOAuthStateRetentionScheduler` that deletes expired OAuth states (see `calendar/AGENTS.md`) |
 
 ## Key Files
 | File | Description |
@@ -53,8 +53,9 @@ that the relay lane dispatches.
 - **Scheduler split.** Add the cron/fixed-rate annotation to the thin `*Scheduler`, put the logic in
   `*SchedulingService`, and unit-test the service. Keep jobs short — the shared scheduler pool is 4 threads.
   The sweeps and purges keep trigger and logic in one class instead (`relay/OutboxRecoveryScheduler`,
-  `relay/OutboxRetentionScheduler`, `agent/AgentAskThreadStarter`, `agent/AgentRetentionScheduler`): the `@Scheduled`
-  method is a thin trigger around the failure containment (per table inside `AgentRetentionScheduler.purgeOnce`), and
+  `relay/OutboxRetentionScheduler`, `agent/AgentAskThreadStarter`, `agent/AgentRetentionScheduler`,
+  `calendar/GoogleOAuthStateRetentionScheduler`): the `@Scheduled`
+  method is a thin trigger around the failure containment (per table inside `AgentRetentionScheduler.purgeOnce`, and inside `GoogleOAuthStateRetentionScheduler.purgeOnce`), and
   the specs call `recoverOnce()` / `purgeOnce()` / `resumeOnce()`. Ticks contain failures with `containFailure`
   (infrastructure `common`), never `runCatching`: an `Exception` is logged and the next tick runs, an interrupt is
   rethrown with its flag, and an `Error` ends the tick and reaches the scheduler's error handler (2026-10-15). This is

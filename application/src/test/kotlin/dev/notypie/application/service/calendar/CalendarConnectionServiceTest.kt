@@ -225,7 +225,7 @@ class CalendarConnectionServiceTest :
                     "a single-use random state is issued with the configured TTL and nothing else touches the state table",
                 ) {
                     issuedState.captured shouldMatch Regex("[A-Za-z0-9_-]{43}")
-                    verify(exactly = 0) { h.states.deleteExpired(before = any()) }
+                    verify(exactly = 0) { h.states.deleteExpired(before = any(), limit = any()) }
                 }
 
                 then("the consent link goes to the requester as a DM, with the state and `&` escaped for mrkdwn") {
@@ -413,7 +413,6 @@ class CalendarConnectionServiceTest :
             fun Harness.withConsumedState(state: String = "ok"): Harness =
                 apply {
                     every { states.consume(state = state, now = now) } returns TEST_USER_ID
-                    every { states.deleteExpired(before = now) } returns 0
                 }
 
             fun Harness.withUpcomingMeetings(upcoming: List<MeetingDto> = emptyList()): Harness =
@@ -459,10 +458,9 @@ class CalendarConnectionServiceTest :
             `when`("the state is unknown, expired or already used") {
                 val h = harness().apply { every { states.consume(state = "stale", now = now) } returns null }
 
-                then("the link is rejected, nothing is purged and no code exchange happens") {
+                then("the link is rejected and no code exchange happens") {
                     h.service.completeConnection(code = "c", state = "stale", error = null) shouldBe
                         CalendarConnectionOutcome.INVALID_STATE
-                    verify(exactly = 0) { h.states.deleteExpired(before = any()) }
                     verify(exactly = 0) { h.oauth.exchangeCode(code = any()) }
                 }
             }
@@ -470,11 +468,11 @@ class CalendarConnectionServiceTest :
             `when`("the user denied consent") {
                 val h = harness().withConsumedState()
 
-                then("the state is consumed, expired states are purged in that transaction, and no exchange happens") {
+                then("the state is consumed, nothing is purged on the callback path, and no exchange happens") {
                     h.service.completeConnection(code = null, state = "ok", error = "access_denied") shouldBe
                         CalendarConnectionOutcome.DENIED
                     verify(exactly = 1) { h.states.consume(state = "ok", now = now) }
-                    verify(exactly = 1) { h.states.deleteExpired(before = now) }
+                    verify(exactly = 0) { h.states.deleteExpired(before = any(), limit = any()) }
                     verify(exactly = 0) { h.oauth.exchangeCode(code = any()) }
                 }
             }
