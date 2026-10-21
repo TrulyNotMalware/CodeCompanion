@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-20_
+_type: decision · updated: 2026-10-21_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -115,6 +115,8 @@ _type: decision · updated: 2026-10-20_
       나중에 바뀌거나 다른 사람에게 재할당된 경우다 — 사용자가 직접 바꾸는 이메일(확인을 거친다)도, 관리자·SCIM이 넣는 임의 주소도
       가능하고(한계 ②), 기존 연결은 다시 검사하지 않으므로(한계 ④) 같은 상황이 다시 생길 수 있다.
       "같은 `google_subject`의 활성 연결이 있으면 revoke를 생략"하는 가드는 만들지 않는다.
+    - **만료 state 정리 (2026-10-21):** V24 헤더가 적은 "콜백이 성공한 consume의 트랜잭션에서 만료 state를 지운다"는 결정 #51로
+      바뀌었다 — 매시간 `GoogleOAuthStateRetentionScheduler`가 지우고, 콜백은 consume만 한다.
 37. **미러는 아웃박스 `Transport`가 아니라 전용 더티 마커 테이블 + CAS 스케줄러로 at-least-once.** `meeting_calendar_event`(V25)는
     (미팅, 사용자)당 한 행이고 "원하는 동작"이 아니라 "다시 보라"는 표시다. 훅이 미팅 쓰기 트랜잭션 안에서 행을 upsert/touch해
     `change_seq`를 올리면, 60초 워커가 claim(CAS) 뒤 미팅을 다시 읽어 이벤트가 있어야 하는지 계산하고 Google을 호출한다. 완료
@@ -548,6 +550,56 @@ _type: decision · updated: 2026-10-20_
     `impl/command/AGENTS.md`(`SlackInboundMapper`), `impl/command/slack/AGENTS.md`, `impl/command/event/AGENTS.md`,
     `domain/.../command/inbound/AGENTS.md`, `domain/.../command/dto/AGENTS.md`.
 
+51. **`google_oauth_state`의 만료 행은 전용 스케줄러가 매시간 지우고, OAuth 콜백은 더 이상 지우지 않는다 (2026-10-21).**
+    `GoogleOAuthStateRetentionScheduler`(`@Conditional(OnGoogleCalendarEnabled)` — `CalendarSyncScheduler`와 같은 조건이다. 꺼진 환경에는
+    V24가 없을 수 있어 매시간 ERROR가 나지 않게 한다)가 매시간(fixedDelay 1시간; 첫 실행은 인스턴스마다 기동 뒤 10~20분 사이에서 무작위 —
+    `initialDelayString = "${random.long[600000,1200000]}"`, 결정 #43과 같은 이유로 `Recreate`로 함께 뜬 두 레플리카의 틱이 어긋난다)
+    `expires_at`이 `clock.instant()`보다 이른 행을 네이티브 `DELETE FROM google_oauth_state WHERE expires_at < :before LIMIT :limit`(1000)로
+    짧은 배치가 나올 때까지 틱당 최대 20회 지운다(`relay/purgeInBatches`, 아웃박스·에이전트 purge와 같은 루프). 실패는 `containFailure`로
+    가둔다 — `Exception`은 테이블과 이미 지운 행 수를 남기는 ERROR 하나, `Error`는 전파(결정 #48). `completeConnection`의 쓰기 트랜잭션은
+    이제 `consume`만 한다. 이유: 그전까지 만료 행은 콜백이 성공했을 때 그 consume 트랜잭션 안에서만 지워져(결정 #36, V24 헤더), 버려진
+    `/calendar connect`의 state가 누군가의 콜백이 성공할 때까지 쌓였다(`service/calendar/AGENTS.md`가 2026-10-15부터 열린 후속으로 적어 둔 것).
+    스케줄러가 테이블을 묶으면 콜백의 정리는 겹치는 일이고, 빼면 사용자의 브라우저 응답 경로에서 range `DELETE`와 그 락이 사라진다.
+    - **컷오프가 `now`여도 안전하다 — 같은 순간에 잡은 컷오프끼리.** `consume`은 `expires_at > :now`인 행만 받으므로 같은 `now`에서
+      `expires_at < now`인 행은 claim될 수 없다. 두 시각이 다르면 겹칠 수 있다 — 콜백이 `now`를 잡은 뒤 `UPDATE` 전에 멈춘 사이 더 늦은
+      `now`의 정리가 만료 직전이던 행을 지우거나, 레플리카 사이 시계가 δ만큼 어긋나 앞선 쪽의 정리가 state 유효 시간의 마지막 δ를 줄인다
+      (NTP라면 밀리초). 어느 쪽이든 사용자는 만료 직전의 링크에서 `INVALID_STATE`를 받을 뿐이고, 옛 콜백 정리(`deleteExpired(before = now)`를
+      콜백을 받은 레플리카가 돌림)도 같았으므로 유예를 두지 않는다.
+      소비된 행도 만료 시각이 지나면 함께 지워지는데, 그 state로 다시 온 콜백은 행이 있을 때와 똑같이 0행 `UPDATE` → `INVALID_STATE`다.
+    - **기능을 끄면 정리도 멈춘다.** 꺼진 배포에는 스케줄러도 콜백도 없어 이미 쌓인 state가 남는다 — 행이 작고, 다시 켜면 첫 틱들이 비운다.
+    - **배치 크기는 상수(1000)이고 설정 키는 없다.** 행이 작고(문자열 둘과 시각 셋) connect 한 번에 한 행이 생기므로 틱당 최대 2만 행이면
+      충분하다(YAGNI). 필요해지면 `slack.app.calendar.google` 아래에 키를 더한다.
+    - **트랜잭션 밖에서 돈다.** 결정 #43의 규칙 그대로 각 `DELETE … LIMIT`이 자기 트랜잭션의 처음이자 유일한 문장이다
+      (`GoogleOAuthStateRepositoryImpl.deleteExpired`의 `@Transactional`, 결정 #24). 스케줄러나 `purgeOnce`에 `@Transactional`을 달면 락을
+      배치마다가 아니라 끝까지 쥔다.
+    - **락 노출 (추론, 미측정).** 아래는 문장이 `expires_at` 인덱스 range를 탄다는 전제다(그 실행 계획은 아래 "마이그레이션 없음"처럼
+      `EXPLAIN`으로 확인하지 않았다; InnoDB는 실제로 훑은 레코드를 잠그므로 계획이 다르면 잠그는 범위도 다르다). 스케줄러의 `DELETE`는
+      REPEATABLE READ에서 훑은 범위를 next-key로 잠근다. 새 state의 `INSERT`(`expires_at = now + state-ttl-minutes`)는 대개 그 범위 밖이라
+      무관하지만, 살아 있는 state가 하나도 없고 그 배치의 스캔이 마지막 만료 행을 지나 supremum에 닿으면(만료 행이 `LIMIT`보다 많으면 앞
+      배치들은 거기까지 가지 않는다) 그 간격 때문에 그 배치가 커밋될 때까지 짧게 기다린다. connect 트랜잭션은 그 뒤 `google_oauth_state`를 더 잠그지 않으므로 순환 대기는
+      없다. 반대 방향도 있다 — 살아 있는 state가 없을 때 아직 커밋되지 않은 connect의 `INSERT`가 범위 바로 다음 항목이면 스케줄러가
+      그 슬래시 트랜잭션의 커밋까지 기다린다(순환 없음). consume `UPDATE`는 기본 키로 그 state 한 행만 잠그고(없는 state면 그 자리의 기본 키
+      간격; 만료된 state로 온 콜백이면 그 행이 스케줄러의 범위 안이라 둘 중 하나가 짧게 기다린다) 같은 트랜잭션에서 이 테이블을 더 잠그지
+      않는다. 두 레플리카의 정리가 겹치면, 두 문장이 같은 range 경로를 쓰는 한 같은 인덱스를 같은 순서로 훑으므로 뒤쪽이 기다렸다가 이어
+      지운다(결정 #43의 MariaDB 실측과 같은 형태). `/calendar disconnect`의 사용자별 `DELETE`(슬래시 트랜잭션)가 같은 만료 행을 두고 겹치면 두 `DELETE`가 다른 인덱스
+      (`slack_user_id`·`expires_at`)로 같은 행의 락을 반대 순서로 잡으므로 드물게 데드락이 날 수 있다 — 결정 #36 시절 콜백 정리(consume
+      트랜잭션의 range `DELETE`)와 같은 노출이다. InnoDB는 대개 가벼운 쪽을 롤백하므로 보통 disconnect 슬래시가 지고(결정 #44의 오류 안내 →
+      사용자가 다시 실행), 스케줄러가 지면 ERROR 뒤 다음 틱이다. 수용한다.
+    - **기각:** ① 콜백의 정리도 함께 두기 — 스케줄러와 겹치는 일이고, 사용자 응답 경로에 range `DELETE`와 그 락을 남긴다; ② 60초
+      `CalendarSyncScheduler` 틱에 얹기 — 결정 #43이 ②를 기각한 것과 같은 이유로 60초마다 `DELETE`가 돌고, 미러 틱의 시간 예산
+      (`sync-tick-budget-seconds`)을 나눠 쓴다; ③ 배치 크기 설정 키 — 위의 YAGNI.
+    - **마이그레이션 없음.** `idx_google_oauth_state_expires_at`는 V24에 있다(다음 번호는 그대로 V29). 출하된 스크립트는 고치지 않는다 —
+      V24 헤더의 "Expired state rows are purged by the OAuth callback, in the transaction that consumes a state and only after a successful
+      consume."와 V27 헤더의 "Size" 문단("Expired states are deleted only when some callback succeeds …")은 이제 옛 동작을 적은 것이다. 이
+      릴리스 전부터 돈 DB에는 버려진 state가 쌓여 있을 수 있고, 첫 실행들이 틱당 최대 2만 행씩 비운다. 이 문장이 MariaDB에서
+      `expires_at` 인덱스 range를 타는지는 `EXPLAIN`으로 확인하지 않았다(미측정; 결정 #43 ①의 다른 테이블들은 range였다).
+    - **H2 스펙의 한계는 결정 #43과 같다.** `JpaGoogleOAuthStateRepositoryTest`(H2 기본 모드)는 배치 삭제를 테스트 케이스마다 한 번만
+      부른다 — H2 2.4.240이 두 번째 호출부터 `DELETE … LIMIT`의 수를 잘못 셌다(그 관찰은 `MODE=MariaDB`에서였고 기본 모드에서는 확인하지
+      않았다). 스케줄러 스펙은 수를 MockK로 준다.
+    상태: 유지. 근거: `service/calendar/AGENTS.md`(`GoogleOAuthStateRetentionScheduler.kt`, `CalendarConnectionService.kt`),
+    `repository/calendar/AGENTS.md`, `GoogleOAuthStateRetentionSchedulerTest`, `CalendarConnectionServiceTest`, `CalendarConfigurationTest`,
+    `JpaGoogleOAuthStateRepositoryTest`.
+
 ## 빌드·런타임
 
 19. **`io.spring.dependency-management` 플러그인을 쓰지 않는다.** 이유: BOM 버전(kotlinx-coroutines 등)을
@@ -882,6 +934,11 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `SlackApiEventConstructorTest`·`SlackControllersTest`·`SlackMentionEventHandlerImplTest`·`OutboxChainJpaTransactionTest`, 미지원 버전 보류는
   기존 `SlackMessageRelayServiceImplTest`("schema version this binary cannot read")·`OutboxPayloadRendererTest`·`AgentAskThreadStarterTest`;
   선택지 A/B/C와 사용자 결정(2026-10-20, 세션 기록)
+- OAuth state 만료 정리(#51): `application/src/main/kotlin/dev/notypie/application/service/calendar/{GoogleOAuthStateRetentionScheduler,CalendarConnectionService,CalendarSyncScheduler}.kt`,
+  `service/relay/OutboxRetentionScheduler.kt`(`purgeInBatches`), `infrastructure/src/main/kotlin/dev/notypie/repository/calendar/{GoogleOAuthStateRepository,GoogleOAuthStateRepositoryImpl,JpaGoogleOAuthStateRepository}.kt`,
+  `repository/calendar/schema/GoogleOAuthStateSchema.kt`(`idx_google_oauth_state_expires_at`), `db/migration/V24__…`·`V27__…` 헤더, 스펙
+  `GoogleOAuthStateRetentionSchedulerTest`·`CalendarConnectionServiceTest`·`CalendarConfigurationTest`·`JpaGoogleOAuthStateRepositoryTest`,
+  git-ignored `.omc/plans/oauth-state-retention-2026-10-21.md`(리드 결정과 락 노출 추론)(2026-10-21, 미커밋 작업 트리 `feature/oauth-state-retention`)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

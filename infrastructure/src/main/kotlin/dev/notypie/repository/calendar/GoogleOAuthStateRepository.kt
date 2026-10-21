@@ -7,7 +7,7 @@ interface GoogleOAuthStateRepository {
 
     fun consume(state: String, now: Instant): String?
 
-    fun deleteExpired(before: Instant): Int
+    fun deleteExpired(before: Instant, limit: Int): Int
 
     fun deleteForUser(userId: String): Int
 }

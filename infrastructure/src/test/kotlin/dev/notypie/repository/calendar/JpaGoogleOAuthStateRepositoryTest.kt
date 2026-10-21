@@ -119,16 +119,33 @@ class JpaGoogleOAuthStateRepositoryTest
             }
 
             given("expired and live states") {
-                `when`("expired rows are purged") {
+                `when`("expired rows are purged with a limit above their count") {
                     then("only rows past the cutoff are deleted") {
                         repository.issue(state = "old", userId = "U", expiresAt = now.minusSeconds(1))
                         repository.issue(state = "live", userId = "U", expiresAt = now.plusSeconds(60))
                         entityManager.flush()
 
-                        repository.deleteExpired(before = now) shouldBe 1
+                        repository.deleteExpired(before = now, limit = 10) shouldBe 1
                         entityManager.clear()
                         jpaGoogleOAuthStateRepository.existsById("old") shouldBe false
                         jpaGoogleOAuthStateRepository.existsById("live") shouldBe true
+                    }
+                }
+
+                `when`("more rows are expired than one batch may delete") {
+                    val expired = listOf("expired-1", "expired-2", "expired-3")
+
+                    then("the batch deletes exactly its limit and keeps the remaining expired row and the live one") {
+                        expired.forEach { state ->
+                            repository.issue(state = state, userId = "U", expiresAt = now.minusSeconds(1))
+                        }
+                        repository.issue(state = "live-beside-batch", userId = "U", expiresAt = now.plusSeconds(60))
+                        entityManager.flush()
+
+                        repository.deleteExpired(before = now, limit = 2) shouldBe 2
+                        entityManager.clear()
+                        expired.count { state -> jpaGoogleOAuthStateRepository.existsById(state) } shouldBe 1
+                        jpaGoogleOAuthStateRepository.existsById("live-beside-batch") shouldBe true
                     }
                 }
             }

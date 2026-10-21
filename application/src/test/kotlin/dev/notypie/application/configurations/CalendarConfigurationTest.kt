@@ -6,6 +6,7 @@ import dev.notypie.application.service.calendar.CalendarConnectionService
 import dev.notypie.application.service.calendar.CalendarSyncScheduler
 import dev.notypie.application.service.calendar.CalendarSyncService
 import dev.notypie.application.service.calendar.GoogleAccessTokenProvider
+import dev.notypie.application.service.calendar.GoogleOAuthStateRetentionScheduler
 import dev.notypie.application.service.calendar.GoogleTokenRevocationWorker
 import dev.notypie.application.service.calendar.MeetingCalendarMirror
 import dev.notypie.application.service.calendar.MeetingCalendarMirrorService
@@ -52,6 +53,7 @@ class CalendarConfigurationTest :
                     CalendarDisabledConfiguration::class.java,
                     GoogleOAuthCallbackController::class.java,
                     CalendarSyncScheduler::class.java,
+                    GoogleOAuthStateRetentionScheduler::class.java,
                 ).withBean(Clock::class.java, { Clock.systemUTC() })
                 .withBean(PlatformTransactionManager::class.java, { mockk(relaxed = true) })
                 .withBean(OutboundMessageStager::class.java, { stager })
@@ -172,7 +174,7 @@ class CalendarConfigurationTest :
                         }
                 }
 
-                then("the mirror sync lane is wired and the meeting hooks get the queueing mirror") {
+                then("the mirror sync lane and state purge are wired and the meeting hooks get the queueing mirror") {
                     contextRunner
                         .withPropertyValues("slack.app.calendar.google.enabled=true", *fullyConfigured)
                         .run { context ->
@@ -186,6 +188,7 @@ class CalendarConfigurationTest :
                             context.getBean(GoogleCalendarClient::class.java)
                             context.getBean(GoogleAccessTokenProvider::class.java)
                             context.getBean(CalendarSyncScheduler::class.java)
+                            context.getBean(GoogleOAuthStateRetentionScheduler::class.java)
                         }
                 }
             }
@@ -262,7 +265,7 @@ class CalendarConfigurationTest :
                         }
                 }
 
-                then("the meeting hooks get the no-op mirror and no sync bean exists") {
+                then("the meeting hooks get the no-op mirror and no sync or state purge bean exists") {
                     contextRunner
                         .withPropertyValues("slack.app.calendar.google.enabled=false")
                         .run { context ->
@@ -275,6 +278,7 @@ class CalendarConfigurationTest :
                             context.getBeanNamesForType(GoogleCalendarClient::class.java).size shouldBe 0
                             context.getBeanNamesForType(GoogleAccessTokenProvider::class.java).size shouldBe 0
                             context.getBeanNamesForType(CalendarSyncScheduler::class.java).size shouldBe 0
+                            context.getBeanNamesForType(GoogleOAuthStateRetentionScheduler::class.java).size shouldBe 0
                         }
                 }
             }

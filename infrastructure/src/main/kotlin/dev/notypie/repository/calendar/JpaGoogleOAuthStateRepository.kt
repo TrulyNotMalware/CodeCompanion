@@ -29,9 +29,17 @@ interface JpaGoogleOAuthStateRepository : JpaRepository<GoogleOAuthStateSchema, 
 
     @Modifying
     @Transactional
-    @Query("DELETE FROM google_oauth_state s WHERE s.expiresAt < :before")
-    fun deleteExpiredBefore(
+    @Query(
+        value = """
+            DELETE FROM google_oauth_state
+            WHERE expires_at < :before
+            LIMIT :limit
+        """,
+        nativeQuery = true,
+    )
+    fun deleteExpired(
         @Param("before") before: Instant,
+        @Param("limit") limit: Int,
     ): Int
 
     @Modifying

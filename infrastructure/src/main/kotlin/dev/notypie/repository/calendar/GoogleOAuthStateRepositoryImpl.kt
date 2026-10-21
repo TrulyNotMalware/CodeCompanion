@@ -22,8 +22,8 @@ open class GoogleOAuthStateRepositoryImpl(
     }
 
     @Transactional
-    override fun deleteExpired(before: Instant): Int =
-        jpaGoogleOAuthStateRepository.deleteExpiredBefore(before = before)
+    override fun deleteExpired(before: Instant, limit: Int): Int =
+        jpaGoogleOAuthStateRepository.deleteExpired(before = before, limit = limit)
 
     @Transactional
     override fun deleteForUser(userId: String): Int = jpaGoogleOAuthStateRepository.deleteBySlackUser(userId = userId)

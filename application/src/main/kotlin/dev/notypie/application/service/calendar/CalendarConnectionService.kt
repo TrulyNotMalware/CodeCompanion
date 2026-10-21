@@ -81,10 +81,8 @@ class CalendarConnectionService(
     override fun completeConnection(code: String?, state: String?, error: String?): CalendarConnectionOutcome {
         if (state.isNullOrBlank()) return CalendarConnectionOutcome.INVALID_STATE
         val userId =
-            writeTemplate.execute {
-                val now = clock.instant()
-                stateRepository.consume(state = state, now = now)?.also { stateRepository.deleteExpired(before = now) }
-            } ?: return CalendarConnectionOutcome.INVALID_STATE
+            writeTemplate.execute { stateRepository.consume(state = state, now = clock.instant()) }
+                ?: return CalendarConnectionOutcome.INVALID_STATE
         if (!error.isNullOrBlank()) {
             log.info { "Google Calendar consent denied: userId=$userId" }
             return CalendarConnectionOutcome.DENIED
