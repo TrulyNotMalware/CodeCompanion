@@ -13,7 +13,6 @@ open class CommandOutput(
     val idempotencyKey: UUID,
     val publisherId: String,
     val channel: String,
-    val token: String = "", // FIXME ChatPostRequest doesn't have any token?
     val commandType: CommandType,
     val errorReason: String = "",
     val messageTs: String = "",

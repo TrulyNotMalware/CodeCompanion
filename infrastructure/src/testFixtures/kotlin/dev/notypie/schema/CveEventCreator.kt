@@ -31,7 +31,7 @@ fun createCveEvent(
 
 fun createCveEventSchema(
     id: Long = 0L,
-    topicId: Long = 1L,
+    topicId: Long = 0L,
     externalId: String = "CVE-2026-0001",
     title: String = "Sample advisory",
     rawContent: String = "Raw advisory content.",

@@ -201,7 +201,7 @@ class CommandExecutorTest :
                 val command =
                     TestCommand(
                         idempotencyKey = UUID.randomUUID(),
-                        commandData = createSlashInboundCommand(appToken = "xoxb-secret-token"),
+                        commandData = createSlashInboundCommand(),
                         failure = IllegalStateException("database down"),
                     )
                 val warnings =
@@ -209,7 +209,7 @@ class CommandExecutorTest :
                         executor.execute(command = command)
                     }.eventsAt(level = Level.WARN)
 
-                then("one WARN names the command, its ids and the reason, never the app token") {
+                then("one WARN names the command, its ids and the reason") {
                     warnings.size shouldBe 1
                     val line = warnings.single().formattedMessage
                     line shouldContain "Command TestCommand failed"
@@ -217,7 +217,6 @@ class CommandExecutorTest :
                     line shouldContain "idempotencyKey=${command.idempotencyKey}"
                     line shouldContain "kind=SLASH"
                     line shouldContain "reason=java.lang.IllegalStateException: database down"
-                    line shouldNotContain "xoxb-secret-token"
                 }
 
                 then("the generic error reply goes out through the stager like any other outbound") {

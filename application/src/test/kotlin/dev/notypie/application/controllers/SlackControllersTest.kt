@@ -13,14 +13,19 @@ import dev.notypie.application.service.standup.StandupSlashService
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
+import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.impl.command.SlackViewOpenDispatcher
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.createOpenViewEvent
+import dev.notypie.impl.command.slack.SlashCommandRequestBody
 import dev.notypie.logging.captureLogs
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
@@ -222,6 +227,25 @@ class SlackControllersTest :
                             payload = match { it.command == "/calendar" },
                             commandData = any(),
                         )
+                    }
+                }
+
+                then("the form's verification token and response URL bind without error and are kept nowhere") {
+                    val payload = slot<SlashCommandRequestBody>()
+                    val commandData = slot<InboundCommand>()
+                    verify {
+                        calendarSlashService.handleCalendar(
+                            headers = any(),
+                            payload = capture(payload),
+                            commandData = capture(commandData),
+                        )
+                    }
+                    form.getFirst("token") shouldBe "verification-token"
+                    form.getFirst("response_url") shouldStartWith "https://hooks.slack.com/"
+                    payload.captured.toString() shouldStartWith "SlashCommandRequestBody("
+                    listOf(payload.captured.toString(), commandData.captured.toString()).forEach { printed ->
+                        printed shouldNotContain "verification-token"
+                        printed shouldNotContain "hooks.slack.com"
                     }
                 }
             }

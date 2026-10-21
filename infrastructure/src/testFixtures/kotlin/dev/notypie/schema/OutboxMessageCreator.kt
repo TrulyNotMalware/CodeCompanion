@@ -15,7 +15,7 @@ fun createOutboxMessage(
     payload: String = "{}",
     createdAt: LocalDateTime = LocalDateTime.now(),
     status: MessageStatus = MessageStatus.PENDING,
-    schemaVersion: Int = OutboxSchemaVersion.V2,
+    schemaVersion: Int = OutboxSchemaVersion.V7,
 ): OutboxMessage =
     OutboxMessage(
         eventId = eventId,

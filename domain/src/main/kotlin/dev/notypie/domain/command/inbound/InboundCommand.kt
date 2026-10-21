@@ -27,7 +27,6 @@ data class MentionInvocation(
 
 data class InboundCommand(
     val appId: String,
-    val appToken: String,
     val actorId: String,
     val actorName: String,
     val channel: String,
@@ -40,7 +39,6 @@ data class InboundCommand(
     fun extractBasicInfo(idempotencyKey: UUID): CommandBasicInfo =
         CommandBasicInfo(
             appId = appId,
-            appToken = appToken,
             publisherId = actorId,
             channel = channel,
             idempotencyKey = idempotencyKey,

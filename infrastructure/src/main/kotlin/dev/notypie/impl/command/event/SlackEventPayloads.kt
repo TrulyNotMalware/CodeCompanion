@@ -45,7 +45,12 @@ data class ActionEventPayloadContents(
         idempotencyKey = idempotencyKey,
         publisherId = publisherId,
         channel = channel,
-    )
+    ) {
+    override fun toString(): String =
+        "ActionEventPayloadContents(eventId=$eventId, apiAppId=$apiAppId, commandDetailType=$commandDetailType, " +
+            "idempotencyKey=$idempotencyKey, publisherId=$publisherId, channel=$channel, responseUrl=redacted, " +
+            "body=$body)"
+}
 
 data class OpenViewPayloadContents(
     override val eventId: UUID,
@@ -64,7 +69,12 @@ data class OpenViewPayloadContents(
         idempotencyKey = idempotencyKey,
         publisherId = publisherId,
         channel = channel,
-    )
+    ) {
+    override fun toString(): String =
+        "OpenViewPayloadContents(eventId=$eventId, apiAppId=$apiAppId, commandDetailType=$commandDetailType, " +
+            "idempotencyKey=$idempotencyKey, publisherId=$publisherId, channel=$channel, triggerId=$triggerId, " +
+            "viewJson=redacted, meetingIdempotencyKey=$meetingIdempotencyKey, participantUserId=$participantUserId)"
+}
 
 enum class MessageType {
     CHANNEL_ALERT,

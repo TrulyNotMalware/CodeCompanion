@@ -4,7 +4,6 @@ import java.util.*
 
 data class CommandBasicInfo(
     val appId: String,
-    val appToken: String,
     val publisherId: String,
     val channel: String,
     val idempotencyKey: UUID,
@@ -18,13 +17,9 @@ data class CommandBasicInfo(
         ): CommandBasicInfo =
             CommandBasicInfo(
                 appId = appId,
-                appToken = "",
                 publisherId = publisherId,
                 channel = channel,
                 idempotencyKey = idempotencyKey,
             )
     }
 }
-
-internal fun CommandBasicInfo.withNewKey(): CommandBasicInfo =
-    CommandBasicInfo(appId, appToken, publisherId, channel, UUID.randomUUID())

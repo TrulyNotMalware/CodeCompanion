@@ -3,7 +3,6 @@ package dev.notypie.impl.command.slack
 import com.fasterxml.jackson.annotation.JsonProperty
 
 data class SlackEventCallBackRequest(
-    val token: String,
     @field:JsonProperty("team_id")
     val teamId: String,
     @field:JsonProperty("api_app_id")

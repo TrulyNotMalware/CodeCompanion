@@ -17,9 +17,10 @@ import dev.notypie.schema.createOutboxColumnMap
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
-import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotBeBlank
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import java.time.LocalDateTime
@@ -97,9 +98,14 @@ class OutboxMessageTest :
                     row.transport shouldBe Transport.SLACK.name
                 }
 
-                then("the row is stamped at the current schema version and starts PENDING") {
-                    row.schemaVersion shouldBe OutboxSchemaVersion.V2
+                then("the row is stamped V7 and starts PENDING") {
+                    row.schemaVersion shouldBe OutboxSchemaVersion.V7
                     row.status shouldBe MessageStatus.PENDING.name
+                }
+
+                then("the payload's command context carries no Slack verification token") {
+                    row.payload shouldContain "\"basicInfo\":{\"appId\":\"${basicInfo.appId}\",\"publisherId\""
+                    row.payload shouldNotContain "appToken"
                 }
 
                 then("each row mints its own event id") {
@@ -139,11 +145,9 @@ class OutboxMessageTest :
                     head.chainedParts() shouldBe 2
                 }
 
-                then(
-                    "only a row with a continuation is stamped V3, so an older binary holds it instead of sending part 1",
-                ) {
-                    head.schemaVersion shouldBe OutboxSchemaVersion.V3
-                    single.schemaVersion shouldBe OutboxSchemaVersion.V2
+                then("a chain head and a single part are both stamped V7, and the single part has no chained parts") {
+                    head.schemaVersion shouldBe OutboxSchemaVersion.V7
+                    single.schemaVersion shouldBe OutboxSchemaVersion.V7
                     single.chainedParts() shouldBe 0
                 }
             }
@@ -173,10 +177,10 @@ class OutboxMessageTest :
                 val withFallback = replace(withFallback = fallback)
                 val withoutFallback = replace(withFallback = null)
 
-                then("only the row with a fallback is stamped V4, so an older binary holds it instead of dropping it") {
-                    withFallback.schemaVersion shouldBe OutboxSchemaVersion.V4
-                    withoutFallback.schemaVersion shouldBe OutboxSchemaVersion.V2
-                    OutboxSchemaVersion.SUPPORTED shouldBe setOf(2, 3, 4, 5, 6)
+                then("both rows are stamped V7, and this binary still reads every older version") {
+                    withFallback.schemaVersion shouldBe OutboxSchemaVersion.V7
+                    withoutFallback.schemaVersion shouldBe OutboxSchemaVersion.V7
+                    OutboxSchemaVersion.SUPPORTED shouldBe setOf(2, 3, 4, 5, 6, 7)
                 }
 
                 then("the fallback survives the codec") {
@@ -204,10 +208,9 @@ class OutboxMessageTest :
                         basicInfo = basicInfo,
                     )
 
-                then("only the question row is stamped V5, a version this binary reads, so an older one holds it") {
-                    question.schemaVersion shouldBe OutboxSchemaVersion.V5
-                    plain.schemaVersion shouldBe OutboxSchemaVersion.V2
-                    OutboxSchemaVersion.SUPPORTED shouldContain OutboxSchemaVersion.V5
+                then("the question row and the plain row are both stamped V7") {
+                    question.schemaVersion shouldBe OutboxSchemaVersion.V7
+                    plain.schemaVersion shouldBe OutboxSchemaVersion.V7
                 }
             }
         }
@@ -225,30 +228,7 @@ class OutboxMessageTest :
             fun versionOf(message: OutboundMessage, continuation: List<OutboundMessage> = emptyList()): Int =
                 port.toRow(message = message, basicInfo = basicInfo, continuation = continuation).schemaVersion
 
-            `when`("the fallback sits on the head row") {
-                then("an /ask question with a fallback is V6, not V5, and so is an ephemeral with one") {
-                    versionOf(message = createAgentQuestionMessage(fallback = reply)) shouldBe OutboxSchemaVersion.V6
-                    versionOf(message = ephemeralWithFallback) shouldBe OutboxSchemaVersion.V6
-                    versionOf(message = plain.copy(fallback = reply)) shouldBe OutboxSchemaVersion.V6
-                    OutboxSchemaVersion.SUPPORTED shouldContain OutboxSchemaVersion.V6
-                }
-
-                then("the direct reply a relay stages, a plain channel message, is V2") {
-                    versionOf(message = plain) shouldBe OutboxSchemaVersion.V2
-                }
-            }
-
-            `when`("the fallback or a newer shape sits only in a continuation part") {
-                then("the head row takes the highest version any part needs") {
-                    versionOf(message = plain, continuation = listOf(plain, ephemeralWithFallback)) shouldBe
-                        OutboxSchemaVersion.V6
-                    versionOf(message = plain, continuation = listOf(createAgentQuestionMessage())) shouldBe
-                        OutboxSchemaVersion.V5
-                    versionOf(message = plain, continuation = listOf(plain)) shouldBe OutboxSchemaVersion.V3
-                }
-            }
-
-            `when`("the fallback is nested in a replace-original message's fallback ephemeral") {
+            `when`("the fallback sits on the head row, only in a continuation part, or nested in a replace") {
                 val replace =
                     OutboundMessage.ReplaceMessage(
                         handle = ResponseReplaceHandle(raw = "https://hooks.slack.com/actions/T1/1/list"),
@@ -256,10 +236,17 @@ class OutboxMessageTest :
                         fallback = ephemeralWithFallback,
                     )
 
-                then("the row is V6, so a V4 or V5 binary holds it instead of dropping the nested fallback") {
-                    versionOf(message = replace) shouldBe OutboxSchemaVersion.V6
-                    versionOf(message = replace.copy(fallback = ephemeralWithFallback.copy(fallback = null))) shouldBe
-                        OutboxSchemaVersion.V4
+                then("every row is V7, which no binary without the V7 command context reads") {
+                    listOf(
+                        versionOf(message = createAgentQuestionMessage(fallback = reply)),
+                        versionOf(message = ephemeralWithFallback),
+                        versionOf(message = plain.copy(fallback = reply)),
+                        versionOf(message = plain),
+                        versionOf(message = plain, continuation = listOf(plain, ephemeralWithFallback)),
+                        versionOf(message = plain, continuation = listOf(createAgentQuestionMessage())),
+                        versionOf(message = plain, continuation = listOf(plain)),
+                        versionOf(message = replace),
+                    ).distinct() shouldBe listOf(OutboxSchemaVersion.V7)
                 }
             }
         }

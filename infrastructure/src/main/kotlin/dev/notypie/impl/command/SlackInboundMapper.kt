@@ -15,13 +15,17 @@ import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.inbound.MessageHandle
 import dev.notypie.domain.command.inbound.ReplyHandle
 import dev.notypie.domain.command.inbound.TriggerHandle
+import dev.notypie.domain.command.outbound.ResponseReplaceHandle
 import dev.notypie.impl.command.slack.ActionElementTypes
 import dev.notypie.impl.command.slack.InteractionPayload
 import dev.notypie.impl.command.slack.States
 
+private const val LIST_HANDLE_INDEX = 2
+
 // fields order mirrors the parser's states order; some contexts read positionally (e.g. start/end TIME pickers).
 fun InteractionPayload.toInbound(): InboundInteraction {
     val form = InboundForm(fields = states.map { it.toInboundField() })
+    val submission = buildSubmission(form = form)
     return InboundInteraction(
         detailType = type,
         actor = InboundActor(id = user.id),
@@ -30,12 +34,35 @@ fun InteractionPayload.toInbound(): InboundInteraction {
         reply = ReplyHandle(raw = responseUrl),
         message = container.messageTs?.let { MessageHandle(raw = it) },
         idempotencyKey = idempotencyKey,
-        routingExtras = routingExtras,
+        routingExtras =
+            if (submission.carriesListHandle()) {
+                routingExtras.filterIndexed { index, _ -> index != LIST_HANDLE_INDEX }
+            } else {
+                routingExtras
+            },
         form = form,
         action = currentAction.toInboundAction(),
-        submission = buildSubmission(form = form),
+        submission = submission,
     )
 }
+
+private fun InboundSubmission?.carriesListHandle(): Boolean =
+    when (this) {
+        is InboundSubmission.RescheduleMeeting, is InboundSubmission.AddParticipant -> true
+        is InboundSubmission.DeclineReason,
+        is InboundSubmission.StandupAnswer,
+        is InboundSubmission.StandupSetup,
+        is InboundSubmission.CveSubscribe,
+        is InboundSubmission.CveUnsubscribe,
+        null,
+        -> false
+    }
+
+private fun InteractionPayload.listHandle(): ResponseReplaceHandle? =
+    routingExtras
+        .getOrNull(index = LIST_HANDLE_INDEX)
+        ?.takeIf { it.isNotBlank() }
+        ?.let { ResponseReplaceHandle(raw = it) }
 
 private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmission? =
     when (type) {
@@ -45,7 +72,7 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
                 requesterId = routingExtras.getOrNull(0).orEmpty(),
                 date = form.firstNonBlankValue(kind = InboundFieldKind.DATE),
                 time = form.firstNonBlankValue(kind = InboundFieldKind.TIME),
-                listHandleRaw = routingExtras.getOrNull(2).orEmpty(),
+                listHandle = listHandle(),
             )
 
         CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT ->
@@ -53,7 +80,7 @@ private fun InteractionPayload.buildSubmission(form: InboundForm): InboundSubmis
                 meetingUidRaw = idempotencyKey,
                 requesterId = routingExtras.getOrNull(0).orEmpty(),
                 participantUserIdsRaw = form.value(key = InboundFieldKeys.ADD_PARTICIPANT_USERS),
-                listHandleRaw = routingExtras.getOrNull(2).orEmpty(),
+                listHandle = listHandle(),
             )
 
         CommandDetailType.MEETING_DECLINE_REASON ->
@@ -154,10 +181,9 @@ private fun ActionElementTypes.toInboundFieldKind(): InboundFieldKind =
         else -> InboundFieldKind.UNKNOWN
     }
 
-fun InteractionPayload.toInboundCommand() =
+fun InteractionPayload.toInboundCommand(): InboundCommand =
     InboundCommand(
         appId = apiAppId,
-        appToken = token,
         actorId = user.id,
         actorName = user.name,
         channel = channel.id,

@@ -7,7 +7,6 @@ import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_CHANNEL_NAME
 import dev.notypie.domain.TEST_TEAM_DOMAIN
 import dev.notypie.domain.TEST_TEAM_ID
-import dev.notypie.domain.TEST_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.TEST_USER_NAME
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -37,7 +36,6 @@ fun createInteractionPayloadInput(
     enterprise: Enterprise? = null,
     apiAppId: String = TEST_APP_ID,
     botId: String = TEST_BOT_ID,
-    token: String = TEST_TOKEN,
     responseUrl: String = TEST_BASE_URL,
     idempotencyKey: UUID,
     triggerId: String = "",
@@ -53,7 +51,6 @@ fun createInteractionPayloadInput(
         idempotencyKey = idempotencyKey.toString(),
         apiAppId = apiAppId,
         botId = botId,
-        token = token,
         container = container,
         channel = channel,
         responseUrl = responseUrl,

@@ -48,7 +48,7 @@ fun createOutboxRow(
     createdAt: LocalDateTime = DEFAULT_TEST_NOW,
     attemptCount: Int = 0,
     sendCount: Int = 0,
-    schemaVersion: Int = OutboxSchemaVersion.V2,
+    schemaVersion: Int = OutboxSchemaVersion.V7,
 ): OutboxMessage =
     mockk(relaxed = true) {
         every { this@mockk.eventId } returns eventId

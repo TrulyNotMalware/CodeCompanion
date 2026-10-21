@@ -5,7 +5,6 @@ import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
-import dev.notypie.domain.command.outbound.replaceHandleOrNull
 import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.domain.standup.entity.Routine
@@ -55,7 +54,7 @@ internal data class AddParticipantParsed(
                     meetingUid = meetingUid,
                     requesterId = raw.requesterId.ifBlank { actorId },
                     participantUserIds = it,
-                    listHandle = replaceHandleOrNull(raw = raw.listHandleRaw),
+                    listHandle = raw.listHandle,
                 )
             }
         }
@@ -79,7 +78,7 @@ internal data class RescheduleMeetingParsed(
                 meetingUid = meetingUid,
                 requesterId = raw.requesterId.ifBlank { actorId },
                 newStartAt = newStartAt,
-                listHandle = replaceHandleOrNull(raw = raw.listHandleRaw),
+                listHandle = raw.listHandle,
             )
         }
 

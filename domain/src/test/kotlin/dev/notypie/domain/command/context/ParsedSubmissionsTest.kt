@@ -30,6 +30,7 @@ import java.time.ZoneId
 import java.util.UUID
 
 private const val ACTOR = "U_ACTOR"
+private val LIST_HANDLE = ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
 
 class ParsedSubmissionsTest :
     BehaviorSpec({
@@ -40,12 +41,12 @@ class ParsedSubmissionsTest :
                 uidRaw: String = meetingUid.toString(),
                 requesterId: String = "U_HOST",
                 idsRaw: String = "U_A,U_B",
-                listHandleRaw: String = "",
+                listHandle: ResponseReplaceHandle? = null,
             ) = createAddParticipantSubmission(
                 meetingUidRaw = uidRaw,
                 requesterId = requesterId,
                 participantUserIdsRaw = idsRaw,
-                listHandleRaw = listHandleRaw,
+                listHandle = listHandle,
             )
 
             `when`("the raw variant is well-formed") {
@@ -61,10 +62,10 @@ class ParsedSubmissionsTest :
             }
 
             `when`("the modal carried the list message's reply handle") {
-                val parsed = AddParticipantParsed.from(raw = raw(listHandleRaw = TEST_LIST_HANDLE), actorId = ACTOR)
+                val parsed = AddParticipantParsed.from(raw = raw(listHandle = LIST_HANDLE), actorId = ACTOR)
 
                 then("it becomes the handle that closes the list") {
-                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
+                    parsed.shouldNotBeNull().listHandle shouldBe LIST_HANDLE
                 }
             }
 
@@ -91,13 +92,13 @@ class ParsedSubmissionsTest :
                 uidRaw: String = meetingUid.toString(),
                 date: String = "2026-10-01",
                 time: String = "14:30",
-                listHandleRaw: String = "",
+                listHandle: ResponseReplaceHandle? = null,
             ) = createRescheduleMeetingSubmission(
                 meetingUidRaw = uidRaw,
                 requesterId = "",
                 date = date,
                 time = time,
-                listHandleRaw = listHandleRaw,
+                listHandle = listHandle,
             )
 
             `when`("date and time parse to a start") {
@@ -112,10 +113,10 @@ class ParsedSubmissionsTest :
             }
 
             `when`("the modal carried the list message's reply handle") {
-                val parsed = RescheduleMeetingParsed.from(raw = raw(listHandleRaw = TEST_LIST_HANDLE), actorId = ACTOR)
+                val parsed = RescheduleMeetingParsed.from(raw = raw(listHandle = LIST_HANDLE), actorId = ACTOR)
 
                 then("it becomes the handle that closes the list") {
-                    parsed.shouldNotBeNull().listHandle shouldBe ResponseReplaceHandle(raw = TEST_LIST_HANDLE)
+                    parsed.shouldNotBeNull().listHandle shouldBe LIST_HANDLE
                 }
             }
 

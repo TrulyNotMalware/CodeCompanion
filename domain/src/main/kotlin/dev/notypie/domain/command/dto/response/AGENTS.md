@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-11 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-20 -->
 
 # domain/command/dto/response
 
@@ -10,7 +10,7 @@ type, error reason). It is deliberately not the list of effects — those come f
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CommandOutput.kt` | `open class CommandOutput(ok, apiAppId, status, commandDetailType, idempotencyKey, publisherId, channel, token = "", commandType, errorReason = "", messageTs = "")`; factories `empty()` (`ok = false`, `DO_NOTHING`, random key), `fail(basicInfo, commandDetailType, reason, commandType = SIMPLE)`, `success(basicInfo, commandType, commandDetailType)` |
+| `CommandOutput.kt` | `open class CommandOutput(ok, apiAppId, status, commandDetailType, idempotencyKey, publisherId, channel, commandType, errorReason = "", messageTs = "")`; factories `empty()` (`ok = false`, `DO_NOTHING`, random key), `fail(basicInfo, commandDetailType, reason, commandType = SIMPLE)`, `success(basicInfo, commandType, commandDetailType)` |
 | `Status.kt` | `IN_PROGRESSED`, `SUCCESS`, `FAILED`, `DO_NOTHING`; `Status.isOk(status)` is true for the first two |
 
 ## For AI Agents
@@ -25,8 +25,9 @@ type, error reason). It is deliberately not the list of effects — those come f
   consumers of that subclass must read `status`.
 - `empty()` is what `EmptyContext` and every no-op path return: `ok = false` with `DO_NOTHING`, and
   `Status.isOk(DO_NOTHING) == false`. Treat "not ok" as "nothing to do" unless `status == FAILED`.
-- `token` and `messageTs` are placeholders (the source carries a `FIXME`); `token` is only populated by
-  `RequestMeetingContextResult` and `ApprovalCallbackContext`. Do not add logic that depends on them.
+- `messageTs` is set only by the dispatcher's `successOutput` (`impl/command/event/SlackCommandOutputs.kt`, the
+  `chat.postMessage` ts); contexts leave it blank. The `token` field (Slack's verification token, never read) was
+  removed on 2026-10-20 (`docs/wiki/decisions.md` #50).
 - `IN_PROGRESSED` is produced by no context; it only participates in `ApprovalCallbackContext`'s
   status aggregation. `Command.handleEvent()`'s `Exception` catch uses `fail(..., ERROR_RESPONSE, ...)`.
 

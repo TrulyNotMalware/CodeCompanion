@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import dev.notypie.application.configurations.createAgentRetentionAppConfig
 import dev.notypie.application.outbox.DEFAULT_TEST_NOW
 import dev.notypie.application.outbox.createFixedUtcClock
+import dev.notypie.application.service.relay.RETENTION_MAX_BATCHES_PER_TICK
 import dev.notypie.logging.captureLogs
 import dev.notypie.logging.messagesAt
 import dev.notypie.repository.agent.AgentAskTurnRepository
@@ -94,14 +95,14 @@ class AgentRetentionSchedulerTest :
                 val purged = lane.scheduler.purgeOnce()
 
                 then("each table stops after the per-tick batch cap and the rest waits for the next tick") {
-                    purged shouldBe 3 * AGENT_RETENTION_MAX_BATCHES_PER_TICK * RetentionLane.BATCH
-                    verify(exactly = AGENT_RETENTION_MAX_BATCHES_PER_TICK) {
+                    purged shouldBe 3 * RETENTION_MAX_BATCHES_PER_TICK * RetentionLane.BATCH
+                    verify(exactly = RETENTION_MAX_BATCHES_PER_TICK) {
                         lane.askTurnRepository.deleteFinishedOlderThan(olderThan = any(), limit = any())
                     }
-                    verify(exactly = AGENT_RETENTION_MAX_BATCHES_PER_TICK) {
+                    verify(exactly = RETENTION_MAX_BATCHES_PER_TICK) {
                         lane.turnHistoryRepository.deleteOlderThan(olderThan = any(), limit = any())
                     }
-                    verify(exactly = AGENT_RETENTION_MAX_BATCHES_PER_TICK) {
+                    verify(exactly = RETENTION_MAX_BATCHES_PER_TICK) {
                         lane.toolCallRepository.deleteOlderThan(olderThan = any(), limit = any())
                     }
                 }

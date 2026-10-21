@@ -59,7 +59,6 @@ internal class ApprovalCallbackContext(
             idempotencyKey = commandBasicInfo.idempotencyKey,
             publisherId = commandBasicInfo.publisherId,
             channel = commandBasicInfo.channel,
-            token = commandBasicInfo.appToken,
             commandType = commandType,
             commandDetailType = commandDetailType,
         )

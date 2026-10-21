@@ -70,6 +70,52 @@ class SlackInboundMapperTest :
             }
         }
 
+        given("reschedule and add-participant submissions whose modal metadata carries a /meetup list handle") {
+            val submitTypes =
+                listOf(CommandDetailType.MEETING_RESCHEDULE_SUBMIT, CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT)
+
+            fun submitOf(type: CommandDetailType, routingExtras: List<String>): InboundInteraction =
+                createInteractionPayloadInput(
+                    commandDetailType = type,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states = emptyList(),
+                    idempotencyKey = UUID.randomUUID(),
+                ).copy(routingExtras = routingExtras).toInbound()
+
+            fun InboundSubmission?.handleUrl(): String? =
+                when (this) {
+                    is InboundSubmission.RescheduleMeeting -> listHandle?.raw
+                    is InboundSubmission.AddParticipant -> listHandle?.raw
+                    else -> error("not a list-handle submission: $this")
+                }
+
+            `when`("the handle slot is present but blank") {
+                val inbound =
+                    submitTypes.map { type -> submitOf(type = type, routingExtras = listOf("U_HOST", "C1", "")) }
+
+                then("neither submission carries a handle") {
+                    inbound.map { it.submission.handleUrl() } shouldBe listOf(null, null)
+                }
+            }
+
+            `when`("the handle slot holds a response URL followed by another extra") {
+                val inbound =
+                    submitTypes.map { type ->
+                        submitOf(
+                            type = type,
+                            routingExtras = listOf("U_HOST", "C1", "https://hooks.slack.test/list", "EXTRA"),
+                        )
+                    }
+
+                then("both submissions carry it and only the handle slot leaves the routing extras") {
+                    inbound.map { it.submission.handleUrl() } shouldBe
+                        listOf("https://hooks.slack.test/list", "https://hooks.slack.test/list")
+                    inbound.map { it.routingExtras } shouldBe
+                        listOf(listOf("U_HOST", "C1", "EXTRA"), listOf("U_HOST", "C1", "EXTRA"))
+                }
+            }
+        }
+
         given("a standup-answer view_submission with unordered per-question fields") {
             val sessionUid = UUID.randomUUID()
             val payload =
@@ -215,7 +261,6 @@ class SlackInboundMapperTest :
 
                 then("identity fields map from the Slack payload") {
                     commandData.appId shouldBe payload.apiAppId
-                    commandData.appToken shouldBe payload.token
                     commandData.actorId shouldBe payload.user.id
                     commandData.actorName shouldBe payload.user.name
                     commandData.channel shouldBe payload.channel.id

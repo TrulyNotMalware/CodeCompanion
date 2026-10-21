@@ -14,6 +14,7 @@ import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
+import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.templates.AddParticipantModalIds
 import dev.notypie.templates.DeclineReasonModalIds
 import dev.notypie.templates.ModalBlockBuilder
@@ -23,8 +24,13 @@ import dev.notypie.templates.StandupModalIds
 import dev.notypie.templates.StandupSetupModalIds
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.mockk
 import java.time.LocalDate
@@ -344,6 +350,32 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     effects.filterIsInstance<CommandIntent.RescheduleMeeting>().single().listHandle shouldBe
                         ResponseReplaceHandle(raw = listResponseUrl)
                 }
+
+                then("printing the open-view event that carries the modal names its payload but hides the view JSON") {
+                    val encodedHandle = privateMetadata.split(",")[4]
+                    modalJson shouldContain encodedHandle
+                    val printed = createOpenViewEvent(viewJson = modalJson).toString()
+                    printed shouldContain "OpenViewPayloadContents("
+                    printed shouldContain "viewJson=redacted"
+                    printed shouldNotContain encodedHandle
+                }
+
+                then("printing the parsed payload never shows the URL, raw or as the encoded metadata token") {
+                    val printed = interactionPayload.toString()
+                    printed shouldStartWith "InteractionPayload("
+                    printed shouldNotContain listResponseUrl
+                    printed shouldNotContain privateMetadata.split(",")[4]
+                }
+
+                then("printing the inbound interaction or its submission names them but never shows the URL") {
+                    val inbound = interactionPayload.toInbound()
+                    inbound.routingExtras shouldBe listOf("U_HOST", originChannel)
+                    inbound.toString() shouldStartWith "InboundInteraction("
+                    inbound.toString() shouldNotContain listResponseUrl
+                    val submission = inbound.submission.shouldBeInstanceOf<InboundSubmission.RescheduleMeeting>()
+                    submission.toString() shouldStartWith "RescheduleMeeting("
+                    submission.toString() shouldNotContain listResponseUrl
+                }
             }
 
             `when`("the add-participant modal carries the list's response URL") {
@@ -365,9 +397,11 @@ class ViewSubmissionChannelRoutingRegressionTest :
                         ).toInbound()
                         .submission
 
-                then("the submission hands the decoded URL to the domain") {
-                    submission.shouldBeInstanceOf<InboundSubmission.AddParticipant>().listHandleRaw shouldBe
-                        listResponseUrl
+                then("the submission hands the decoded URL to the domain as a handle that does not print it") {
+                    val addParticipant = submission.shouldBeInstanceOf<InboundSubmission.AddParticipant>()
+                    addParticipant.listHandle.shouldNotBeNull().raw shouldBe listResponseUrl
+                    addParticipant.toString() shouldStartWith "AddParticipant("
+                    addParticipant.toString() shouldNotContain listResponseUrl
                 }
             }
 
@@ -386,7 +420,7 @@ class ViewSubmissionChannelRoutingRegressionTest :
                         .submission
 
                 then("there is no list to close, so the host gets the ephemeral reply as before") {
-                    submission.shouldBeInstanceOf<InboundSubmission.RescheduleMeeting>().listHandleRaw shouldBe ""
+                    submission.shouldBeInstanceOf<InboundSubmission.RescheduleMeeting>().listHandle.shouldBeNull()
                 }
             }
         }

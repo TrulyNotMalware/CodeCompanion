@@ -140,4 +140,31 @@ class SafeTextTest :
                 }
             }
         }
+
+        given("isBlankAcrossLineBreaks") {
+            `when`("the text is only a NEL (U+0085), which String.isBlank does not count as whitespace") {
+                then("it is blank, because splitLineBreaks treats NEL as a line break") {
+                    "\u0085".isBlankAcrossLineBreaks() shouldBe true
+                }
+            }
+
+            `when`("NELs are mixed with spaces, tabs and U+2028") {
+                then("it is blank") {
+                    " \u0085\t\u2028 \u0085\u0085 ".isBlankAcrossLineBreaks() shouldBe true
+                }
+            }
+
+            `when`("NELs surround real text") {
+                then("it is not blank") {
+                    "\u0085what is kotlin?\u0085".isBlankAcrossLineBreaks() shouldBe false
+                }
+            }
+
+            `when`("the text is empty or only spaces") {
+                then("it is blank, as String.isBlank says") {
+                    "".isBlankAcrossLineBreaks() shouldBe true
+                    "   ".isBlankAcrossLineBreaks() shouldBe true
+                }
+            }
+        }
     })

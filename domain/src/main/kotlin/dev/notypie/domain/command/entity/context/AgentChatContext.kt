@@ -8,6 +8,7 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.common.isBlankAcrossLineBreaks
 
 internal class AgentChatContext(
     private val prompt: String,
@@ -31,7 +32,7 @@ internal class AgentChatContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.AGENT_CONVERSE
 
     override fun runCommand(): CommandOutput {
-        if (prompt.isBlank()) return createErrorResponse(errMessage = EMPTY_PROMPT_MESSAGE)
+        if (prompt.isBlankAcrossLineBreaks()) return createErrorResponse(errMessage = EMPTY_PROMPT_MESSAGE)
         addIntent(
             CommandIntent.AgentConverse(
                 prompt = prompt,

@@ -32,7 +32,7 @@ class OutboundMessageCodecTest :
         val fixtureBasicInfo =
             createCommandBasicInfo(idempotencyKey = UUID.fromString("00000000-0000-0000-0000-000000000001"))
         val basicInfoJson =
-            "\"basicInfo\":{\"appId\":\"A12ABCDEFG\",\"appToken\":\"I_AM_TEST_TOKEN\"," +
+            "\"basicInfo\":{\"appId\":\"A12ABCDEFG\"," +
                 "\"publisherId\":\"U012ABCDEFG\",\"channel\":\"C012ABCDEFG\"," +
                 "\"idempotencyKey\":\"00000000-0000-0000-0000-000000000001\"}"
 
@@ -343,6 +343,35 @@ class OutboundMessageCodecTest :
             OutboundMessageCodec.encode(envelope = channelEnvelope) shouldBe channelFixture
             OutboundMessageCodec.encode(envelope = ephemeralEnvelope) shouldBe ephemeralFixture
             OutboundMessageCodec.encode(envelope = ephemeralWithFallbackEnvelope) shouldBe ephemeralWithFallbackFixture
+        }
+
+        "a pre-V7 row whose basicInfo still carries the Slack verification token decodes, and re-encoding drops it" {
+            val textJson = "{\"@type\":\"Text\",\"headline\":null,\"markdown\":\"plain\"}"
+            val v6Row =
+                "{\"message\":{\"@type\":\"Ephemeral\",\"target\":\"C012ABCDEFG\",\"recipient\":\"U012ABCDEFG\"," +
+                    "\"content\":$textJson,\"detailType\":null," +
+                    "\"fallback\":{\"recipient\":\"U012ABCDEFG\",\"content\":$textJson}}," +
+                    "\"basicInfo\":{\"appId\":\"A12ABCDEFG\",\"appToken\":\"I_AM_TEST_TOKEN\"," +
+                    "\"publisherId\":\"U012ABCDEFG\",\"channel\":\"C012ABCDEFG\"," +
+                    "\"idempotencyKey\":\"00000000-0000-0000-0000-000000000001\"}}"
+            val text = MessageContent.Text(headline = null, markdown = "plain")
+            val expected =
+                OutboundEnvelope(
+                    message =
+                        OutboundMessage.Ephemeral(
+                            target = target,
+                            recipient = UserRef(id = "U012ABCDEFG"),
+                            content = text,
+                            fallback = DirectReply(recipient = UserRef(id = "U012ABCDEFG"), content = text),
+                        ),
+                    basicInfo = fixtureBasicInfo,
+                )
+
+            val decoded = OutboundMessageCodec.decode(json = v6Row)
+
+            decoded shouldBe expected
+            OutboundMessageCodec.encode(envelope = decoded) shouldNotContain "appToken"
+            OutboundMessageCodec.encode(envelope = decoded) shouldNotContain "I_AM_TEST_TOKEN"
         }
 
         "an envelope carrying the rest of a chain round-trips every part with its subtype" {

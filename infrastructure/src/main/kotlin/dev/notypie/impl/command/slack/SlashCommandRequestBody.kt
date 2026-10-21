@@ -7,7 +7,6 @@ import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.command.inbound.TriggerHandle
 
 data class SlashCommandRequestBody(
-    val token: String,
     @field:JsonProperty("team_id")
     val teamId: String,
     @field:JsonProperty("team_domain")
@@ -27,15 +26,12 @@ data class SlashCommandRequestBody(
     val command: String,
     @field:JsonProperty("text")
     val subCommands: String,
-    @field:JsonProperty("response_url")
-    val responseUrl: String,
     @field:JsonProperty("trigger_id")
     val triggerId: String,
 ) {
-    fun toInboundCommand() =
+    fun toInboundCommand(): InboundCommand =
         InboundCommand(
             appId = apiAppId,
-            appToken = token,
             channel = channel,
             channelName = channelName,
             actorId = userId,
@@ -46,5 +42,5 @@ data class SlashCommandRequestBody(
             teamId = teamId,
         )
 
-    fun subCommandList() = subCommands.split(" ")
+    fun subCommandList(): List<String> = subCommands.split(" ")
 }

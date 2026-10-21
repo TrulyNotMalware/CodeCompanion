@@ -18,6 +18,7 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.command.outbound.askRefusedNotice
 import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.common.escapeMarkup
+import dev.notypie.domain.common.isBlankAcrossLineBreaks
 
 internal class AskSlashContext(
     commandBasicInfo: CommandBasicInfo,
@@ -47,7 +48,7 @@ internal class AskSlashContext(
 
     override fun runCommand(): CommandOutput {
         if (!actorRole.grants(permission = CommandPermission.AI)) return permissionDenied()
-        if (prompt.isBlank()) return usageError()
+        if (prompt.isBlankAcrossLineBreaks()) return usageError()
         addOutbound(
             message =
                 OutboundMessage.ChannelMessage(

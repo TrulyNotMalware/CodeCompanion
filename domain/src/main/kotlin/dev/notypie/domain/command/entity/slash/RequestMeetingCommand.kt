@@ -85,7 +85,6 @@ data class RequestMeetingContextResult(
         idempotencyKey = commandBasicInfo.idempotencyKey,
         publisherId = commandBasicInfo.publisherId,
         channel = commandBasicInfo.channel,
-        token = commandBasicInfo.appToken,
         commandType = CommandType.PIPELINE,
         commandDetailType = CommandDetailType.MEETING_CREATE_REQUEST,
     )

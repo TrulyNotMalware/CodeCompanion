@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-02 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-20 -->
 
 # infrastructure/impl/command/event
 
@@ -12,7 +12,7 @@ and the `CommandOutput` helpers.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackEventPayloads.kt` | `sealed class SlackEventPayload(apiAppId, commandDetailType, idempotencyKey, publisherId, channel) : EventPayload`; `PostEventPayloadContents(eventId, …, messageType, replaceOriginal, body: Map<String, Any>)`; `ActionEventPayloadContents(…, responseUrl, body: String)`; `OpenViewPayloadContents(…, triggerId, viewJson, meetingIdempotencyKey?, participantUserId = "")`; `enum MessageType { CHANNEL_ALERT, EPHEMERAL_MESSAGE, DIRECT_MESSAGE, UPDATE_MESSAGE }` (no `ACTION_RESPONSE` since B1 — action responses are their own payload type); `toMessageTypeByTargetUser(targetUserId?)` |
+| `SlackEventPayloads.kt` | `sealed class SlackEventPayload(apiAppId, commandDetailType, idempotencyKey, publisherId, channel) : EventPayload`; `PostEventPayloadContents(eventId, …, messageType, replaceOriginal, body: Map<String, Any>)`; `ActionEventPayloadContents(…, responseUrl, body: String)`; `OpenViewPayloadContents(…, triggerId, viewJson, meetingIdempotencyKey?, participantUserId = "")`. Both override `toString()` by hand (2026-10-20, `docs/wiki/decisions.md` #50): the action payload prints `responseUrl=redacted`, the open-view payload `viewJson=redacted` (a reschedule / add-participant view carries the `/meetup list` URL URL-encoded in `private_metadata`); every other field prints, and a new field must be added to the override; `enum MessageType { CHANNEL_ALERT, EPHEMERAL_MESSAGE, DIRECT_MESSAGE, UPDATE_MESSAGE }` (no `ACTION_RESPONSE` since B1 — action responses are their own payload type); `toMessageTypeByTargetUser(targetUserId?)` |
 | `SlackCommandEvents.kt` | `SendSlackMessageEvent(idempotencyKey, payload: SlackEventPayload, destination, timestamp, type, isInternal = true)`; `OpenViewEvent(idempotencyKey, payload: OpenViewPayloadContents, type, isInternal = true, destination = "")` |
 | `OutboundMessageEnqueued.kt` | `OutboundMessageEnqueuedPayload(eventId, message: OutboundMessage, basicInfo, continuation: List<OutboundMessage> = emptyList())` (`continuation` = the messages to post after `message`, in order) and `OutboundMessageEnqueued(idempotencyKey, payload, isInternal = true, type = SIMPLE_TEXT)` — the transport-neutral effect a BEFORE_COMMIT listener turns into an outbox row |
 | `MessageDispatcher.kt` | `interface MessageDispatcher { dispatch(SlackEventPayload): CommandOutput; dispatchImmediate(OpenViewPayloadContents): CommandOutput }` |
@@ -44,7 +44,9 @@ and the `CommandOutput` helpers.
 ```
 No spec targets this package directly; the constructor and renderer specs assert the payload shapes, and
 `testFixtures/.../impl/command/event/SlackEventTestFixtures.kt` builds `SendSlackMessageEvent`s for the
-`:application` relay and service specs.
+`:application` relay and service specs. The two redacting `toString`s are pinned by `SlackApiEventConstructorTest`
+(`replaceOriginalText`) and `ViewSubmissionChannelRoutingRegressionTest` (an `OpenViewEvent` over the real reschedule
+modal JSON).
 
 ### Common Patterns
 - `sealed class` payloads with `open val`s overridden by data-class constructor properties.

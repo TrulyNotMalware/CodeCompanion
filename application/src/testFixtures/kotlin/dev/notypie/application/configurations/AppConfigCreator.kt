@@ -20,6 +20,14 @@ fun createAppConfigWithSecrets(
         agent = AppConfig.Agent(sidecar = AppConfig.Agent.Sidecar(bearerSecret = sidecarBearerSecret)),
     )
 
+fun createOutboxRetentionAppConfig(days: Long = 7L, batchSize: Int = 50): AppConfig =
+    AppConfig(
+        outbox =
+            AppConfig.Outbox(
+                retention = AppConfig.Outbox.Retention(days = days, batchSize = batchSize),
+            ),
+    )
+
 fun createAgentRetentionAppConfig(
     askTurnDays: Long = 14L,
     historyDays: Long = 180L,

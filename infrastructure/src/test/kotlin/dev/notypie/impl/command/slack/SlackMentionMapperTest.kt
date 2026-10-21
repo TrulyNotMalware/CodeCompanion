@@ -6,6 +6,7 @@ import dev.notypie.domain.command.inbound.InboundKind
 import dev.notypie.domain.command.inbound.MentionInvocation
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 
 class SlackMentionMapperTest :
@@ -35,6 +36,25 @@ class SlackMentionMapperTest :
                 then("it deserializes with a blank actor and no command structure instead of throwing") {
                     command.actorId shouldBe ""
                     command.payload.shouldBeInstanceOf<MentionInvocation>().hasCommandStructure shouldBe false
+                }
+            }
+        }
+
+        given("an event_callback body that still carries Slack's verification token") {
+            val token = "VERIFICATION_TOKEN_NOT_KEPT"
+            val request =
+                jsonMapper.readValue(
+                    createRichAppMentionJson(botUserId = botId, token = token),
+                    SlackEventCallBackRequest::class.java,
+                )
+
+            `when`("the request is mapped and printed") {
+                val payload =
+                    request.toMentionInboundCommand(appId = TEST_APP_ID, channelName = "", actorName = "").payload
+
+                then("the body binds and the token appears nowhere in the request") {
+                    payload.shouldBeInstanceOf<MentionInvocation>()
+                    request.toString() shouldNotContain token
                 }
             }
         }

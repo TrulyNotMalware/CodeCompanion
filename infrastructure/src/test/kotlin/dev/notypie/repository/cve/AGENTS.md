@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-20 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository/cve
 
@@ -32,7 +32,9 @@ execute them).
   unique `externalId` / `topicKey` / `userId` per block, assertions scoped by those keys or as deltas
   against a baseline, and `afterSpec { deleteAll() }` wherever a block leaves claimable or joinable rows
   behind (`JpaCveDeliveryRepositoryTest` and `JpaCveCollectLedgerRepositoryTest` do; `JpaCveEventRepositoryTest`
-  intentionally does not and filters instead).
+  intentionally does not and filters instead). Its rows saved without a `topicId` land on topic `0`, the
+  `createCveEventSchema` default that no saved topic gets, so a block scoped by a topic it saved never sees them
+  (until 2026-10-20 the default was `1`, which a fresh H2 gives the first saved topic: the spec failed alone).
 - **Retry ceilings are chosen so leaked rows cannot interfere**: the dead-letter block uses `maxRetries = 50`
   because rows from other blocks stay far below it. Keep that discipline for new counter / revive cases.
 - **`INSERT IGNORE` is never executed in this module.** `insertIgnore`, `claim`, `claimWindow` are only

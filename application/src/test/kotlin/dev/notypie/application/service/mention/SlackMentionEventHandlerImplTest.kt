@@ -17,6 +17,7 @@ import dev.notypie.domain.command.dto.response.Status
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldNotContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -53,7 +54,11 @@ class SlackMentionEventHandlerImplTest :
                 then("parsed command data fields should be correct") {
                     result.channel shouldBe TEST_CHANNEL_ID
                     result.actorId shouldBe TEST_USER_ID
-                    result.appToken shouldBe TEST_BOT_TOKEN
+                }
+
+                then("the body's verification token is accepted but kept nowhere in the parsed command") {
+                    payload["token"] shouldBe TEST_BOT_TOKEN
+                    result.toString() shouldNotContain TEST_BOT_TOKEN
                 }
             }
 

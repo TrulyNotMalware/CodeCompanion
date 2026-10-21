@@ -61,7 +61,7 @@ class SubmissionPipelineCharacterizationTest :
                                 meetingUidRaw = meetingUid.toString(),
                                 requesterId = "U_HOST",
                                 participantUserIdsRaw = " U_A , U_B ,,",
-                                listHandleRaw = TEST_LIST_HANDLE,
+                                listHandle = ResponseReplaceHandle(raw = TEST_LIST_HANDLE),
                             ),
                     )
 
@@ -135,7 +135,7 @@ class SubmissionPipelineCharacterizationTest :
                                 requesterId = "U_HOST",
                                 date = "2099-10-01",
                                 time = "14:30",
-                                listHandleRaw = TEST_LIST_HANDLE,
+                                listHandle = ResponseReplaceHandle(raw = TEST_LIST_HANDLE),
                             ),
                     )
 
