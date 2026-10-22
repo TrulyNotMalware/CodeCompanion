@@ -159,5 +159,14 @@ class AskCommandTest :
                     effects.ephemeral().content shouldBe MessageContent.Text(headline = null, markdown = usage)
                 }
             }
+
+            `when`("the text is only zero-width characters (U+200B, U+FEFF)") {
+                val (result, effects) = run(text = "\u200B\uFEFF", actorRole = UserRole.AI_USER)
+
+                then("it fails with the same usage line instead of posting an empty question") {
+                    result.ok shouldBe false
+                    effects.ephemeral().content shouldBe MessageContent.Text(headline = null, markdown = usage)
+                }
+            }
         }
     })

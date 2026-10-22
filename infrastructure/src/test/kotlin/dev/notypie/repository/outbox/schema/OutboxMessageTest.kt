@@ -14,6 +14,7 @@ import dev.notypie.repository.outbox.Transport
 import dev.notypie.repository.outbox.chainedParts
 import dev.notypie.repository.outbox.toChainHead
 import dev.notypie.schema.createOutboxColumnMap
+import dev.notypie.schema.createOutboxMessage
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.throwables.shouldThrowExactly
 import io.kotest.core.spec.style.BehaviorSpec
@@ -149,6 +150,19 @@ class OutboxMessageTest :
                     head.schemaVersion shouldBe OutboxSchemaVersion.V7
                     single.schemaVersion shouldBe OutboxSchemaVersion.V7
                     single.chainedParts() shouldBe 0
+                }
+
+                then("the schema stamp is not consulted, so the chain payload in a row stamped V2 still counts 2") {
+                    createOutboxMessage(payload = head.payload, schemaVersion = OutboxSchemaVersion.V2)
+                        .chainedParts() shouldBe 2
+                }
+            }
+
+            `when`("a row's payload no longer decodes") {
+                val broken = createOutboxMessage(payload = "{\"message\":")
+
+                then("it reports no chained parts instead of throwing") {
+                    broken.chainedParts() shouldBe 0
                 }
             }
         }

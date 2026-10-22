@@ -421,6 +421,44 @@ class SlackOutboundRendererTest :
                 }
             }
 
+            `when`("render is called on a long line of words and then on a long whitespace run") {
+                val bodies = mutableListOf<String>()
+                every {
+                    slackEventBuilder.simpleTextRequest(
+                        commandDetailType = any(),
+                        headLineText = any(),
+                        commandBasicInfo = any(),
+                        simpleString = capture(bodies),
+                        threadTs = any(),
+                    )
+                } returns stubEvent
+                val words = "words ".repeat(n = 600)
+                val whitespaceRun = "a" + " ".repeat(n = 3_000) + "b"
+
+                listOf(words, whitespaceRun).forEach { prompt ->
+                    renderer.render(message = createAgentQuestionMessage(prompt = prompt), basicInfo = basicInfo)
+                }
+                val (wordPieces, whitespacePieces) = bodies.map { body -> body.lines().drop(n = 1) }
+
+                then("words are cut after a space into quoted pieces within the line limit that rebuild the line") {
+                    wordPieces.size shouldBe 3
+                    wordPieces.forEach { piece ->
+                        piece shouldStartWith "> "
+                        piece.length shouldBeLessThanOrEqual SlackBlockLimits.SECTION_TEXT_BUDGET / 2 + "> ".length
+                    }
+                    wordPieces.dropLast(n = 1).forEach { piece -> piece shouldEndWith " " }
+                    wordPieces.joinToString(separator = "") { piece -> piece.removePrefix(prefix = "> ") } shouldBe
+                        words
+                }
+
+                then("a whitespace-only piece is kept, so the quoted pieces still rebuild the line") {
+                    whitespacePieces.size shouldBe 3
+                    whitespacePieces.joinToString(separator = "") { piece ->
+                        piece.removePrefix(prefix = "> ")
+                    } shouldBe whitespaceRun
+                }
+            }
+
             `when`("render is called on a question broken by Unicode line and paragraph separators") {
                 val body = slot<String>()
                 every {
