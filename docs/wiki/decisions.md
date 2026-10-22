@@ -354,7 +354,7 @@ _type: decision · updated: 2026-10-26_
     처리 전에 ack 하며 아웃박스 우회다(#38 ①). 알려진 한계: 폴백은 한 홉 더 걸린다(폴링 5초, CDC는 즉시, 커넥터 정지 시 stale 스윕
     5~6분); 거의 모든 슬래시 응답 행이 V6이 되므로 V6을 모르는 바이너리(롤백·롤아웃 중 구 레플리카)는 그 행을 `IN_PROGRESS`로 쥔다
     (24시간 상한); `/meetup list`는 목록이 아니라 안내만 DM으로 간다(`MeetingList`는 `ChannelMessage`에 렌더되지 않음, 후속 후보);
-    Messages 탭이 읽기 전용이라 DM에 답할 수는 없다. 안내문의 `<#C>`는 채널 id 멘션이라 봇이 없는 1:1 DM(`D…`)·그룹 DM(`G…`)에서 거절된 경우에는 어색하게 렌더되고 "초대" 안내도 맞지 않는다(그 대화에서 거절될 때만 보인다). 어느 채널 유형이 `not_in_channel`과 `channel_not_found` 중 무엇을 돌려주는지는
+    Messages 탭이 읽기 전용이라 DM에 답할 수는 없다. 안내문의 `<#C>`는 채널 id 멘션이라 봇이 없는 1:1 DM(`D…`)·그룹 DM(`G…`, `C…` 가능성은 미확인 — #49)에서 거절된 경우에는 어색하게 렌더되고 "초대" 안내도 맞지 않는다(그 대화에서 거절될 때만 보인다). 어느 채널 유형이 `not_in_channel`과 `channel_not_found` 중 무엇을 돌려주는지는
     미확인이라 둘 다 처리한다. 상태: 유지. 근거: `service/relay/AGENTS.md`, `impl/command/AGENTS.md`,
     `domain/.../command/outbound/AGENTS.md`, `.omc/plans/b2-not-in-channel-slash-replies.md`(git 미추적).
 
@@ -692,16 +692,29 @@ _type: decision · updated: 2026-10-26_
     해법: `ConversationTarget.kind()`가 id 첫 글자로 `DIRECT`(`D`)·`GROUP`(`G`)·`CHANNEL`을 가르고, `channelRefusedNotice`·`directFallbackOf`는
     DIRECT·GROUP에서 `<#…>` 없이 "그 대화에는 쓸 수 없다 — 봇이 있는 채널에서 다시"로 말한다. 어떤 문구도 봇 DM으로 안내하지 않는다 —
     운영 매니페스트는 메시지 탭이 읽기 전용(`messages_tab_read_only_enabled`)이고 앱은 `app_mention`만 구독하므로 "여기서 물어보라"는 성립하지 않는다
-    (code-reviewer가 잡음; 개발 앱은 DM 탭이 열려 있어 라이브에서 못 걸렀다). `G` id는 그룹 DM과 옛 비공개 채널을 모두 가리키므로 GROUP 문구는
-    "that conversation"이다. `/ask`의 폴백은 `askRefusedNotice`가 "답하지 않았다"를 명시하고 질문을 `>` 인용(이스케이프, 1,500자 상한 —
-    `takeEntitySafe`로 엔티티·서로게이트를 자르지 않음)으로 돌려준다 — 요청자가 봇이 있는 채널에 붙여넣을 수 있게. 한계: 새 워크스페이스의
-    그룹 DM은 `C` id를 받을 수 있어 채널 문구가 나간다(슬래시 `channel_name`의 `mpdm-` 접두사로 가를 수 있지만 호출처 14곳의 시그니처라 보류).
+    (code-reviewer가 잡음; 개발 앱은 DM 탭이 열려 있어 라이브에서 못 걸렀다). `G` id는 그룹 DM과 2021년 3월 전에 만든 비공개 채널을 모두 가리키므로
+    (둘 다 Slack 문서) GROUP 문구는 "that conversation"이다. `/ask`의 폴백은 `askRefusedNotice`가 "답하지 않았다"를 명시하고 질문을 `>` 인용(이스케이프, 1,500자 상한 —
+    `takeEntitySafe`로 엔티티·서로게이트를 자르지 않음)으로 돌려준다 — 요청자가 봇이 있는 채널에 붙여넣을 수 있게. 한계(2026-10-22 정정):
+    그룹 DM이 `C` id를 받는지는 확인되지 않았다(미확인) — Slack 문서에는 `G` id 그룹 DM(레거시 MPIM 객체 예시 `G024BE91L`)과 2021년 3월
+    전에 만든 비공개 채널의 `G` id만 있고(그 뒤 비공개 채널이 `C`인 것은 라이브 `C0CA3FYCAT1`로 확인) `C` id 그룹 DM은 없으며, 라이브는 워크스페이스에 사람이 둘뿐이라 봇 없는 그룹 DM을 만들 수
+    없어 재지 못했다. 받는다면 채널 문구가 나간다. 문서에 정의된 신호는 `conversations.info`의 `is_mpim`(Web API 호출과 읽기 스코프 추가)이다.
+    슬래시 `channel_name`의 `mpdm-` 접두사는 Slack이 "이름은 바뀔 수 있으니 ID에 의존하라"고 하고, 문구를 만드는 호출처 13곳(처음 기록한
+    14곳은 오기)이 채널 이름 없이 id만으로 대상을 만들므로 보류 — 11곳은 `CommandBasicInfo.channel`(아웃박스 payload에 직렬화되는 타입),
+    슬래시 실패 응답(`Command.kt`) 1곳은 `InboundCommand.channel`(여기만 곁에 `channelName`이 있다), 스탠드업 응답 확인 1곳은 모달 메타데이터의
+    채널 id다.
     기각(후속 후보): 폴백이 `AgentQuestion` 자체를 요청자 DM에 실어 턴을 DM 스레드에서 잇는 안 — `DirectReply.content`를 `Text`에서 `MessageContent`로
     넓히고 `U…` 채널 + `thread_ts` 게시를 라이브로 확인해야 한다. 인용 분할: Slack은 U+2028/U+2029를 줄바꿈으로 렌더하고 그 뒤 텍스트는 `>` 밖으로
-    나오지만 Kotlin `lines()`는 CR/LF만 자른다 → `askedBy`·`wrappedForQuote`·멘션 매퍼의 인용 복원·`askRefusedNotice`는 `domain/common/SafeText.kt`의 `splitLineBreaks()`(`Regex("\\R")`, LS·PS·NEL·VT·FF 포함)로 나눈다.
+    나오지만 Kotlin `lines()`는 CR/LF만 자른다 → `askedBy`·멘션 매퍼의 인용 복원·`askRefusedNotice`는 `domain/common/SafeText.kt`의 `splitLineBreaks()`(`Regex("\\R")`, LS·PS·NEL·VT·FF 포함)로 나눈다.
+    `askedBy`는 2026-10-22부터 줄을 `templates/hardWrap`으로 바로 자른다 — 그 전에는 `splitSectionText`가 조각을 `\n`으로 묶은 뒤 다시 나눠서,
+    두 분할을 함께 되돌려야만 테스트가 실패했다. 이때 1,450자를 넘는 줄의 공백뿐인 조각은 버리지 않고 남긴다(전에는 `packLines`가 버렸다) — 대가로 아주 긴 공백 줄이
+    11,000자 본문 한도를 차지해 그 뒤 글이 채널의 인용에서 잘릴 수 있다(Codex 지적; 에이전트가 받는 질문 원문은 그대로).
     Slack 클라이언트는 슬래시 텍스트의 LS/PS를 보내기 전에 LF로 바꾸므로 UI 경로로는 재현되지 않고 API로 게시된 멘션 텍스트만 남는 경로다(심층 방어).
-    빈 프롬프트 판정(`AgentChatContext`·`AskSlashContext`)도 같은 `\R` 분할을 쓰는 `isBlankAcrossLineBreaks()`로 맞춘다 — `isBlank()`는
-    NEL(U+0085, `Cc`)을 공백으로 보지 않아 NEL만 있는 프롬프트가 통과했다(2026-10-20). 제로폭 등 `Cf` 문자는 여전히 비어 있지 않은 것으로 본다.
+    빈 프롬프트 판정(`AgentChatContext`·`AskSlashContext`)은 2026-10-20에 `\R` 분할을 쓰는 `isBlankAcrossLineBreaks()`로 맞췄다 —
+    `isBlank()`는 NEL(U+0085, `Cc`)을 공백으로 보지 않아 NEL만 있는 프롬프트가 통과했다. 2026-10-22에 `isVisiblyBlank()`로 바꿔 `Cc` 제어
+    문자와 `Cf` 서식 문자(`[\p{Cc}\p{Cf}]`, U+E0001 같은 보충 평면 태그 포함)를 지운 뒤 `isBlank()`로 판정한다 — 그 전에는 U+200B나
+    U+0001만 있는 질문도 사이드카로 넘어갔다. `\R` 줄바꿈은 모두 `Cc`이거나 `isBlank`가 공백으로 보는 U+2028·U+2029라 분할 없이도 같다.
+    범주 판정이라 양쪽으로 어긋난다: 글자를 그리는 `Cf`(U+0600–U+0605, U+06DD 등)는 빈 것으로, `Cc`·`Cf` 밖의 보이지 않는 문자(이체 선택자
+    U+FE0F, 한글 채움 문자 U+3164, U+2800)는 텍스트로 본다 — 어느 쪽도 혼자서는 질문이 되지 않아 받아들인다.
 
 ## CI/CD와 공급망
 
@@ -959,7 +972,11 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `SocketModeReceiverTest`; 변이 검사 7건(2026-10-15, 헬퍼가 `Throwable`을 잡게·모든 경계를 `runCatching`으로·L2 분기 제거 등)
 - 대화 종류별 거절 문구·`/ask` 거절 안내·유니코드 줄바꿈 인용(#49): `domain/src/main/kotlin/dev/notypie/domain/command/outbound/{OutboundTargets,DirectReply}.kt`(`ConversationKind`, `kind()`, `askRefusedNotice`), `domain/common/SafeText.kt`(`splitLineBreaks`, `takeEntitySafe`),
   `domain/.../entity/context/form/AskSlashContext.kt`, `infrastructure/.../impl/command/OutboundRenderer.kt`(`askedBy`), `impl/command/slack/SlackMentionMapper.kt`;
-  실측 기록 `.omc/handoffs/2026-10-20-live-slack.md`(git-ignored)
+  실측 기록 `.omc/handoffs/2026-10-20-live-slack.md`(git-ignored); 2026-10-22 정정: Slack 문서 "Conversation object"(2021년 3월 전에 만든 비공개
+  채널은 `G` id, 종류 판정은 `is_private`·`is_mpim`)·레거시 "MPIM object"(예시 `"id": "G024BE91L"`, `"is_mpim": true`)·"Implementing slash commands"(`*_name`은 바뀔 수 있으니 ID에 의존)(2026-10-22 조회),
+  `templates/SlackBlockLimits.kt`(`hardWrap`), `domain/common/SafeText.kt`(`isVisiblyBlank`), JDK 25 `Character.getType`(jshell 2026-10-22:
+  U+200B·U+FEFF·U+E0001·U+0600·U+06DD는 `FORMAT`, U+0001·U+007F·U+009B는 `CONTROL`, U+FE0F는 `Mn`, U+3164는 `Lo`, U+2800은 `So`),
+  스펙 `SafeTextTest`·`AgentChatContextTest`·`AskCommandTest`·`SlackOutboundRendererTest`·`SlackBlockLimitsTest`·`OutboxMessageTest`
 - 남은 응답 핸들 노출·verification token 삭제·아웃박스 V7(#50): `domain/src/main/kotlin/dev/notypie/domain/command/inbound/{InboundCommand,InboundInteraction}.kt`,
   `dto/CommandBasicInfo.kt`, `dto/response/CommandOutput.kt`, `entity/context/form/ParsedSubmissions.kt`, `infrastructure/.../impl/command/SlackInboundMapper.kt`
   (`listHandle()`, `carriesListHandle()`), `SlackInteractionRequestParser.kt`, `impl/command/slack/{InteractionPayload,SlashCommandRequestBody,SlackEventCallBackRequest,SlackMentionMapper}.kt`,

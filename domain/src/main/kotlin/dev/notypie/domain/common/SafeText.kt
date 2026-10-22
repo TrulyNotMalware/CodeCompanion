@@ -2,6 +2,7 @@ package dev.notypie.domain.common
 
 private const val MAX_ENTITY_LENGTH: Int = 5
 private val LINE_BREAKS: Regex = Regex(pattern = "\\R")
+private val INVISIBLE_CHARACTERS: Regex = Regex(pattern = "[\\p{Cc}\\p{Cf}]")
 
 fun String.escapeMarkup(): String =
     replace(oldValue = "&", newValue = "&amp;")
@@ -30,4 +31,4 @@ fun String.takeEntitySafe(maxLength: Int): String {
 
 fun String.splitLineBreaks(): List<String> = split(regex = LINE_BREAKS)
 
-fun String.isBlankAcrossLineBreaks(): Boolean = splitLineBreaks().all { line -> line.isBlank() }
+fun String.isVisiblyBlank(): Boolean = replace(regex = INVISIBLE_CHARACTERS, replacement = "").isBlank()

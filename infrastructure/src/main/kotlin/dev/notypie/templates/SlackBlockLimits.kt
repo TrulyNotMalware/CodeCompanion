@@ -80,16 +80,16 @@ private fun packLines(text: String, chunkBudget: Int): List<String> {
     return chunks.filter { it.isNotBlank() }.ifEmpty { listOf(text.takeSafely(limit = chunkBudget)) }
 }
 
-private fun String.hardWrap(maxLength: Int): List<String> {
+internal fun String.hardWrap(maxLength: Int): List<String> {
     if (length <= maxLength) return listOf(this)
     val pieces = mutableListOf<String>()
     var rest = this
     while (rest.length > maxLength) {
         val window = rest.takeSafely(limit = maxLength)
-        val space = window.lastIndexOf(' ')
-        val cut = (if (space > maxLength / 2) space + 1 else window.length).coerceAtLeast(1)
-        pieces += rest.substring(0, cut)
-        rest = rest.substring(cut)
+        val space = window.lastIndexOf(char = ' ')
+        val cut = (if (space > maxLength / 2) space + 1 else window.length).coerceAtLeast(minimumValue = 1)
+        pieces += rest.substring(startIndex = 0, endIndex = cut)
+        rest = rest.substring(startIndex = cut)
     }
     if (rest.isNotEmpty()) pieces += rest
     return pieces
