@@ -8,7 +8,7 @@ import dev.notypie.domain.common.splitLineBreaks
 import dev.notypie.impl.command.event.SlackEventPayload
 import dev.notypie.templates.SlackBlockLimits
 import dev.notypie.templates.escapeMrkdwn
-import dev.notypie.templates.splitSectionText
+import dev.notypie.templates.hardWrap
 import dev.notypie.templates.truncateSectionText
 
 private const val MAX_QUOTED_LINE_LENGTH: Int = SlackBlockLimits.SECTION_TEXT_BUDGET / 2
@@ -158,15 +158,7 @@ class SlackOutboundRenderer(
         prompt
             .escapeMrkdwn()
             .splitLineBreaks()
-            .flatMap { line -> line.wrappedForQuote() }
+            .flatMap { line -> line.hardWrap(maxLength = MAX_QUOTED_LINE_LENGTH) }
             .joinToString(separator = "\n", prefix = "<@$publisherId> asked:\n") { line -> "> $line" }
             .truncateSectionText(limit = SlackBlockLimits.MESSAGE_BODY_BUDGET)
-
-    private fun String.wrappedForQuote(): List<String> =
-        splitSectionText(
-            text = this,
-            maxSections = Int.MAX_VALUE,
-            balanceCodeFences = false,
-            budget = MAX_QUOTED_LINE_LENGTH,
-        ).flatMap { chunk -> chunk.splitLineBreaks() }
 }
