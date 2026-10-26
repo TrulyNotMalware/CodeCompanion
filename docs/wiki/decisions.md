@@ -665,6 +665,49 @@ _type: decision · updated: 2026-10-26_
     `RescheduleMeetingContextTest`, `OutboundMessageTest`, `SlackOutboundStagerTest`, `ModalTemplateBuilderTest`,
     `SlackInteractionRequestParserTest`, `ViewSubmissionChannelRoutingRegressionTest`.
 
+54. **에이전트 턴은 사이드카 호출 전 구간을 `containFailure`로 가두고, 풀 스레드로 새는 것은 uncaught 처리기가 스레드 이름과 함께 남기며, `BoundedHttp`는 본문 읽기 인터럽트를 `InterruptedException`으로 되돌려 던진다 (2026-10-26, 결정 #48 보강).**
+    `AgentConverseService.converse`의 사이드카 호출 전 구간(`lease.begin()`, `findProviderSessionId`, 컨텍스트 프롬프트, 턴 토큰 발급)은 `containFailure`로 가둔다.
+    `Exception`은 `sessionKey`·`idempotencyKey`를 남기는 ERROR 하나와 `agent.turns{outcome=failed}`(지속 시간·이력 행 없음)로 끝나고, 리스가 없는 턴(멘션, 레저 기록에
+    실패한 `/ask`)만 best-effort `FAILURE_MESSAGE` 스레드 답장을 남긴다. `/ask` 리스 턴은 아무것도 쓰지 않는다 — 여기서 `publishFailure`를 부르면 `settle`과 경합하므로
+    행은 ask 스윕(고아 해제 뒤 재제공, `PENDING`이면 바로 재제공)에 맡긴다. 그래도 풀 스레드까지 새는 것(`Error`, 다시 던진 인터럽트, 사이드카 호출 뒤의 `Exception`)은
+    `AgentTurnExecutor.newThread`가 붙이는 `AGENT_TURN_UNCAUGHT_LOGGER`가 스레드 이름과 함께 ERROR로 남기고 풀이 스레드를 대체한다(릴레이 실행기의
+    `RELAY_UNCAUGHT_ERROR_LOGGER`와 같은 모양). 이유: 이전에는 DB 실패 하나가 답장·메트릭·키가 붙은 로그 없이 stderr 스택만 남기고 사라졌다(리뷰 D-01).
+    같은 날, `BoundedHttp.sendWithinDeadline`은 본문 읽기 중 인터럽트를 `InterruptedException`(플래그 복원, 원인은 그 `IOException`)으로 바꿔 던진다. JDK의
+    `BodyHandlers.ofInputStream` 본문은 버퍼 큐에서 받은 `InterruptedException`을 플래그를 세운 뒤 `IOException`으로 감싸므로, 그대로 다시 던지면 네 호출자
+    (`GoogleOAuthClient` revoke·폼 POST, `GoogleCalendarClient`, NVD·GitHub 어댑터)가 일반 전송 실패로 셌다 — 이미 200을 받은 revoke가 `false`가 되어 수동 삭제 안내
+    DM이 나가고, 캘린더 동기화 시도 하나를 소모(리뷰 H-01). 네 호출자는 이미 `InterruptedException`을 먼저 잡아 되던지므로 바뀌지 않았다.
+    - **대가.** 사이드카 전 실패로 센 `/ask` 런은 스윕이 다시 돌리면 나중에 `completed`로도 세어진다(런 단위 카운터라 `busy`와 같은 성격). 별도 태그는 두지 않았다.
+    - **기각.** ① 리스 턴에서 `publishFailure` 호출 — `settle`과 경합; ② 실행기에 `TaskDecorator`만 추가 — 사이드카 전 구간의 안내·메트릭을 못 만든다.
+    상태: 유지. 근거: `application/.../service/agent/AgentConverseService.kt`, `application/.../configurations/AgentConfiguration.kt`, `infrastructure/.../impl/http/BoundedHttp.kt`,
+    `AgentConverseServiceTest`, `AgentTurnExecutorTest`, `BoundedHttpTest`, `GoogleOAuthClientTest`(루프백 서버에서 본문 읽기 중 인터럽트).
+
+55. **회의 리마인더의 아웃박스 트랜잭션이 일시적으로 실패하면 claim을 `PENDING`으로 돌려주고 다음 틱이 다시 시도한다. 회의가 이미 시작된 리마인더는 보내지 않고 지운다 (2026-10-26).**
+    `MeetingReminderSchedulingService.processReminder`는 claim 뒤의 `runInTx`(참석자별 아웃박스 DM 행 + `markReminderSent`)가 실패하면 예외를 가른다.
+    `TransientDataAccessException`이거나 `CannotCreateTransactionException`이면 `releaseReminder(id, claimToken, now)`로 claim을 돌려주고 WARN을 남긴다. 여기에는 `ConcurrencyFailureException` 전부(락 대기
+    초과·데드락으로 번역되는 `CannotAcquireLockException`/`PessimisticLockingFailureException`, 번역된 MariaDB 1020 `SnapshotIsolationConflictException`)와
+    `QueryTimeoutException`, `TransientDataAccessResourceException`이 든다. `releaseReminder`의 쿼리는 `UPDATE meeting_reminder SET status = 'PENDING',
+    claim_token = NULL, updated_at = :now WHERE id = :id AND status = 'SENDING' AND claim_token = :token`이다. 그 밖의 실패는 전처럼 `markReminderFailed`(`FAILED`)로
+    간다. 이유: `FAILED` 행은 아무것도 다시 처리하지 않는다(`findDueBefore`는 `PENDING`만, `resetStuckSending`은 `SENDING`만 본다). 그래서 데드락이나 락 대기 한 번이
+    리마인더를 영영 잃게 했다(리뷰 CX-01). DM 행은 같은 트랜잭션에서 롤백되므로 되돌려도 중복 발송이 없다. 커밋이 끝난 뒤에 예외가 났다면 행은 이미 `SENT`(토큰 null)라서
+    release의 토큰 CAS가 0행으로 끝난다.
+    - **재시도 상한은 회의 시작 시각이다(리뷰 E-01).** claim 전에 `item.startAt`이 `LocalDateTime.now(clock)`보다 뒤가 아니면, claim하지 않고 `discardReminder(id, 읽은
+      scheduledAt)`로 지우고 WARN(`Discarded meeting reminder after its meeting started`)을 남긴다. 돌려준 행은 매 틱(60초) 다시 시도되다가 회의가 시작되면 지워진다.
+      15분 오프셋이면 최대 약 15회다. 장애 전에 만들어졌거나 `SENDING`에서 리셋된 `PENDING` 행이 회의 시작 뒤에 "starts in N minutes"로 나가던 것도 같은 검사가 막는다.
+      `scheduledAt` 나이에 상한을 두지 않는다 — 돌려준 재시도까지 버린다. `findDueBefore`에 하한을 두지도 않는다 — 하한 밖의 행이 영원히 `PENDING`으로 남는다.
+    - **넛지 수신자는 claim 뒤 세션 락 아래에서 다시 읽는다(리뷰 CX-02).** `StandupSchedulingService.nudgeCandidate`는 스냅샷으로 사전 필터만 하고, `runInTx` 안에서
+      `claimNudge`(locking UPDATE)가 성공하면 `findLockedNudgeRecipients(sessionUid)`(`MANDATORY`, `findLockedBySessionUid` 뒤 lazy 컬렉션)로 sent/answered/skipped를
+      다시 읽어 그 결과의 non-responder에게만 DM을 큐에 넣는다. 남은 사람이 없으면 claim은 그대로 커밋하고 INFO만 남긴다. 그 사이 커밋된 답·Skip은 답변 경로가 같은 세션 락을
+      잡으므로 재읽기에 보인다(H2 핸드셰이크 스펙; MariaDB `innodb_snapshot_isolation` 아래 read view 시점은 미측정).
+    - **기각.** ① 시도 횟수 컬럼(`attempt_count`) + N회 뒤 `FAILED` — 스키마 변경이 필요하고 시작 시각이 이미 자연스러운 상한이다. ② 모든 `DataAccessException`을
+      일시적으로 보는 안 — 무결성 위반 같은 결정적 실패가 시작 시각까지 매분 반복된다. ③ 같은 틱 안의 즉시 재시도 — 락 경합이 풀릴 시간을 주지 못한다.
+    - **남은 것.** 같은 행에서 결정적으로 반복되는 일시적 예외는 시작 시각까지 매분 WARN을 남긴다. 시작 직전에 늦게 나가는 리마인더 문구는 여전히 "starts in <offset>
+      minutes"다. 커넥션 풀 고갈(`CannotCreateTransactionException`, `TransactionException` 계열)은 쓰기 전에 실패하므로 함께 돌려주지만(리뷰 L2), 트랜잭션 도중 연결이 끊긴 `DataAccessResourceFailureException`은 일시적으로 보지 않아 `FAILED`로 간다. 오프셋을 `stuckSendingThresholdMinutes`보다
+      작게 두면 이미 시작한 회의의 행이 lookback(기본 2분) 안에서 다시 만들어졌다 지워질 수 있다(기본 설정에서는 1초 경계 한 번). MariaDB에서 실측하지 않았다.
+    상태: 유지. 근거: `application/.../service/meeting/MeetingReminderSchedulingService.kt`, `application/.../service/standup/StandupSchedulingService.kt`,
+    `infrastructure/.../repository/meeting/{MeetingReminderRepository,MeetingReminderRepositoryImpl,JpaMeetingReminderRepository}.kt`,
+    `infrastructure/.../repository/standup/{StandupRepository,StandupRepositoryImpl}.kt`, `MeetingReminderSchedulingServiceTest`, `MeetingReminderRepositoryImplTest`,
+    `StandupSchedulingServiceTest`, `StandupRepositoryImplTest`.
+
 ## 빌드·런타임
 
 19. **`io.spring.dependency-management` 플러그인을 쓰지 않는다.** 이유: BOM 버전(kotlinx-coroutines 등)을
@@ -1036,6 +1079,13 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   (`dc2b9044` 추가, `90c747ab` 삭제), 스펙 `RescheduleMeetingContextTest`·`OutboundMessageTest`·`SlackOutboundStagerTest`·
   `ModalTemplateBuilderTest`·`SlackInteractionRequestParserTest`·`ViewSubmissionChannelRoutingRegressionTest`; 리뷰 G-01과 검증 레인 V4a
   (2026-10-26, 세션 기록)
+- 에이전트 턴 경계·본문 읽기 인터럽트(#54): `application/src/main/kotlin/dev/notypie/application/service/agent/AgentConverseService.kt`,
+  `application/.../configurations/AgentConfiguration.kt`(`AgentTurnExecutor.newThread`, `AGENT_TURN_UNCAUGHT_LOGGER`), `infrastructure/.../impl/http/BoundedHttp.kt`,
+  스펙 `AgentConverseServiceTest`·`AgentTurnExecutorTest`·`BoundedHttpTest`·`GoogleOAuthClientTest`; 리뷰 D-01·H-01(2026-10-26, 세션 기록)
+- 리마인더 일시 실패 복귀·시작 뒤 폐기·넛지 락 재읽기(#55): `application/src/main/kotlin/dev/notypie/application/service/meeting/MeetingReminderSchedulingService.kt`,
+  `application/.../service/standup/StandupSchedulingService.kt`, `infrastructure/.../repository/meeting/{MeetingReminderRepository,MeetingReminderRepositoryImpl,JpaMeetingReminderRepository}.kt`,
+  `infrastructure/.../repository/standup/{StandupRepository,StandupRepositoryImpl}.kt`, 스펙 `MeetingReminderSchedulingServiceTest`·`MeetingReminderRepositoryImplTest`·
+  `StandupSchedulingServiceTest`·`StandupRepositoryImplTest`; 리뷰 E-01·CX-01·CX-02(2026-10-26, 세션 기록)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

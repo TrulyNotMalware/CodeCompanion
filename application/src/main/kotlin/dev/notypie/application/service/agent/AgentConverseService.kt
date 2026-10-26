@@ -2,6 +2,7 @@ package dev.notypie.application.service.agent
 
 import dev.notypie.application.common.runInTx
 import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
+import dev.notypie.common.containFailure
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AgentConversePayload
@@ -214,34 +215,15 @@ class AgentConverseService(
     }
 
     private fun converse(event: AgentConverseRequestEvent, lease: AgentTurnLease) {
-        if (!lease.begin()) {
-            log.info { "Agent turn is owned or finished elsewhere; not started idempotencyKey=${event.idempotencyKey}" }
-            return
-        }
         val payload = event.payload
         val basicInfo = payload.responseBasicInfo
         val sessionKey =
             listOfNotNull(basicInfo.channel, payload.threadId?.takeIf { it.isNotBlank() }, basicInfo.publisherId)
                 .joinToString(separator = ":")
+        val request = startTurn(event = event, sessionKey = sessionKey, lease = lease) ?: return
 
         val startedAtNanos = System.nanoTime()
-        val result =
-            agentGateway.converse(
-                request =
-                    AgentTurnRequest(
-                        sessionKey = sessionKey,
-                        prompt = payload.prompt,
-                        sessionId = agentSessionRepository.findProviderSessionId(sessionKey = sessionKey),
-                        userId = basicInfo.publisherId,
-                        appendSystemPrompt = contextPrompt(payload = payload),
-                        scopedToken =
-                            scopedTurnTokenCodec?.mint(
-                                userId = basicInfo.publisherId,
-                                sessionKey = sessionKey,
-                                turnId = event.idempotencyKey.toString(),
-                            ),
-                    ),
-            )
+        val result = agentGateway.converse(request = request)
         val durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000L
 
         val written =
@@ -273,6 +255,68 @@ class AgentConverseService(
                 }
             }
         recordMetrics(result = result, durationMs = durationMs, superseded = written == Written.SUPERSEDED)
+    }
+
+    private fun startTurn(
+        event: AgentConverseRequestEvent,
+        sessionKey: String,
+        lease: AgentTurnLease,
+    ): AgentTurnRequest? {
+        containFailure(
+            onFailure = { exception ->
+                failedToStart(event = event, sessionKey = sessionKey, lease = lease, failure = exception)
+            },
+        ) {
+            if (!lease.begin()) {
+                log.info {
+                    "Agent turn is owned or finished elsewhere; not started idempotencyKey=${event.idempotencyKey}"
+                }
+                return null
+            }
+            val payload = event.payload
+            val requesterId = payload.responseBasicInfo.publisherId
+            return AgentTurnRequest(
+                sessionKey = sessionKey,
+                prompt = payload.prompt,
+                sessionId = agentSessionRepository.findProviderSessionId(sessionKey = sessionKey),
+                userId = requesterId,
+                appendSystemPrompt = contextPrompt(payload = payload),
+                scopedToken =
+                    scopedTurnTokenCodec?.mint(
+                        userId = requesterId,
+                        sessionKey = sessionKey,
+                        turnId = event.idempotencyKey.toString(),
+                    ),
+            )
+        }
+        return null
+    }
+
+    private fun failedToStart(
+        event: AgentConverseRequestEvent,
+        sessionKey: String,
+        lease: AgentTurnLease,
+        failure: Exception,
+    ) {
+        meterRegistry.counter(METRIC_TURNS, "outcome", "failed").increment()
+        if (lease !is AgentTurnLease.Unleased) {
+            log.error(failure) {
+                "Agent turn failed before the sidecar call; the ask sweep takes it up again " +
+                    "sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"
+            }
+            return
+        }
+        log.error(failure) {
+            "Agent turn failed before the sidecar call sessionKey=$sessionKey idempotencyKey=${event.idempotencyKey}"
+        }
+        transactionTemplate
+            .runInTx {
+                eventPublisher.publishOne(
+                    event = answerEvent(event = event, headline = RESPONSE_HEADLINE, text = FAILURE_MESSAGE),
+                )
+            }.reported(event = event, what = "failure notice") {
+                "Failed to publish agent failure notice idempotencyKey=${event.idempotencyKey}"
+            }
     }
 
     private fun contextPrompt(payload: AgentConversePayload): String {

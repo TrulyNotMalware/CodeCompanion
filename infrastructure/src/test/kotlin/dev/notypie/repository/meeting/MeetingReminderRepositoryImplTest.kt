@@ -124,6 +124,43 @@ class MeetingReminderRepositoryImplTest
                 }
             }
 
+            given("a reminder whose sender's outbox transaction failed transiently after the claim") {
+                val meeting =
+                    persistMeeting(
+                        name = "released",
+                        startAt = LocalDateTime.of(2031, 2, 8, 15, 0),
+                        attending = listOf("U_REL"),
+                    )
+                arm(meeting = meeting, scheduledAt = Instant.parse("2031-02-08T05:50:00Z"))
+                val reminderId = reminderOf(meeting = meeting)!!.id
+                repository.claimReminder(reminderId = reminderId, claimToken = "token-release", now = now) shouldBe true
+
+                `when`("a stale sender releases it with another token, then its own sender releases it twice") {
+                    val foreign =
+                        inTx {
+                            repository.releaseReminder(reminderId = reminderId, claimToken = "token-other", now = now)
+                        }
+                    val released =
+                        inTx {
+                            repository.releaseReminder(reminderId = reminderId, claimToken = "token-release", now = now)
+                        }
+                    val again =
+                        inTx {
+                            repository.releaseReminder(reminderId = reminderId, claimToken = "token-release", now = now)
+                        }
+
+                    then("only the claim's own token releases it, once, back to a PENDING row the next tick claims") {
+                        foreign shouldBe false
+                        released shouldBe true
+                        again shouldBe false
+                        reminderOf(meeting = meeting)!!.status shouldBe MeetingReminderStatus.PENDING
+                        reminderOf(meeting = meeting)!!.claimToken shouldBe null
+                        repository.claimReminder(reminderId = reminderId, claimToken = "token-next", now = now) shouldBe
+                            true
+                    }
+                }
+            }
+
             given("a PENDING reminder the send-time check found stale") {
                 val meeting =
                     persistMeeting(

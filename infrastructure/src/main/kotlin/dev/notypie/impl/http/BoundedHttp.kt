@@ -37,6 +37,7 @@ private val bodyWatchdog: ScheduledExecutorService =
         Thread(runnable, "http-body-watchdog").apply { isDaemon = true }
     }
 
+@Throws(IOException::class, InterruptedException::class)
 internal fun HttpClient.sendWithinDeadline(
     request: HttpRequest,
     deadline: Duration,
@@ -64,6 +65,10 @@ internal fun HttpClient.sendWithinDeadline(
             body = bytes.decodeToString(),
         )
     } catch (exception: IOException) {
+        if (Thread.currentThread().isInterrupted || exception.cause is InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw InterruptedException("Interrupted while reading the response body").apply { initCause(exception) }
+        }
         if (timedOut.get()) throw BodyTimeoutException(deadline = deadline, cause = exception)
         throw exception
     } finally {

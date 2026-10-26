@@ -190,27 +190,35 @@ open class StandupRepositoryImpl(
     override fun findCollectingSessionsForNudge(now: Instant, nudgeWindowEnd: Instant): List<NudgeCandidateSession> =
         jpaStandupSessionRepository
             .findCollectingForNudge(now = now, nudgeWindowEnd = nudgeWindowEnd)
-            .map { schema ->
-                NudgeCandidateSession(
-                    sessionId = schema.id,
-                    sessionUid = schema.sessionUid,
-                    routineUid = schema.routineUid,
-                    cutoffAt = schema.cutoffAt,
-                    sentMemberIds =
-                        schema.dispatches
-                            .filter { it.dmStatus == DispatchStatus.SENT }
-                            .map { it.userId }
-                            .toSet(),
-                    answeredUserIds = schema.answers.map { it.userId }.toSet(),
-                    skippedUserIds =
-                        schema.dispatches
-                            .filter { it.skippedAt != null }
-                            .map { it.userId }
-                            .toSet(),
-                )
-            }
+            .map { it.toNudgeCandidateSession() }
 
     override fun claimNudge(sessionId: Long): Boolean = jpaStandupSessionRepository.claimNudge(id = sessionId) == 1
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    override fun findLockedNudgeRecipients(sessionUid: UUID): NudgeCandidateSession =
+        jpaStandupSessionRepository
+            .findLockedBySessionUid(sessionUid = sessionUid)
+            .throwIfSchemaNotFound(fieldName = "sessionUid", fieldValue = sessionUid)
+            .toNudgeCandidateSession()
+
+    private fun StandupSessionSchema.toNudgeCandidateSession() =
+        NudgeCandidateSession(
+            sessionId = id,
+            sessionUid = sessionUid,
+            routineUid = routineUid,
+            cutoffAt = cutoffAt,
+            sentMemberIds =
+                dispatches
+                    .filter { it.dmStatus == DispatchStatus.SENT }
+                    .map { it.userId }
+                    .toSet(),
+            answeredUserIds = answers.map { it.userId }.toSet(),
+            skippedUserIds =
+                dispatches
+                    .filter { it.skippedAt != null }
+                    .map { it.userId }
+                    .toSet(),
+        )
 
     override fun replaceSummaryMessageTs(currentMessageTs: String, messageTs: String): Boolean =
         jpaStandupSessionRepository.replaceSummaryMessageTs(

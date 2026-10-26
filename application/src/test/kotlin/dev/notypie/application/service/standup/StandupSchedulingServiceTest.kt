@@ -1,5 +1,6 @@
 package dev.notypie.application.service.standup
 
+import ch.qos.logback.classic.Level
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.outbox.createOutboxRow
 import dev.notypie.application.service.meeting.createH2DataSource
@@ -16,6 +17,7 @@ import dev.notypie.domain.standup.createSessionDispatchDto
 import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.domain.standup.entity.StandupSession
 import dev.notypie.domain.standup.entity.enums.SessionStatus
+import dev.notypie.logging.captureLogs
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.repository.standup.ReadyDispatch
@@ -714,15 +716,16 @@ class StandupSchedulingServiceTest :
                             routineUid = routineUid,
                         ),
                     )
-                every { repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any()) } returns
-                    listOf(
-                        createNudgeCandidateSession(
-                            sessionId = sessionId,
-                            routineUid = routineUid,
-                            cutoffAt = nowInstant.plusSeconds(600L),
-                            sentMemberIds = setOf("U_A"),
-                        ),
+                val candidate =
+                    createNudgeCandidateSession(
+                        sessionId = sessionId,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A"),
                     )
+                every { repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any()) } returns
+                    listOf(candidate)
+                every { repo.findLockedNudgeRecipients(sessionUid = candidate.sessionUid) } returns candidate
                 every { repo.listActiveRoutines() } returns listOf(routine)
                 every { repo.claimDispatch(dispatchId = dispatchId, claimToken = any(), now = any()) } answers {
                     jdbc.update(
@@ -891,6 +894,7 @@ class StandupSchedulingServiceTest :
                 } returns listOf(candidate)
                 every { repo.listActiveRoutines() } returns listOf(routine)
                 every { repo.claimNudge(sessionId = 7L) } returns true
+                every { repo.findLockedNudgeRecipients(sessionUid = candidate.sessionUid) } returns candidate
                 every { outboxRepo.save(any()) } answers { firstArg() }
 
                 service.nudgeNonResponders()
@@ -952,6 +956,7 @@ class StandupSchedulingServiceTest :
                 } returns listOf(candidate)
                 every { repo.listActiveRoutines() } returns listOf(routine)
                 every { repo.claimNudge(sessionId = 10L) } returns true
+                every { repo.findLockedNudgeRecipients(sessionUid = candidate.sessionUid) } returns candidate
                 every { outboxRepo.save(any()) } answers { firstArg() }
 
                 service.nudgeNonResponders()
@@ -969,6 +974,102 @@ class StandupSchedulingServiceTest :
                             port.toRow(message = any(), basicInfo = match { it.channel == userId })
                         }
                     }
+                }
+            }
+
+            `when`("one member answers and another skips between the nudge read and the claim") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val port = stubPort()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = port,
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val snapshot =
+                    createNudgeCandidateSession(
+                        sessionId = 12L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A", "U_B", "U_C"),
+                    )
+
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(snapshot)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimNudge(sessionId = 12L) } returns true
+                every { repo.findLockedNudgeRecipients(sessionUid = snapshot.sessionUid) } returns
+                    snapshot.copy(answeredUserIds = setOf("U_A"), skippedUserIds = setOf("U_C"))
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                service.nudgeNonResponders()
+
+                then("the recipients are re-read under the claim's lock and only the member still owing is nudged") {
+                    verifyOrder {
+                        repo.claimNudge(sessionId = 12L)
+                        repo.findLockedNudgeRecipients(sessionUid = snapshot.sessionUid)
+                        outboxRepo.save(any())
+                    }
+                    verify(exactly = 1) { outboxRepo.save(any()) }
+                    verify(exactly = 1) { port.toRow(message = any(), basicInfo = match { it.channel == "U_B" }) }
+                    listOf("U_A", "U_C").forEach { userId ->
+                        verify(exactly = 0) {
+                            port.toRow(message = any(), basicInfo = match { it.channel == userId })
+                        }
+                    }
+                }
+            }
+
+            `when`("every member the read saw as silent has answered or skipped once the claim holds the lock") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val status = mockk<TransactionStatus>(relaxed = true)
+                val transactionManager = stubTransactionManager(status = status)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = transactionManager,
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val snapshot =
+                    createNudgeCandidateSession(
+                        sessionId = 13L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A", "U_B"),
+                    )
+
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(snapshot)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimNudge(sessionId = 13L) } returns true
+                every { repo.findLockedNudgeRecipients(sessionUid = snapshot.sessionUid) } returns
+                    snapshot.copy(answeredUserIds = setOf("U_A"), skippedUserIds = setOf("U_B"))
+
+                val infos =
+                    captureLogs(loggerName = StandupSchedulingService::class.java.name) {
+                        service.nudgeNonResponders()
+                    }.messagesAt(level = Level.INFO)
+
+                then("the claim is committed, nothing is enqueued, and an INFO line records it") {
+                    verify(exactly = 1) { repo.claimNudge(sessionId = 13L) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                    verify(exactly = 1) { transactionManager.commit(status) }
+                    verify(exactly = 0) { status.setRollbackOnly() }
+                    infos shouldBe
+                        listOf(
+                            "Standup nudge claimed with no non-responder left under the session lock: " +
+                                "sessionUid=${snapshot.sessionUid} routineUid=$routineUid",
+                        )
                 }
             }
 

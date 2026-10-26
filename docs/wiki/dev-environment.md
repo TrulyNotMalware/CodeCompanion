@@ -375,7 +375,7 @@ could not be checked" 페이지로 끝난다(코드에서 추론, 미측정). 2�
 - `run`은 **빌드된 jar를 손으로 띄우는** 스크립트다(`./run [-e local|dev|prod] <jar>`). 환경별 힙·GC(local/dev G1, prod ZGC) ·
   JDWP 디버그 포트(기본 5005, 인증 없음, `127.0.0.1`에만 바인드) · devtools · prod 확인 프롬프트 · JMX(기본 9010, 인증 없음,
   `127.0.0.1`에만 바인드, RMI 포트를 레지스트리 포트와 같게 고정해 포트 하나짜리 SSH 터널로 접근)를 붙이고 `-Dspring.profiles.active`를
-  세팅한다. `slack-live`는 받지 않으므로 `bootRun --args`로 띄운다. 컨테이너 배포는 이 스크립트를 쓰지 않는다.
+  세팅한다. `-Duser.timezone=Asia/Seoul`도 항상 붙여(컨테이너 `ENTRYPOINT`와 같은 값) UTC 호스트에서도 회의 알림이 어긋나지 않게 한다. `slack-live`는 받지 않으므로 `bootRun --args`로 띄운다. 컨테이너 배포는 이 스크립트를 쓰지 않는다.
 
 ## 함정
 

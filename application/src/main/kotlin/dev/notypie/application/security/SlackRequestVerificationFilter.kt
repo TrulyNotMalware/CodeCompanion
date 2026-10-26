@@ -54,14 +54,14 @@ class SlackRequestVerificationFilter(
             }
             val origin = request.getHeader(HttpHeaders.ORIGIN)
             if (origin != null) {
-                val requestPath = normalizedPath(request = request)
+                val loggedPath = normalizedPath(request = request).neutralizeControlCharacters()
                 val loggedOrigin =
                     origin
                         .neutralizeControlCharacters()
                         .take(n = MAX_LOGGED_ORIGIN_LENGTH)
                 log.warn {
                     "Rejected browser-originated request while Slack signature verification is disabled: " +
-                        "path=$requestPath origin=$loggedOrigin"
+                        "path=$loggedPath origin=$loggedOrigin"
                 }
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
                 return
@@ -71,6 +71,7 @@ class SlackRequestVerificationFilter(
         }
 
         val requestPath = normalizedPath(request = request)
+        val loggedPath = requestPath.neutralizeControlCharacters()
         val headerCheck =
             signatureVerifier.checkHeaders(
                 requestTimestamp = request.getHeader(SlackHeaders.REQUEST_TIMESTAMP),
@@ -78,7 +79,7 @@ class SlackRequestVerificationFilter(
                 toleranceSeconds = appConfig.api.requestTimestampToleranceSeconds,
             )
         if (!headerCheck.valid) {
-            log.warn { "Rejected Slack request headers: reason=${headerCheck.reason} path=$requestPath" }
+            log.warn { "Rejected Slack request headers: reason=${headerCheck.reason} path=$loggedPath" }
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
             return
         }
@@ -86,7 +87,7 @@ class SlackRequestVerificationFilter(
         val cachedRequest =
             CachedBodyHttpServletRequest.cacheWithinLimit(request = request)
                 ?: run {
-                    log.warn { "Rejected oversized Slack request: path=$requestPath" }
+                    log.warn { "Rejected oversized Slack request: path=$loggedPath" }
                     response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE)
                     return
                 }
@@ -100,7 +101,7 @@ class SlackRequestVerificationFilter(
             )
 
         if (!verification.valid) {
-            log.warn { "Rejected Slack request: reason=${verification.reason} path=$requestPath" }
+            log.warn { "Rejected Slack request: reason=${verification.reason} path=$loggedPath" }
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
             return
         }

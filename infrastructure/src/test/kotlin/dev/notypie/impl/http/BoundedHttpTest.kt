@@ -6,6 +6,16 @@ import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
+import io.mockk.every
+import io.mockk.mockk
+import java.io.IOException
+import java.io.InputStream
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
@@ -15,6 +25,77 @@ class BoundedHttpTest :
     BehaviorSpec({
         fun httpDate(instant: Instant): String =
             DateTimeFormatter.RFC_1123_DATE_TIME.format(instant.atOffset(ZoneOffset.UTC))
+
+        fun clientWhoseBodyRead(fails: () -> Nothing): HttpClient {
+            val stream =
+                object : InputStream() {
+                    override fun read(): Int = fails()
+                }
+            val response = mockk<HttpResponse<InputStream>> { every { body() } returns stream }
+            return mockk { every { send(any(), any<HttpResponse.BodyHandler<InputStream>>()) } returns response }
+        }
+
+        fun HttpClient.readBody(): Result<BoundedResponse> =
+            runCatching {
+                sendWithinDeadline(
+                    request = HttpRequest.newBuilder(URI.create("http://127.0.0.1/")).build(),
+                    deadline = Duration.ofSeconds(5L),
+                    maxBodyBytes = 64,
+                )
+            }
+
+        given("sendWithinDeadline over a body read that fails") {
+            `when`("the read is interrupted as the JDK reports it: flag set, an IOException wrapping the interrupt") {
+                val readFailure = IOException(InterruptedException())
+                val outcome =
+                    clientWhoseBodyRead {
+                        Thread.currentThread().interrupt()
+                        throw readFailure
+                    }.readBody()
+                val keptInterrupt = Thread.interrupted()
+
+                then("it throws InterruptedException with the flag set, not an IOException a caller counts as failed") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>().cause shouldBeSameInstanceAs
+                        readFailure
+                    keptInterrupt shouldBe true
+                }
+            }
+
+            `when`("the IOException wraps an InterruptedException but the flag was cleared") {
+                val outcome = clientWhoseBodyRead { throw IOException(InterruptedException()) }.readBody()
+                val keptInterrupt = Thread.interrupted()
+
+                then("it throws InterruptedException and sets the flag again") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                }
+            }
+
+            `when`("the thread is interrupted and the IOException has no cause") {
+                val outcome =
+                    clientWhoseBodyRead {
+                        Thread.currentThread().interrupt()
+                        throw IOException("closed")
+                    }.readBody()
+                val keptInterrupt = Thread.interrupted()
+
+                then("it throws InterruptedException with the flag set") {
+                    outcome.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
+                }
+            }
+
+            `when`("the read fails with an IOException on a thread that is not interrupted") {
+                val readFailure = IOException("connection reset")
+                val outcome = clientWhoseBodyRead { throw readFailure }.readBody()
+                val keptInterrupt = Thread.interrupted()
+
+                then("the same IOException propagates and the flag stays clear") {
+                    outcome.exceptionOrNull() shouldBeSameInstanceAs readFailure
+                    keptInterrupt shouldBe false
+                }
+            }
+        }
 
         given("parseRetryAfter over delta-seconds") {
             listOf(

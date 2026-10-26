@@ -570,6 +570,22 @@ class SlackRequestVerificationFilterTest :
                 }
             }
 
+            `when`("a rejected request path carries percent-encoded NEL, line separator and bidi override") {
+                val rejections =
+                    captureLogs(loggerName = SlackRequestVerificationFilter::class.java.name) {
+                        filter().doFilter(
+                            unsignedRequest(requestUri = "/api/slack/x%C2%85a%E2%80%A8b%E2%80%AEc"),
+                            MockHttpServletResponse(),
+                            CountingFilterChain(),
+                        )
+                    }.messagesAt(level = Level.WARN).filter { it.startsWith("Rejected Slack request headers") }
+
+                then("the one WARN shows each of them as ? in the path") {
+                    rejections.size shouldBe 1
+                    rejections.single() shouldContain "path=/api/slack/x?a?b?c"
+                }
+            }
+
             `when`("a real secret is configured and a correctly signed request carries an Origin header") {
                 val response = MockHttpServletResponse()
                 val chain = CountingFilterChain()

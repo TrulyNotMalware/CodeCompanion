@@ -158,6 +158,64 @@ class AppConfigBindingTest :
             }
         }
 
+        given("outbox.retention properties") {
+            fun rootCauseOf(properties: Map<String, String>): String {
+                val failure = shouldThrow<BindException> { bind(properties = properties) }
+                return checkNotNull(generateSequence<Throwable>(failure) { it.cause }.last().message)
+            }
+
+            `when`("none are set") {
+                val retention = bind(properties = mapOf("slack.app.api.token" to "xoxb")).outbox.retention
+
+                then("delivered rows are kept 14 days, deleted 1000 at a time") {
+                    retention.days shouldBe 14L
+                    retention.batchSize shouldBe 1_000
+                }
+            }
+
+            `when`("both keys are set at their accepted bounds") {
+                val lowest =
+                    bind(
+                        properties =
+                            mapOf(
+                                "slack.app.outbox.retention.days" to "1",
+                                "slack.app.outbox.retention.batch-size" to "1",
+                            ),
+                    ).outbox.retention
+                val highest =
+                    bind(
+                        properties =
+                            mapOf(
+                                "slack.app.outbox.retention.days" to "3650",
+                                "slack.app.outbox.retention.batch-size" to "10000",
+                            ),
+                    ).outbox.retention
+
+                then("they bind") {
+                    lowest.days shouldBe 1L
+                    lowest.batchSize shouldBe 1
+                    highest.days shouldBe 3_650L
+                    highest.batchSize shouldBe 10_000
+                }
+            }
+
+            listOf(
+                Triple("days", "0", "outbox.retention.days must be between 1 and 3650"),
+                Triple("days", "-1", "outbox.retention.days must be between 1 and 3650"),
+                Triple("days", "3651", "outbox.retention.days must be between 1 and 3650"),
+                Triple("batch-size", "0", "outbox.retention.batch-size must be between 1 and 10000"),
+                Triple("batch-size", "-5", "outbox.retention.batch-size must be between 1 and 10000"),
+                Triple("batch-size", "10001", "outbox.retention.batch-size must be between 1 and 10000"),
+            ).forEach { (key, value, expected) ->
+                `when`("$key is $value") {
+                    then("binding fails and names the property and its range") {
+                        val properties = mapOf("slack.app.outbox.retention.$key" to value)
+                        rootCauseOf(properties = properties) shouldContain expected
+                    }
+                }
+            }
+        }
+
         given("agent.retention properties") {
             fun rootCauseOf(properties: Map<String, String>): String {
                 val failure = shouldThrow<BindException> { bind(properties = properties) }

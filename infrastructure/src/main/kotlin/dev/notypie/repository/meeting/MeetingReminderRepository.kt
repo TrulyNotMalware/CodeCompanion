@@ -54,6 +54,8 @@ interface MeetingReminderRepository {
         now: Instant,
     ): Boolean
 
+    fun releaseReminder(reminderId: Long, claimToken: String, now: Instant): Boolean
+
     fun resetStuckReminders(olderThan: Instant, now: Instant): Int
 
     fun findDueBefore(before: Instant, limit: Int): List<ReadyReminder>

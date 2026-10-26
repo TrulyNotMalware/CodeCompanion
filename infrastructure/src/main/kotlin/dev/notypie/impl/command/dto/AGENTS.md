@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # infrastructure/impl/command/dto
 
@@ -13,18 +13,15 @@ message, and `users.info` (`SlackUserInfoDto`), read by `templates/SlackUserEmai
 | File | Description |
 |------|-------------|
 | `SlackUserInfoDto.kt` | `SlackUserInfoDto(ok, error: String? = null, user: SlackUserInfo? = null)`, `SlackUserInfo(id, profile: SlackUserInfoProfile)`, `SlackUserInfoProfile(email: String? = null)`: only what the e-mail lookup reads. Every other key of the `users.info` body is ignored (Jackson 3's `FAIL_ON_UNKNOWN_PROPERTIES` defaults to `false`, in Boot's mapper and the shared `jsonMapper` alike), and an `ok = false` body (`{"ok": false, "error": "…"}`, no `user`) decodes, so its `error` code can be logged |
-| `SlackUserProfileDto.kt` | `SlackUserProfileDto(ok: Boolean, profile: Profile)`; `Profile` maps `title`, `phone`, `skype`, `real_name`, `real_name_normalized`, `display_name`, `display_name_normalized`, `fields: Map<String, Field>`, `status_*`, `avatar_hash`, `email` (`String? = null`), `first_name`, `last_name`, `image_24` … `image_512`, `status_text_canonical`; `Field(value, alt)` |
+| `SlackUserProfileDto.kt` | `SlackUserProfileDto(ok: Boolean, error: String? = null, profile: Profile? = null)`; `Profile(realName, displayName, imageSize24)` (`real_name`, `display_name`, `image_24`, each `String? = null`): only what `SlackUserProfileResolver` reads. Every other key is ignored, and an `ok = false` body (`{"ok": false, "error": "user_not_found"}`, HTTP 200, no `profile`) decodes, so its `error` code can be logged |
 
 ## For AI Agents
 
 ### Working In This Directory
-- **Every `Profile` property except `statusEmojiDisplayInfo` and `email` is non-null with no default.** Slack omits
-  fields depending on scope, account and workspace settings (`first_name` / `last_name` and `fields` can be absent),
-  and a missing non-null constructor parameter fails the whole decode: `SlackUserProfileResolver` then degrades to the
-  bare `<@id>` mention. `email` is `String? = null` since 2026-10-13 because Slack leaves it out without
-  `users:read.email` or when the workspace's Email Display setting hides it; as `String` it failed every such decode
-  with `KotlinInvalidNullException` (measured with the shared `jsonMapper` and through the `restRequester` bean). When
-  another field turns up missing, make it nullable here rather than widening the scope request.
+- **`Profile` models only the three keys the resolver reads, all nullable.** A required field the resolver never reads
+  made Slack's `ok = false` answer (no `profile`) fail the whole decode, so the resolver logged ERROR with a stack and
+  lost the error code (fixed 2026-10-26). When the resolver starts reading another key, add it here nullable with a
+  default rather than widening the scope request.
 - Do not read the e-mail from this DTO: Slack documents `users:read.email` for `users.info` / `users.list`, not for
   `users.profile.get`, so the identity check reads `SlackUserInfoDto` instead.
 - The call sites are `RestRequester.safeGet(uri = "users.profile.get?user={user}" | "users.info?user={user}",
@@ -40,9 +37,9 @@ message, and `users.info` (`SlackUserInfoDto`), read by `templates/SlackUserEmai
 ./gradlew :infrastructure:test --tests 'dev.notypie.templates.*'
 ```
 No spec lives in this package. Decoding is covered from the consumers: `templates/SlackUserProfileResolverTest`
-decodes a `users.profile.get` body without `email` with the shared `jsonMapper`, `templates/SlackUserEmailResolverTest`
+decodes a `users.profile.get` `ok = false` body, a minimal `ok = true` body and a full body with the shared `jsonMapper`, `templates/SlackUserEmailResolverTest`
 decodes `users.info` bodies (with unmodelled keys, without `email`, blank, `ok = false`), and `:application`'s
-`ApplicationContextSmokeTest` decodes an email-less profile body through Boot's mapper on the `restRequester` bean.
+`ApplicationContextSmokeTest` decodes a profile body through Boot's mapper on the `restRequester` bean.
 
 ### Common Patterns
 - Snake-case wire names mapped explicitly with `@field:JsonProperty`; camelCase Kotlin properties.

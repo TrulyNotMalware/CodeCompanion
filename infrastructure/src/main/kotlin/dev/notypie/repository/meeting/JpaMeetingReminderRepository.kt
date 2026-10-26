@@ -105,6 +105,22 @@ interface JpaMeetingReminderRepository : JpaRepository<MeetingReminderSchema, Lo
         value = """
             UPDATE meeting_reminder
             SET status = 'PENDING', claim_token = NULL, updated_at = :now
+            WHERE id = :id AND status = 'SENDING' AND claim_token = :token
+        """,
+        nativeQuery = true,
+    )
+    fun releaseClaim(
+        @Param("id") id: Long,
+        @Param("token") token: String,
+        @Param("now") now: Instant,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            UPDATE meeting_reminder
+            SET status = 'PENDING', claim_token = NULL, updated_at = :now
             WHERE status = 'SENDING' AND updated_at < :olderThan
         """,
         nativeQuery = true,

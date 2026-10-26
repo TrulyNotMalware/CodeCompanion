@@ -221,6 +221,30 @@ class GithubReleaseSourceAdapterTest :
             }
         }
 
+        given("a list with a draft release and a published one") {
+            respond =
+                jsonResponse(
+                    status = 200,
+                    body =
+                        """
+                        [
+                          {"id": 501, "name": "v9.0", "tag_name": "v9.0", "draft": true,
+                           "body": "embargoed notes", "published_at": null},
+                          {"id": 502, "name": "v8.0", "tag_name": "v8.0", "draft": false, "prerelease": true,
+                           "body": "public notes", "published_at": "2026-01-01T00:00:00Z"}
+                        ]
+                        """.trimIndent(),
+                )
+
+            `when`("fetch") {
+                val events = adapter(token = "gh-token").fetch(topic = githubTopic())
+
+                then("only the published release is collected, prereleases included") {
+                    events.map { it.externalId } shouldBe listOf("502")
+                }
+            }
+        }
+
         given("a release whose name is null") {
             respond =
                 jsonResponse(

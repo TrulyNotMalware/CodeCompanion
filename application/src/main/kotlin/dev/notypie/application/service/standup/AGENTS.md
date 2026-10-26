@@ -56,9 +56,14 @@ is written back onto the session row once the relay has posted it.
   with `"enqueue failed until cutoff: <cause>"` instead of "session closed before the DM was sent", so the real
   reason survives. A row that keeps failing is retried every tick until cutoff and takes a batch slot each time.
 - **Nudge claim inside the enqueue transaction.** Non-responders are `sentMemberIds - answeredUserIds -
-  skippedUserIds` (a member who clicked Skip is not reminded). `claimNudge(sessionId)` is taken only when they
-  exist, in the same `runInTx` as the DMs; a failed enqueue rolls `nudged_at` back and the next tick retries
-  while the session is still in the nudge window (`cutoffAt > now`), which bounds the retries.
+  skippedUserIds` (a member who clicked Skip is not reminded). `claimNudge(sessionId)` is taken only when the
+  unlocked `findCollectingSessionsForNudge` read shows some, in the same `runInTx` as the DMs; a failed enqueue
+  rolls `nudged_at` back and the next tick retries while the session is still in the nudge window
+  (`cutoffAt > now`), which bounds the retries. That read is only a cheap filter: right after the claim (whose
+  `UPDATE` holds the session row lock) the transaction re-reads the three sets with `findLockedNudgeRecipients`
+  and DMs the non-responders of that read. Answers and Skips take the same lock first, so one that committed
+  after the unlocked read is seen, and one that comes later waits for the nudge to commit. When nobody is left,
+  the claim still commits, nothing is enqueued and an INFO line says so.
   `standup.nudge.offsetMinutes <= 0` disables the phase entirely.
 - **Summary marker.** `summary_message_ts` holds `outbox:<eventId>` until the relay posts; the write-back
   `UPDATE` is keyed on that marker, but `standup_session` has no index on `summary_message_ts` (V4), so the

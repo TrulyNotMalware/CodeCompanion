@@ -1,5 +1,6 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.configurations.conditions.OnCveEnabled
 import dev.notypie.application.service.cve.CveTopicBootstrap
 import dev.notypie.application.service.cve.ai.AiSummarizer
 import dev.notypie.application.service.cve.ai.CveSummaryPromptBuilder
@@ -21,8 +22,8 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.OutboundMessagePort
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.micrometer.core.instrument.MeterRegistry
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
 import org.springframework.transaction.PlatformTransactionManager
 import java.time.Clock
@@ -37,7 +38,7 @@ private const val COLLECTOR_TICK_MINUTES = 5L
 private val log = KotlinLogging.logger {}
 
 @Configuration
-@ConditionalOnProperty(prefix = "slack.app.cve", name = ["enabled"], havingValue = "true")
+@Conditional(OnCveEnabled::class)
 class CveConfiguration {
     @Bean
     fun cveTopicBootstrap(

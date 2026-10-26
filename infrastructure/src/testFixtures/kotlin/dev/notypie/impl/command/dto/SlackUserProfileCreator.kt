@@ -6,31 +6,7 @@ fun createProfile(
     displayName: String = "testuser",
     realName: String = "Test User",
     imageSize24: String = "https://example.com/img24.png",
-): Profile =
-    Profile(
-        title = "",
-        phone = "",
-        skype = "",
-        realName = realName,
-        realNameNormalized = realName,
-        displayName = displayName,
-        displayNameNormalized = displayName,
-        fields = emptyMap(),
-        statusText = "",
-        statusEmoji = "",
-        statusExpiration = 0,
-        avatarHash = "abc123",
-        email = "test@example.com",
-        firstName = "Test",
-        lastName = "User",
-        imageSize24 = imageSize24,
-        imageSize32 = "https://example.com/img32.png",
-        imageSize48 = "https://example.com/img48.png",
-        imageSize72 = "https://example.com/img72.png",
-        imageSize192 = "https://example.com/img192.png",
-        imageSize512 = "https://example.com/img512.png",
-        statusTextCanonical = "",
-    )
+): Profile = Profile(realName = realName, displayName = displayName, imageSize24 = imageSize24)
 
 fun createUserProfileResponseJson(displayName: String = "testuser", email: String? = "test@example.com"): String {
     val emailField = email?.let { "\"email\": \"$it\", " }.orEmpty()
@@ -54,6 +30,11 @@ fun createUserProfileResponseJson(displayName: String = "testuser", email: Strin
         }
         """.trimIndent()
 }
+
+fun createMinimalUserProfileResponseJson(displayName: String = "testuser"): String =
+    """{"ok": true, "profile": {"display_name": "$displayName"}}"""
+
+fun createUserProfileErrorJson(error: String = "user_not_found"): String = """{"ok": false, "error": "$error"}"""
 
 fun createUserInfoResponseJson(userId: String = TEST_USER_ID, email: String? = "test@example.com"): String {
     val emailField = email?.let { "\"email\": \"$it\", " }.orEmpty()

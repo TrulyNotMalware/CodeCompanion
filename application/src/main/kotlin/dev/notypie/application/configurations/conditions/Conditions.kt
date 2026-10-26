@@ -50,6 +50,13 @@ class OnGoogleCalendarDisabled : Condition {
             .calendar.google.enabled
 }
 
+class OnCveEnabled : Condition {
+    override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
+        context.environment
+            .extractAppConfig()
+            .cve.enabled
+}
+
 class OnApplicationEventPublisher : Condition {
     override fun matches(context: ConditionContext, metadata: AnnotatedTypeMetadata) =
         context.environment
