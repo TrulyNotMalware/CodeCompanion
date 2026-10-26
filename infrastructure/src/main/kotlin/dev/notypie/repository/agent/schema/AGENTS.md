@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # infrastructure/repository/agent/schema
 
@@ -19,8 +19,9 @@ JPA entities for the agent lane.
 - **A ledger row changes only through the native statements in `AgentAskTurnRepository`.** The entity is the
   insert shape and the read shape; nothing loads it, mutates it and saves it. Its timestamps carry no
   `@CreationTimestamp` / `@UpdateTimestamp` because the caller's clock writes them (`../AGENTS.md`).
-- **`providerSessionId` is the only mutable column** (`var`); everything on the history row is `val` —
-  the table is append-only by construction.
+- **No column of `AgentSessionSchema` or `AgentTurnHistorySchema` is mutable** (every property is `val`);
+  `provider_session_id` changes only through the native upsert in `JpaAgentSessionRepository`, and the
+  history table is append-only by construction.
 - **`outcome` is stored by enum name with `length = 16`**; new `AgentTurnOutcome` constants must fit and
   must never be renamed once rows exist.
 - **Token counts are nullable** because the sidecar's `done.usage` block is optional; treat `null` as

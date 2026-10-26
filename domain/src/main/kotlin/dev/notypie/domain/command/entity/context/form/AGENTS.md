@@ -77,11 +77,10 @@ paths. Button contexts extend `ReactionContext`; submission leaves extend `Submi
 Specs (all under `domain/src/test/kotlin/dev/notypie/domain/command/context/`): `MeetingContextTest`
 (for `RequestMeetingContext` + `MeetingFormInput`), `ApprovalCallbackContextTest`,
 `MeetingApprovalResponseContextTest`, `RescheduleMeetingContextTest`, `AddParticipantContextTest`,
-`StandupFillContextTest`, `StandupSlashContextTest`; the submission side is `ParsedSubmissionsTest` (parse factories) plus
+`StandupFillContextTest`, `StandupSlashContextTest`, `CancelMeetingContextTest`; the submission side is `ParsedSubmissionsTest` (parse factories) plus
 `SubmissionContextsTest` (all seven leaves + `IgnoredSubmissionContext`), with the full path in
 `../SubmissionPipelineCharacterizationTest` and routing in `../parsers/SubmissionRouterTest`. Not covered:
-`CancelMeetingContext`, `RequestCveLatestContext`, the three
-`RequestCve*Context`s — add a spec when touching them. Build interactions with
+`RequestCveLatestContext` and the three `RequestCve*Context`s — add a spec when touching them. Build interactions with
 `InboundInteractionInputCreator` (`testFixtures`), extend `AbstractReactionCommandContextTest`.
 
 ### Common Patterns

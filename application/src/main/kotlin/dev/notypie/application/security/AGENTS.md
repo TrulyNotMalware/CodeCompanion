@@ -125,10 +125,11 @@ Everything that decides whether a request is allowed to reach a handler. Two ind
 
 ### Testing Requirements
 ```bash
-./gradlew :application:test --tests '*Slack*Verif*' --tests '*Retry*' --tests '*ScopedTurnToken*'
+./gradlew :application:test --tests '*Slack*Verif*' --tests '*Retry*' --tests '*ScopedTurnToken*' --tests '*McpTurnTokenFilter*'
 ```
 Specs: `SlackSignatureVerifierTest`, `SlackRequestVerificationFilterTest`, `SlackRetryDeduplicatorTest`,
-`CachedBodyHttpServletRequestTest`, `mcp/ScopedTurnTokenCodecTest`. Deduplicator and codec specs pin a
+`CachedBodyHttpServletRequestTest`, `mcp/ScopedTurnTokenCodecTest`, `mcp/McpTurnTokenFilterTest` (address gate only — token rejection on a loopback
+request is not pinned, review C-05). Deduplicator and codec specs pin a
 `Clock` — do so for any new time-bounded behaviour (freshness window, TTL, token expiry) and add a
 negative case (expired / tampered signature), not just the happy path.
 End-to-end MCP auth can be probed against a running app with `./scripts/mcp-smoke.sh`.

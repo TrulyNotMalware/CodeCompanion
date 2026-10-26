@@ -1,6 +1,6 @@
 # DDD와 계층 원칙 — 도메인 순수성과 전송 중립성
 
-_type: decision · updated: 2026-10-07_
+_type: decision · updated: 2026-10-26_
 
 > 도메인 순수성은 규율이 아니라 **빌드 제약과 가드 테스트**로 강제하고, 전송 중립성은 **각 단계가 그 자체로
 > 이득을 낼 때만** 점진적으로 밀어붙인다.
@@ -67,8 +67,12 @@ _type: decision · updated: 2026-10-07_
 - 애그리거트는 자기 것만 수정하고 다른 애그리거트에 미치는 효과는 이벤트로 위임한다. 이벤트 리스너가 DB를
   쓰고 응답을 스테이징할 때는 `@Transactional`을 명시해 **역할 쓰기와 응답 아웃박스가 한 트랜잭션**이 되게
   한다 — 호출자 트랜잭션에 암묵적으로 기대다 응답이 유실될 뻔한 사례가 Phase 10에 있다.
-- `@Transactional`은 Repository `Impl`에 건다. 스케줄러·비동기 경로처럼 앰비언트 트랜잭션이 없는 곳은
-  `TransactionTemplate.runInTx`로 경계를 명시한다.
+- 트랜잭션 경계는 명령 진입점이 연다 — 슬래시 서비스 메서드의 `@Transactional`, 멘션·인터랙션 핸들러의
+  `TransactionTemplate`/`PlatformTransactionManager`. 위 리스너의 `@Transactional`도 서비스 메서드에 있다. 답장 아웃박스 행은
+  `BEFORE_COMMIT` 리스너가 그 트랜잭션 안에서만 쓰므로, 서비스에서 `@Transactional`을 빼면 답장이 조용히 사라진다. 그 밖의
+  DB 접근은 Repository `Impl`의 `@Transactional`이 경계이고, 스케줄러·비동기 경로처럼 앰비언트 트랜잭션이 없는 곳은
+  `TransactionTemplate.runInTx`로 경계를 명시한다(2026-10-26 정정 — 전에는 "`Impl`에 건다"만 적어 서비스의 경계와 어긋났다.
+  결정 #24, [coding-style.md](coding-style.md)의 트랜잭션 행).
 
 ## 의도적으로 남긴 누수 — 드라이브바이로 고치지 말 것
 
@@ -98,6 +102,8 @@ _type: decision · updated: 2026-10-07_
 - `infrastructure/AGENTS.md`(렌더 1회·모달 예외·아웃박스 계약), `domain/AGENTS.md`, `AGENTS.md`
 - `Refactor.md`(로컬 전용 계획 문서) — 방향성, §1 목표 아키텍처, Phase 3 포트 소유권, Phase 5 정직화, Phase 10, §5 코딩 원칙
 - `README.md` — Architecture 절
+- `application/src/main/kotlin/dev/notypie/application/service/relay/SlackMessageRelayServiceImpl.kt`(`saveOutboxMessage`),
+  `service/{mention,interaction}/*HandlerImpl.kt`, 슬래시 서비스·리스너의 `@Transactional`(2026-10-26 grep)
 
 ## 관련 페이지
 

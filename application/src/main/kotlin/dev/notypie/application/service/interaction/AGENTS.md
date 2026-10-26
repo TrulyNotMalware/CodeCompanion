@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
 
 # application/service/interaction
 
@@ -33,7 +33,7 @@ persisting anything.
   executed. If a new element style needs handling, extend the `isPrimary` / `isCanceled` helpers in
   `infrastructure/impl/command/slack/`, not this branch.
 - **The interaction transaction is the boundary `BEFORE_COMMIT` listeners attach to:**
-  `MeetingServiceImpl.updateParticipantAttendance` and `SlackMessageRelayServiceImpl.saveOutboxMessage`.
+  `MeetingServiceImpl.createNewMeeting` and `updateParticipantAttendance`, and `SlackMessageRelayServiceImpl.saveOutboxMessage`.
   `CommandExecutor` re-throws, so a failed intent resolution rolls back the decision *and* the outbox row.
   Every command keeps that atomicity; only the three meeting writes leave it.
 - **Modals open after the interaction commits** (`ViewOpenDeferral.afterBoundary` inside `MeetingWriteDeferral.collecting`), so
@@ -48,9 +48,14 @@ persisting anything.
   answers the host with "Please try again later" and HTTP 200; an exception while staging that reply
   surfaces as a 500 although the interaction's own rows are committed. Do not wrap this method in
   `@Transactional` again: a proxy transaction would enclose the deferred writes.
-- `applicationEventPublisher.publishEvent(result)` (marked `FIXME Event publisher`) publishes the raw
-  `CommandOutput`; no `@EventListener` currently consumes it, so removing it is safe once the FIXME is
-  resolved, but check listeners first.
+- `applicationEventPublisher.publishEvent(result)` publishes the raw `CommandOutput` of an ok
+  `InteractionCommand` (never of the legacy `ReplaceTextResponseCommand` path or a result with `ok = false`; a notice
+  failure returns `ok = true` with `status = FAILED`, so it is published and the meeting is still saved).
+  `MeetingServiceImpl.createNewMeeting` (`@TransactionalEventListener(phase = BEFORE_COMMIT)`) consumes the
+  `RequestMeetingContextResult` and is the only path that saves a modal-created meeting: removing the publish
+  still compiles, but a `/meetup` submission would then commit only its reply rows (the Approval DMs when a notice
+  is required, and the success reply) and write no `meetings` row. `SlackInteractionHandlerImplTest` pins the publish (ok, and ok with `status = FAILED`) and the two cases that must
+  not publish.
 
 ### Testing Requirements
 ```bash

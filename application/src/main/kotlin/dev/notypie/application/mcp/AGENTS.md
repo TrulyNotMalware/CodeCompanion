@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # application/mcp
 
@@ -49,8 +49,8 @@ Both classes are explicit `@Bean`s in `configurations/McpServerConfiguration`, w
   already rejected anonymous requests and the transport provider's `contextExtractor` in
   `McpServerConfiguration` is what puts the token into the context. Fix the wiring, do not relax the
   gate.
-- `DomainReadTools.clock` is not passed by the bean method, so `list_meetings` uses the system zone
-  while `CommandRoleResolver` / `OpsStatusService` / `AgentUsageReportService` are the same beans chat uses. Keep
+- `DomainReadTools.clock` has no default and `McpServerConfiguration` passes the context `Clock` bean, so
+  `list_meetings` shares the zone of every other time decision, while `CommandRoleResolver` / `OpsStatusService` / `AgentUsageReportService` are the same beans chat uses. Keep
   `renderReport()` and `renderGrants()` shared so `@bot status` / `@bot usage` / `@bot roles` and the tools never diverge; the same goes for
   `renderSubscriptions()` (`/subscriptions`) and `renderLatest()` (`/latest`).
 - The CVE render methods do not check `appConfig.cve.enabled` (their event listeners do), so each CVE tool

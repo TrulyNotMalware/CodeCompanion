@@ -20,9 +20,11 @@ _type: architecture · updated: 2026-10-26_
    `OutboundMessageStager.stage`에 넘기고, `SlackOutboundStager`는 모달을 제외한 모든 가족을 **미렌더** 상태로
    `OutboundMessageEnqueued`(`isInternal = true`)에 감싼다. `EventPublisher.publishEvent` → Spring 이벤트 버스 →
    `SlackMessageRelayServiceImpl.saveOutboxMessage`(`@TransactionalEventListener(phase = BEFORE_COMMIT)`)가
-   `OutboundMessagePort.toRow`로 row를 만들어 `MessageOutboxRepository.save`. 진입 핸들러
-   (`MeetingServiceImpl.handleMeeting`, `SlackMentionEventHandlerImpl.handleEvent`,
-   `SlackInteractionHandlerImpl.handleInteraction`)가 `@Transactional`이므로 도메인 쓰기와 row가 함께 커밋된다.
+   `OutboundMessagePort.toRow`로 row를 만들어 `MessageOutboxRepository.save`. 진입점이 트랜잭션을 열므로 도메인 쓰기와
+   row가 함께 커밋된다 — 슬래시 서비스(`MeetingServiceImpl.handleMeeting` 등)는 메서드의 `@Transactional`,
+   `SlackMentionEventHandlerImpl.handleEvent`는 `commandExecutor.execute`만 감싼 `TransactionTemplate`,
+   `SlackInteractionHandlerImpl.handleInteraction`은 `PlatformTransactionManager.getTransaction`으로 직접 연 트랜잭션(모든
+   `Throwable`에 롤백)이다. 두 핸들러는 역할을 그 트랜잭션 밖에서 해석한다.
    - **리스너는 활성 트랜잭션이 있어야 동작한다.** `fallbackExecution`이 기본(false)이라 트랜잭션 밖에서 publish
      하면 이벤트가 조용히 버려진다. Codex 리뷰 1라운드의 "DM never sent"가 정확히 이 사고였다(`Handoff.md`).
      트랜잭션이 없는 곳(executor 스레드, 스케줄러)은 `TransactionTemplate.runInTx { }` 안에서 publish 하거나
@@ -37,7 +39,8 @@ _type: architecture · updated: 2026-10-26_
    `CommandBasicInfo.forOutbound(publisherId, channel)`로 합성한다(전송은 봇 토큰으로 인증한다). DM은
    별도 타입이 아니라 `channel = userId`인 `ChannelMessage`/`Approval`로 표현한다.
    - `runInTx`(`TransactionTemplateExt.kt`)는 `Exception`을 `Result.failure`로 바꾸고 rollback-only를 찍는다(`Error`는 롤백 뒤 전파). 호출자는
-     `Result`를 보고 실패 감사(`markDispatchFailed` 등)를 **별도 트랜잭션**에서 기록한다.
+     `Result`를 보고 실패(`StandupSchedulingService`의 `recordDispatchFailure`, `MeetingReminderSchedulingService`의
+     `releaseReminder`/`markReminderFailed` 등)를 **별도 트랜잭션**에서 기록한다.
 
 ## 렌더는 배송 시점에 정확히 한 번, 모달만 예외
 
@@ -207,16 +210,23 @@ _type: architecture · updated: 2026-10-26_
 
 | 패턴 | 술어 | 구현 |
 |---|---|---|
-| claim-token CAS | claim: `... SET status='SENDING', claim_token=:token WHERE status='PENDING'`, 완료/실패: `WHERE status='SENDING' AND claim_token=:token` | `JpaSessionDispatchRepository`(standup DM), `JpaMeetingReminderRepository`, `JpaCveEventRepository`(summarize) |
+| claim-token CAS | claim: `... SET status='SENDING', claim_token=:token WHERE status='PENDING'`, claim을 끝내는 완료·실패·반환: `WHERE status='SENDING' AND claim_token=:token`(스탠드업 DM의 실패는 claim을 롤백하고 `PENDING` 행에 사유만 적는다 — 아래) | `JpaSessionDispatchRepository`(standup DM), `JpaMeetingReminderRepository`, `JpaCveEventRepository`(summarize) |
 | `INSERT IGNORE` once-per-window ledger | 유니크 키 + `INSERT IGNORE`, 반환 1이면 claim | `JpaAgendaDispatchRepository.claimAgenda(agenda_date)`, `JpaCveCollectLedgerRepository`(topic_id, window_start), `JpaCveDeliveryRepository`(event_id, user_id) |
 | once-only stamp | `WHERE nudged_at IS NULL AND status='COLLECTING'` / `WHERE status='COLLECTING'` | `JpaStandupSessionRepository.claimNudge`, `markSummarized` |
 
-- claim 토큰이 붙은 이유: `markDispatchFailed`가 **다른 tick의** claim을 덮어쓸 수 있다는 Codex 3라운드 지적.
-  이후 모든 CAS 술어가 토큰을 함께 검사한다(`Handoff.md`). 4라운드는 `claim_token`에 마이그레이션이 없어 prod
+- claim 토큰이 붙은 이유: 당시 스탠드업 실패 기록 `markDispatchFailed`(#26에서 사라졌다 — 아래 트랜잭션 구조)가 **다른 tick의**
+  claim을 덮어쓸 수 있다는 Codex 3라운드 지적. 이후 claim을 끝내는 완료·실패·반환 CAS 술어는 토큰을 함께 검사한다
+  (`Handoff.md`; stuck 리셋은 나이로만 고른다). 4라운드는 `claim_token`에 마이그레이션이 없어 prod
   (`ddl-auto: none`)에서 깨질 뻔한 지적 — 새 컬럼은 반드시 `V*` 스크립트가 따라가야 한다.
-- 트랜잭션 구조(`StandupSchedulingService.processDispatch`): claim은 자체 트랜잭션으로 커밋 → 메시지 빌드 +
-  `outboxRepository.save` + `markDispatchSent`를 한 트랜잭션(`markDispatchSent`가 no-op이면 `error()`로 롤백:
-  복구가 먼저 리셋한 경우) → 실패 시 `markDispatchFailed`는 새 트랜잭션. `CveNotificationDispatcher`는 claim과
+- 트랜잭션 구조(`StandupSchedulingService.processDispatch`, 2026-10-06 #26부터): claim(`claimDispatch`) + 메시지 빌드 +
+  `outboxRepository.save` + `markDispatchSent`가 `runInTx` **하나**다(`markDispatchSent`가 no-op이면 `error()`로 롤백). 실패하면
+  claim까지 롤백돼 행은 `PENDING`으로 남고, `recordDispatchFailure`가 별도 트랜잭션(리포지토리 `Impl`의 `@Transactional`,
+  `containFailure`로 감쌈)에서 그 `PENDING` 행에 `failure_reason`만 적는다. 상태를 바꾸지 않으므로 다음 틱이 다시 시도하고, 컷오프가
+  지나거나 세션이 닫히면 `markDispatchSkipped`가 `FAILED`로 은퇴시키며 남은 사유를 "skipped: enqueue failed until cutoff: …"로 적는다.
+  그 전에는 claim이 따로 커밋되고 `markDispatchFailed`가 새 트랜잭션에서 `FAILED`를 남겼다. 넛지(`nudgeCandidate`)도 `runInTx`
+  하나다: `claimNudge`(once-only stamp)가 이기면 같은 트랜잭션에서 `findLockedNudgeRecipients`로 세션 락 아래 sent/answered/skipped를
+  다시 읽어 남은 non-responder에게만 DM 행을 쓰고(남은 사람이 없으면 claim만 커밋, 결정 #55), 실패하면 claim도 롤백돼 다음 틱이
+  다시 시도한다. `CveNotificationDispatcher`는 claim과
   outbox save를 한 트랜잭션에 넣는다(claim 쪽 `@Transactional`이 REQUIRED라 join) — "저장 안 된 배송을 ledger가
   기록"하는 일을 막는다.
 - 아웃박스 자체의 다중 인스턴스 안전은 같은 claim-token 패턴이다. 토큰이 별도 컬럼 대신 `attempt_count`이고,
@@ -395,6 +405,11 @@ _type: architecture · updated: 2026-10-26_
   `infrastructure/src/main/kotlin/dev/notypie/impl/command/AGENTS.md`(dispatch 시간 상한 산식);
   Slack SDK 1.51.0 소스 `SlackHttpClient.buildOkHttpClient`, `MethodsClientImpl`(stats 경로의 `Long.valueOf`,
   `TeamIdCache`); spring-web 7.0.9 `JdkClientHttpRequest`(read timeout이 본문까지 적용)
+- 2026-10-26 확인: `application/.../service/{mention/SlackMentionEventHandlerImpl,interaction/SlackInteractionHandlerImpl}.kt`(진입점 경계),
+  `service/standup/StandupSchedulingService.kt`(`processDispatch`, `recordDispatchFailure`, `nudgeCandidate`),
+  `infrastructure/.../repository/standup/{StandupRepositoryImpl,JpaSessionDispatchRepository}.kt`(`recordFailure`·`markSkipped`·`markSent`
+  술어), `StandupSchedulingServiceTest`("the claim runs inside the enqueue transaction and rolls back instead of ending in FAILED",
+  "the recipients are re-read under the claim's lock and only the member still owing is nudged")
 - `README.md`(Event-Driven Architecture), `infrastructure/AGENTS.md`, `application/AGENTS.md`,
   `application/src/main/resources/AGENTS.md`; git 미추적 근거 문서 `Handoff.md`(Phase 2, Codex 리뷰 표), `Refactor.md`(8b·9)
 

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-21 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-26 -->
 
 # application/service
 
@@ -50,9 +50,13 @@ that the relay lane dispatches.
   `configurations/`. The `PENDING → IN_PROGRESS` CAS in `MessageOutboxRepository.claimPending` is the
   single source of truth, so racing pollers cannot double-dispatch. Never dispatch a row you did not
   claim.
-- **Scheduler split.** Add the cron/fixed-rate annotation to the thin `*Scheduler`, put the logic in
-  `*SchedulingService`, and unit-test the service. Keep jobs short — the shared scheduler pool is 4 threads.
-  The sweeps and purges keep trigger and logic in one class instead (`relay/OutboxRecoveryScheduler`,
+- **Scheduled jobs.** Logic may live with its `@Scheduled` method when the class exposes a public entry point
+  for specs — a once-function or a public tick (`relay/PollingMessageProcessor.pollPending`,
+  `cve/collector/CveCollector.tick`, `cve/ai/CveSummaryWorker.tick`,
+  `cve/notification/CveNotificationDispatcher.immediateTick` / `digestTick`). The thin `*Scheduler` + service
+  split (`standup`, `meeting` reminder and daily agenda, `calendar` sync) is for ticks whose phases must fail
+  independently: the scheduler wraps each phase in `containFailure` (decision #56). Keep jobs short — the shared
+  scheduler pool is 4 threads. The sweeps and purges keep trigger and logic in one class (`relay/OutboxRecoveryScheduler`,
   `relay/OutboxRetentionScheduler`, `agent/AgentAskThreadStarter`, `agent/AgentRetentionScheduler`,
   `calendar/GoogleOAuthStateRetentionScheduler`): the `@Scheduled`
   method is a thin trigger around the failure containment (per table inside `AgentRetentionScheduler.purgeOnce`, and inside `GoogleOAuthStateRetentionScheduler.purgeOnce`), and

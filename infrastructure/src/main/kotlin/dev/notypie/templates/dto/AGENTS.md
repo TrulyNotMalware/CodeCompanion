@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # infrastructure/templates/dto
 
@@ -12,8 +12,8 @@ checkbox/radio option, and `TimeScheduleAlertContents` carries the schedule-noti
 | File | Description |
 |------|-------------|
 | `LayoutBlocks.kt` | `LayoutBlocks(interactionStates: List<States> = [], template: List<LayoutBlock>)` — what every `SlackTemplateBuilder` method returns; `InteractionLayoutBlock(interactiveObjects: List<States>, layout: LayoutBlock)`; `InteractiveObject(state: States, element: BlockElement)` |
-| `CheckBoxOptions.kt` | `CheckBoxOptions(text, description = "", isMarkDown = true)`; consumed by `ModalElementBuilder.checkboxElements` / `radioButtonElements` and `ModalBlockBuilder.checkBoxesBlock` |
-| `TimeScheduleAlertContents.kt` | `TimeScheduleAlertContents(title = "Time Schedule Notice", description = <three-line default copy>, startTime: LocalDateTime, host: String, rejectReasons = RejectReason.entries.map { it.showMessage }.toSet())`; input to `SlackTemplateBuilder.simpleScheduleNoticeTemplate` |
+| `CheckBoxOptions.kt` | `CheckBoxOptions(text, description = "")`; consumed by `ModalElementBuilder.checkboxElements` / `radioButtonElements` and `ModalBlockBuilder.checkBoxesBlock` |
+| `TimeScheduleAlertContents.kt` | `TimeScheduleAlertContents(title = "Time Schedule Notice", description = <three-line default copy>, startTime: LocalDateTime, host: String, rejectReasons = RejectReason.entries.map { it.showMessage }.toSet())`; input to `SlackTemplateBuilder.timeScheduleNoticeTemplate`, which only `ModalTemplateBuilderTest` calls |
 
 ## For AI Agents
 
@@ -23,10 +23,13 @@ checkbox/radio option, and `TimeScheduleAlertContents` carries the schedule-noti
   DSL (`LayoutBlocksDsl`) and by `ModalTemplateBuilderTest`. Do not rely on it for routing.
 - **This package imports `impl/command/slack/States`** and the Slack SDK model (`LayoutBlock`,
   `BlockElement`). That is the only place `templates` touches the wire-DTO package — keep it that way.
-- **The default strings in `TimeScheduleAlertContents` are user-visible copy** (the meeting notice tells
-  participants attendance is auto-processed after 10 minutes). Change wording here, not in the builder.
-- `CheckBoxOptions.description` is optional and `isMarkDown` selects `mrkdwn` vs `plain_text` for the
-  option label; the builders never validate Slack's 75-char option-text limit.
+- **`TimeScheduleAlertContents` is test-only today**: `timeScheduleNoticeTemplate` is called by no production
+  path (the meeting notice goes through `simpleScheduleNoticeTemplate`, which takes the domain
+  `TimeScheduleInfo`), so its default strings are not sent to Slack.
+- `CheckBoxOptions.description` is optional and always rendered as `plain_text`; the option label is `mrkdwn`
+  or `plain_text` by the `isMarkDown` parameter of `ModalElementBuilder.checkboxElements` /
+  `ModalBlockBuilder.checkBoxesBlock` (default `true`; `radioButtonElements` is fixed `true`).
+  The builders never validate Slack's 75-char option-text limit.
 
 ### Testing Requirements
 ```bash

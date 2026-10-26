@@ -101,7 +101,6 @@ class SlackInteractionHandlerImpl(
 
     private fun execute(command: Command<*>) {
         val result = commandExecutor.execute(command = command)
-        // FIXME Event publisher
         if (command is InteractionCommand) result.takeIf { it.ok }?.let { applicationEventPublisher.publishEvent(it) }
     }
 
