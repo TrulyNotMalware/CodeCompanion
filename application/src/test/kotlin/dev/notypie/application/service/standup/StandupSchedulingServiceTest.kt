@@ -924,6 +924,89 @@ class StandupSchedulingServiceTest :
                 }
             }
 
+            `when`("one member skipped, one answered after skipping, and two neither answered nor skipped") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val port = stubPort()
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = port,
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val candidate =
+                    createNudgeCandidateSession(
+                        sessionId = 10L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A", "U_SKIP", "U_BOTH", "U_D"),
+                        answeredUserIds = setOf("U_BOTH"),
+                        skippedUserIds = setOf("U_SKIP", "U_BOTH"),
+                    )
+
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(candidate)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+                every { repo.claimNudge(sessionId = 10L) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                service.nudgeNonResponders()
+
+                then("only the two members who neither answered nor skipped are nudged") {
+                    verify(exactly = 1) { repo.claimNudge(sessionId = 10L) }
+                    verify(exactly = 2) { outboxRepo.save(any()) }
+                    listOf("U_A", "U_D").forEach { userId ->
+                        verify(exactly = 1) {
+                            port.toRow(message = any(), basicInfo = match { it.channel == userId })
+                        }
+                    }
+                    listOf("U_SKIP", "U_BOTH").forEach { userId ->
+                        verify(exactly = 0) {
+                            port.toRow(message = any(), basicInfo = match { it.channel == userId })
+                        }
+                    }
+                }
+            }
+
+            `when`("every member who received the prompt skipped it") {
+                val repo = mockk<StandupRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service =
+                    StandupSchedulingService(
+                        standupRepository = repo,
+                        outboxRepository = outboxRepo,
+                        outboundMessagePort = stubPort(),
+                        transactionManager = stubTransactionManager(),
+                        clock = clock,
+                        appConfig = AppConfig(),
+                    )
+                val candidate =
+                    createNudgeCandidateSession(
+                        sessionId = 11L,
+                        routineUid = routineUid,
+                        cutoffAt = nowInstant.plusSeconds(600L),
+                        sentMemberIds = setOf("U_A", "U_B"),
+                        answeredUserIds = emptySet(),
+                        skippedUserIds = setOf("U_A", "U_B"),
+                    )
+
+                every {
+                    repo.findCollectingSessionsForNudge(now = any(), nudgeWindowEnd = any())
+                } returns listOf(candidate)
+                every { repo.listActiveRoutines() } returns listOf(routine)
+
+                service.nudgeNonResponders()
+
+                then("the nudge is NOT claimed and no DM is sent") {
+                    verify(exactly = 0) { repo.claimNudge(sessionId = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
             `when`("every member who received the prompt has answered") {
                 val repo = mockk<StandupRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)

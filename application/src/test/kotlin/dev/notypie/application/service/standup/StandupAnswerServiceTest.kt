@@ -2,6 +2,7 @@ package dev.notypie.application.service.standup
 
 import dev.notypie.domain.command.DefaultEventQueue
 import dev.notypie.domain.command.createRecordStandupAnswerEvent
+import dev.notypie.domain.command.createRecordStandupSkipEvent
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CommandEvent
@@ -229,6 +230,117 @@ class StandupAnswerServiceTest :
 
                 then("the answer is stored and there is no message to send") {
                     verify(exactly = 0) { stager.stage(message = any(), basicInfo = any()) }
+                }
+            }
+        }
+
+        given("recordSkip") {
+            val now = Instant.parse("2026-05-01T02:00:00Z")
+            val notice = MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1700000000.000600")
+            val updateNotice = StandupAnswerConfirmation.UpdateNotice(ref = notice)
+
+            fun serviceOf(repo: StandupRepository, stager: OutboundMessageStager, eventPublisher: EventPublisher) =
+                StandupAnswerService(
+                    standupRepository = repo,
+                    outboundStager = stager,
+                    eventPublisher = eventPublisher,
+                    clock = Clock.fixed(now, ZoneOffset.UTC),
+                )
+
+            fun updateTo(text: String): OutboundMessage.UpdateMessage =
+                OutboundMessage.UpdateMessage(
+                    ref = notice,
+                    content = MessageContent.Text(headline = null, markdown = text),
+                    detailType = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                )
+
+            fun repoSkipping(result: AnswerRecordResult): StandupRepository {
+                val repo = mockk<StandupRepository>()
+                every { repo.recordSkip(sessionUid = any(), userId = any(), skippedAt = any()) } returns result
+                return repo
+            }
+
+            fun stubbedStager(): OutboundMessageStager {
+                val stager = mockk<OutboundMessageStager>()
+                every { stager.stage(message = any(), basicInfo = any()) } returns
+                    mockk<SendSlackMessageEvent>(relaxed = true)
+                return stager
+            }
+
+            `when`("the session is still collecting") {
+                val repo = repoSkipping(result = AnswerRecordResult.RECORDED)
+                val stager = stubbedStager()
+                val eventPublisher = mockk<EventPublisher>(relaxed = true)
+                val event = createRecordStandupSkipEvent(userId = "U_STANDUP", confirmation = updateNotice)
+
+                serviceOf(repo = repo, stager = stager, eventPublisher = eventPublisher).recordSkip(event = event)
+
+                then("the repository records the skip with the service clock timestamp and no answer") {
+                    verify(exactly = 1) {
+                        repo.recordSkip(sessionUid = event.payload.sessionUid, userId = "U_STANDUP", skippedAt = now)
+                    }
+                    verify(exactly = 0) {
+                        repo.recordAnswer(sessionUid = any(), userId = any(), responses = any(), submittedAt = any())
+                    }
+                }
+
+                then("the DM prompt is folded into the skipped notice, which points at /standup answer") {
+                    verify(exactly = 1) {
+                        stager.stage(
+                            message =
+                                updateTo(
+                                    text =
+                                        "Standup skipped for today. " +
+                                            "You can still answer with `/standup answer` in the routine's channel before the cutoff.",
+                                ),
+                            basicInfo =
+                                CommandBasicInfo.forOutbound(
+                                    publisherId = "U_STANDUP",
+                                    channel = "D_NOTICE",
+                                    idempotencyKey = event.idempotencyKey,
+                                ),
+                        )
+                    }
+                    verify(exactly = 1) { stager.stage(message = any(), basicInfo = any()) }
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+            }
+
+            `when`("the session already closed") {
+                val stager = stubbedStager()
+
+                serviceOf(
+                    repo = repoSkipping(result = AnswerRecordResult.SESSION_CLOSED),
+                    stager = stager,
+                    eventPublisher = mockk(relaxed = true),
+                ).recordSkip(event = createRecordStandupSkipEvent(confirmation = updateNotice))
+
+                then("the DM prompt is folded into the closed notice and never claims the skip was recorded") {
+                    verify(exactly = 1) {
+                        stager.stage(message = updateTo(text = "This standup has already closed."), basicInfo = any())
+                    }
+                    verify(exactly = 1) { stager.stage(message = any(), basicInfo = any()) }
+                }
+            }
+
+            `when`("the session does not exist") {
+                val stager = stubbedStager()
+
+                serviceOf(
+                    repo = repoSkipping(result = AnswerRecordResult.SESSION_NOT_FOUND),
+                    stager = stager,
+                    eventPublisher = mockk(relaxed = true),
+                ).recordSkip(event = createRecordStandupSkipEvent(confirmation = updateNotice))
+
+                then("the DM prompt is folded into a notice saying nothing was recorded") {
+                    verify(exactly = 1) {
+                        stager.stage(
+                            message =
+                                updateTo(text = "This standup could no longer be found, so nothing was recorded."),
+                            basicInfo = any(),
+                        )
+                    }
+                    verify(exactly = 1) { stager.stage(message = any(), basicInfo = any()) }
                 }
             }
         }

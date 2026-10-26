@@ -113,6 +113,10 @@ fun timePickerField(time: LocalTime, format: String) =
         rawValue = time.format(DateTimeFormatter.ofPattern(format)),
     )
 
+fun unselectedTimePickerField() = inboundField(kind = InboundFieldKind.TIME, isSelected = false, rawValue = "")
+
+fun toggleField(isSelected: Boolean = false) = inboundField(kind = InboundFieldKind.TOGGLE, isSelected = isSelected)
+
 fun multiUsersField(userName: String = TEST_USER_NAME, maximumSequence: Int = 0) =
     inboundField(
         kind = InboundFieldKind.USERS,

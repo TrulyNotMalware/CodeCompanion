@@ -39,6 +39,7 @@ sealed interface MessageContent {
         val members: List<RoutineMemberDto>,
         val answers: List<StandupAnswerDto>,
         val questions: List<String>,
+        val skippedUserIds: Set<String> = emptySet(),
     ) : MessageContent
 
     data class AgentQuestion(

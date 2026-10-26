@@ -10,6 +10,7 @@ class SessionDispatch(
     val dmSentAt: Instant? = null,
     val dmStatus: DispatchStatus = DispatchStatus.PENDING,
     val failureReason: String? = null,
+    val skippedAt: Instant? = null,
 ) {
     init {
         validate(className = this.javaClass.simpleName) {

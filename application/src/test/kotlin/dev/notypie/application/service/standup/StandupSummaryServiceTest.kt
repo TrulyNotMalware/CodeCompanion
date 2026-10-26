@@ -12,6 +12,7 @@ import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createRoutineMemberDto
+import dev.notypie.domain.standup.createSessionDispatchDto
 import dev.notypie.domain.standup.createStandupAnswerDto
 import dev.notypie.domain.standup.createStandupSessionDto
 import dev.notypie.domain.standup.entity.enums.SessionStatus
@@ -37,6 +38,7 @@ import io.mockk.verifyOrder
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
@@ -120,6 +122,7 @@ class StandupSummaryServiceTest :
                                     members = summary.members,
                                     answers = summary.answers,
                                     questions = summary.questions,
+                                    skippedUserIds = summary.skippedUserIds,
                                 ).template
                         val texts = blocks.map { it.shouldBeInstanceOf<SectionBlock>().text.text }
                         blocks.size shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_MAX_BLOCKS
@@ -198,6 +201,82 @@ class StandupSummaryServiceTest :
                             .single()
                     response.length shouldBe SUMMARY_MEMBER_RESPONSE_CHARS
                     response.endsWith("…") shouldBe true
+                }
+            }
+        }
+
+        given("a cutoff for a session where members skipped the prompt") {
+            val repo = mockk<StandupRepository>()
+            val outboxRepo = mockk<MessageOutboxRepository>()
+            val port = mockk<OutboundMessagePort>()
+            val sessionUid = UUID.randomUUID()
+            val routineUid = UUID.randomUUID()
+            val skippedAt = Instant.parse("2026-05-01T01:10:00Z")
+            val session =
+                createStandupSessionDto(
+                    sessionId = 12L,
+                    sessionUid = sessionUid,
+                    routineUid = routineUid,
+                    dispatches =
+                        listOf(
+                            createSessionDispatchDto(id = 1L, userId = "U_SKIP", skippedAt = skippedAt),
+                            createSessionDispatchDto(id = 2L, userId = "U_BOTH", skippedAt = skippedAt),
+                            createSessionDispatchDto(id = 3L, userId = "U_SILENT"),
+                        ),
+                    answers = listOf(createStandupAnswerDto(userId = "U_BOTH", responses = listOf("shipped"))),
+                )
+            val staged = slot<OutboundMessage>()
+            every { repo.findSessionForSummary(sessionUid = sessionUid) } returns session
+            every { repo.getRoutine(routineUid = routineUid) } returns
+                createRoutineDto(
+                    routineUid = routineUid,
+                    members = listOf("U_SKIP", "U_BOTH", "U_SILENT").map { createRoutineMemberDto(userId = it) },
+                    questions = listOf("Yesterday?"),
+                )
+            every { port.toRow(message = capture(staged), basicInfo = any()) } returns
+                createOutboxRow(eventId = "EVT-12")
+            every { outboxRepo.save(any<OutboxMessage>()) } answers { firstArg() }
+            every { repo.markSessionSummarized(sessionId = 12L, messageTs = "outbox:EVT-12") } returns true
+
+            `when`("the summary is posted") {
+                StandupSummaryService(
+                    standupRepository = repo,
+                    outboxRepository = outboxRepo,
+                    outboundMessagePort = port,
+                    transactionManager = stubTransactionManager(),
+                ).postSummary(
+                    event =
+                        StandupCutoffEvent(
+                            sessionId = 12L,
+                            sessionUid = sessionUid,
+                            routineUid = routineUid,
+                            sessionDate = session.sessionDate,
+                        ),
+                )
+                val content =
+                    (staged.captured as OutboundMessage.ChannelMessage).content as MessageContent.StandupSummary
+
+                then("the stored summary carries only the skipped members who did not answer") {
+                    content.skippedUserIds shouldBe setOf("U_SKIP")
+                }
+
+                then("it renders the skip, the answer given after a skip, and the silent member") {
+                    ModalTemplateBuilder(slackApiToken = "xoxb-test")
+                        .standupSummaryTemplate(
+                            routineName = content.routineName,
+                            sessionDate = content.sessionDate,
+                            members = content.members,
+                            answers = content.answers,
+                            questions = content.questions,
+                            skippedUserIds = content.skippedUserIds,
+                        ).template
+                        .drop(n = 1)
+                        .map { it.shouldBeInstanceOf<SectionBlock>().text.text } shouldBe
+                        listOf(
+                            "<@U_SKIP> _(skipped)_",
+                            "<@U_BOTH>\n• *Yesterday?* shipped",
+                            "<@U_SILENT> _(no response)_",
+                        )
                 }
             }
         }

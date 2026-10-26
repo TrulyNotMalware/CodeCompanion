@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-21_
+_type: decision · updated: 2026-10-26_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -599,6 +599,41 @@ _type: decision · updated: 2026-10-21_
     상태: 유지. 근거: `service/calendar/AGENTS.md`(`GoogleOAuthStateRetentionScheduler.kt`, `CalendarConnectionService.kt`),
     `repository/calendar/AGENTS.md`, `GoogleOAuthStateRetentionSchedulerTest`, `CalendarConnectionServiceTest`, `CalendarConfigurationTest`,
     `JpaGoogleOAuthStateRepositoryTest`.
+52. **스탠드업 프롬프트의 Skip은 멤버의 dispatch 행에 `skipped_at`을 기록하고, DM을 접고, 넛지에서 빼고, 요약에 `_(skipped)_`로
+    보인다. 그 뒤에 답하면 답이 그대로 기록된다 (2026-10-26).** 프롬프트 DM(`buildDmNotice`)의 두 버튼 "Fill in standup"/"Skip"은 같은
+    라우팅(`STANDUP_PROMPT`, `routingExtras = [sessionUid, routineUid]`)을 싣고, Skip은 `REJECT` 액션(`isCanceled()`)으로 온다. 그전까지
+    `StandupFillContext`는 `isCanceled()`를 보지 않아 Skip도 답변 모달을 열었고, 아무것도 기록되지 않아 DM은 남고, 컷오프 전에 넛지를
+    받고, 요약에는 `_(no response)_`로 나왔다(리뷰 F-01, 독립 리뷰 두 건이 확인; 그전에는 Skip을 정의한 결정이 없었다). 이제 Skip →
+    `CommandIntent.RecordStandupSkip`(확인 = DM 프롬프트의 `UpdateNotice`) → `RecordStandupSkipEvent` → `StandupAnswerService.recordSkip`
+    → `StandupRepository.recordSkip`이 답변과 같은 세션 행 락과 같은 규칙(`COLLECTING`이고 컷오프 전, 아니면 `SESSION_CLOSED`)으로
+    `markMemberSkipped`를 부르고, 결과를 답변과 같은 확인 경로(`confirmOutcome`)로 DM에 접는다 — `RECORDED` → "Standup skipped for today.
+    You can still answer with `/standup answer` in the routine's channel before the cutoff.", `SESSION_CLOSED` → "This standup has already closed.",
+    `SESSION_NOT_FOUND` → "This standup could no longer be found, so nothing was recorded." 넛지 대상은 `sentMemberIds - answeredUserIds -
+    skippedUserIds`이고, 요약은 답이 없는 skip 멤버를 `_(skipped)_`로 그린다. 이유: 버튼을 지우는 안과 Skip을 실제 상태로 만드는 안 중
+    사용자가 뒤를 골랐다(2026-10-26).
+    - **답이 이긴다.** skip 뒤의 `/standup answer`는 그대로 기록되고(`recordAnswer`는 `skipped_at`을 보지 않는다) 요약은 그 답을 보인다.
+      `/standup answer`로 답해 프롬프트가 접히지 않은 채 남아 있다가 Skip을 누른 경우도 답은 지워지지 않는다 — 그때 DM이 "Standup
+      skipped for today."로 접히는 어색함은 수용한다. `skipped_at`은 지우지 않는다. 넛지는 어느 쪽이든 그 멤버를 빼고, 요약은 답을 먼저
+      본다.
+    - **멱등.** `UPDATE … WHERE skipped_at IS NULL`이라 두 번째 클릭은 0행을 바꾸고 결과는 그대로 `RECORDED`다(첫 시각 유지). `dm_status`는
+      조건에도 값에도 넣지 않는다 — DM 전달 상태를 설명하는 열이고, 스케줄러가 보내지 못한 dispatch를 `FAILED` + `"skipped: …"`로
+      은퇴시키는 `markDispatchSkipped`와는 별개다.
+    - **이벤트 타입은 `STANDUP_ANSWER_SUBMIT`을 재사용한다.** 내부 이벤트(`isInternal = true`)의 `type`은 어디서도 라우팅에 쓰이지 않고,
+      확인 `UpdateMessage`도 답변과 같은 `confirmOutcome`을 거친다. 새 상수는 `CommandDetailType.createContext`의 exhaustive `when`에
+      자리를 요구할 뿐 얻는 것이 없다.
+    - **아웃박스 shape — 스키마 버전은 그대로 V7.** `MessageContent.StandupSummary`에 `skippedUserIds: Set<String> = emptySet()`이 붙었다.
+      필드가 없는 이전 행은 기본값으로 읽히고(`OutboundMessageCodecTest`의 고정 행), 이 필드를 모르는 V7 바이너리(롤아웃 중 구 레플리카,
+      롤백)는 Jackson 3이 모르는 키를 무시하므로 skip 멤버를 `_(no response)_`로 그릴 뿐이다. V3 연쇄처럼 내용이 사라지는 것이 아니라
+      표시만 옛 동작으로 돌아가므로 보류(새 버전)할 이유가 없다([events-and-outbox.md](events-and-outbox.md)의 버전 규칙).
+    - **마이그레이션 V29.** `standup_session_dispatch.skipped_at DATETIME NULL`, 이 릴리스 전에 적용한다(모든 dispatch 읽기가 열을
+      고른다). 이전 릴리스 옆에서도 안전하고, 롤백하면 이전 바이너리의 Skip은 다시 모달을 연다. MariaDB 12.3.3 실측(2026-10-26, 일회용 DB `cc_verify_1026`, V4·V6 위에 적용): 첫 적용 오류·경고 없음, 재적용은 Note 1060만, `skipped_at datetime DEFAULT NULL`, 기존 행 NULL 유지, `markMemberSkipped` UPDATE 는 1행→0행(첫 시각·`dm_status` 유지). 기록 `.omc/handoffs/2026-10-26-review-high-fixes/mariadb-v29/`.
+    - **기각:** ① Skip 버튼 제거 — 사용자 선택에서 기각; ② `dm_status`에 새 값 — DM 전달 상태와 멤버의 의사를 한 열에 섞고, 기존 CAS
+      조건(`dm_status = 'PENDING'` 등)과 `DispatchStatus` 분기를 모두 건드린다; ③ 빈 답변 행으로 skip 표시 — 요약은 `(blank)` 답으로,
+      `/standup answer` 후보 선택(결정 #39)은 "답함"으로 읽는다.
+    상태: 유지. 근거: `entity/context/form/AGENTS.md`(`StandupFillContext.kt`), `service/standup/AGENTS.md`(`StandupAnswerService.kt`,
+    `StandupSchedulingService.kt`, `StandupSummaryService.kt`), `repository/standup/AGENTS.md`, `db/migration/AGENTS.md`(V29),
+    `StandupFillContextTest`, `StandupAnswerServiceTest`, `StandupSchedulingServiceTest`, `StandupSummaryServiceTest`,
+    `StandupRepositoryImplTest`, `ModalTemplateBuilderTest`, `OutboundMessageCodecTest`.
 
 ## 빌드·런타임
 
@@ -939,6 +974,14 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `repository/calendar/schema/GoogleOAuthStateSchema.kt`(`idx_google_oauth_state_expires_at`), `db/migration/V24__…`·`V27__…` 헤더, 스펙
   `GoogleOAuthStateRetentionSchedulerTest`·`CalendarConnectionServiceTest`·`CalendarConfigurationTest`·`JpaGoogleOAuthStateRepositoryTest`,
   git-ignored `.omc/plans/oauth-state-retention-2026-10-21.md`(리드 결정과 락 노출 추론)(2026-10-21, 미커밋 작업 트리 `feature/oauth-state-retention`)
+- 스탠드업 Skip 기록(#52): `domain/src/main/kotlin/dev/notypie/domain/command/entity/context/form/StandupFillContext.kt`,
+  `intent/CommandIntent.kt`(`RecordStandupSkip`), `entity/event/Event.kt`(`RecordStandupSkip*`), `outbound/MessageContent.kt`(`skippedUserIds`),
+  `domain/standup/{entity/SessionDispatch,dto/StandupSessionDto}.kt`, `infrastructure/.../impl/command/{SlackIntentResolver,OutboundRenderer,SlackApiEventConstructor}.kt`,
+  `repository/standup/{StandupRepository,StandupRepositoryImpl,JpaSessionDispatchRepository}.kt`, `repository/standup/schema/StandupSessionSchema.kt`,
+  `templates/{ModalTemplateBuilder,SlackTemplateBuilder}.kt`, `application/.../service/standup/{StandupAnswerService,StandupSchedulingService,StandupSummaryService}.kt`,
+  `db/migration/V29__add_standup_session_dispatch_skipped_at.sql`, 스펙 `StandupFillContextTest`·`SlackIntentResolverTest`·`StandupRepositoryImplTest`·
+  `ModalTemplateBuilderTest`·`OutboundMessageCodecTest`·`SlackOutboundRendererTest`·`StandupAnswerServiceTest`·`StandupSchedulingServiceTest`·
+  `StandupSummaryServiceTest`; 리뷰 F-01과 사용자 선택(2026-10-26, 세션 기록)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

@@ -93,6 +93,7 @@ class SlackApiEventConstructorTest :
                         members = any(),
                         answers = any(),
                         questions = any(),
+                        skippedUserIds = any(),
                     )
                 } returns emptyLayout
 
@@ -104,6 +105,7 @@ class SlackApiEventConstructorTest :
                         members = emptyList(),
                         answers = emptyList(),
                         questions = listOf("What did you do yesterday?"),
+                        skippedUserIds = emptySet(),
                     )
 
                 then("the payload carries STANDUP_SUMMARY, which the success event hands the marker listener") {

@@ -442,6 +442,7 @@ class SlackApiEventConstructor(
         members: List<RoutineMemberDto>,
         answers: List<StandupAnswerDto>,
         questions: List<String>,
+        skippedUserIds: Set<String>,
     ): SendSlackMessageEvent {
         val layout =
             templateBuilder.standupSummaryTemplate(
@@ -450,6 +451,7 @@ class SlackApiEventConstructor(
                 members = members,
                 answers = answers,
                 questions = questions,
+                skippedUserIds = skippedUserIds,
             )
         return buildMessage(
             commandBasicInfo = commandBasicInfo,

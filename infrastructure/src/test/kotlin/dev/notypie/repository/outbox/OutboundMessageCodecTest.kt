@@ -147,6 +147,47 @@ class OutboundMessageCodecTest :
             )
         }
 
+        "StandupSummary round-trips skipped members, and a row written before the field decodes with none" {
+            assertRoundTrips(
+                message =
+                    OutboundMessage.ChannelMessage(
+                        target = target,
+                        content =
+                            MessageContent.StandupSummary(
+                                routineName = "Daily Standup",
+                                sessionDate = LocalDate.of(2026, 5, 1),
+                                members = listOf(createRoutineMemberDto(userId = "U_SKIP")),
+                                answers = emptyList(),
+                                questions = listOf("What did you do yesterday?"),
+                                skippedUserIds = setOf("U_SKIP"),
+                            ),
+                    ),
+            )
+            val v7Row =
+                "{\"message\":{\"@type\":\"ChannelMessage\",\"target\":\"C012ABCDEFG\"," +
+                    "\"content\":{\"@type\":\"StandupSummary\",\"routineName\":\"Daily\"," +
+                    "\"sessionDate\":\"2026-05-01\",\"members\":[],\"answers\":[],\"questions\":[\"Q?\"]}," +
+                    "\"detailType\":null,\"threadId\":null},$basicInfoJson}"
+
+            OutboundMessageCodec.decode(json = v7Row) shouldBe
+                OutboundEnvelope(
+                    message =
+                        OutboundMessage.ChannelMessage(
+                            target = target,
+                            content =
+                                MessageContent.StandupSummary(
+                                    routineName = "Daily",
+                                    sessionDate = LocalDate.of(2026, 5, 1),
+                                    members = emptyList(),
+                                    answers = emptyList(),
+                                    questions = listOf("Q?"),
+                                    skippedUserIds = emptySet(),
+                                ),
+                        ),
+                    basicInfo = fixtureBasicInfo,
+                )
+        }
+
         "ChannelMessage with AgentQuestion round-trips with its detailType" {
             assertRoundTrips(message = createAgentQuestionMessage(prompt = "Why is the build slow?\nsecond line"))
         }

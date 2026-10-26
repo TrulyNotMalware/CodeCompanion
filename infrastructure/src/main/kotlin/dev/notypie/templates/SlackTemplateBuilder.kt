@@ -86,5 +86,6 @@ interface SlackTemplateBuilder {
         members: List<RoutineMemberDto>,
         answers: List<StandupAnswerDto>,
         questions: List<String>,
+        skippedUserIds: Set<String>,
     ): LayoutBlocks
 }

@@ -25,6 +25,7 @@ data class SessionDispatchDto(
     val dmSentAt: Instant?,
     val dmStatus: DispatchStatus,
     val failureReason: String?,
+    val skippedAt: Instant?,
 )
 
 data class StandupAnswerDto(

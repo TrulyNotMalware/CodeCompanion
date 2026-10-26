@@ -4,6 +4,7 @@ import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
+import dev.notypie.domain.command.entity.event.RecordStandupSkipEvent
 import dev.notypie.domain.command.entity.event.StandupModalOpenFailedEvent
 import dev.notypie.domain.command.entity.event.publishOne
 import dev.notypie.domain.command.intent.StandupAnswerConfirmation
@@ -20,6 +21,7 @@ import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
+import java.util.UUID
 
 private val answerLog = KotlinLogging.logger {}
 
@@ -28,6 +30,11 @@ internal const val CLOSED_NOTICE: String =
     "This standup has already closed, so your answer was not recorded or added to the summary."
 internal const val SESSION_NOT_FOUND_NOTICE: String =
     "This standup could no longer be found, so your answer was not recorded."
+internal const val SKIPPED_NOTICE: String =
+    "Standup skipped for today. You can still answer with `/standup answer` in the routine's channel before the cutoff."
+internal const val SKIP_CLOSED_NOTICE: String = "This standup has already closed."
+internal const val SKIP_SESSION_NOT_FOUND_NOTICE: String =
+    "This standup could no longer be found, so nothing was recorded."
 
 @Service
 class StandupAnswerService(
@@ -63,11 +70,60 @@ class StandupAnswerService(
                     SESSION_NOT_FOUND_NOTICE
                 }
             }
+        confirmOutcome(
+            confirmation = payload.confirmation,
+            userId = payload.userId,
+            idempotencyKey = event.idempotencyKey,
+            noticeText = noticeText,
+        )
+    }
+
+    @EventListener
+    fun recordSkip(event: RecordStandupSkipEvent) {
+        val payload = event.payload
+        val result =
+            standupRepository.recordSkip(
+                sessionUid = payload.sessionUid,
+                userId = payload.userId,
+                skippedAt = clock.instant(),
+            )
+        val noticeText =
+            when (result) {
+                AnswerRecordResult.RECORDED -> SKIPPED_NOTICE
+
+                AnswerRecordResult.SESSION_CLOSED -> {
+                    answerLog.info {
+                        "Standup skip rejected; session closed: sessionUid=${payload.sessionUid} " +
+                            "userId=${payload.userId}"
+                    }
+                    SKIP_CLOSED_NOTICE
+                }
+
+                AnswerRecordResult.SESSION_NOT_FOUND -> {
+                    answerLog.warn { "Standup skip ignored; session not found: sessionUid=${payload.sessionUid}" }
+                    SKIP_SESSION_NOT_FOUND_NOTICE
+                }
+            }
+        confirmOutcome(
+            confirmation = payload.confirmation,
+            userId = payload.userId,
+            idempotencyKey = event.idempotencyKey,
+            noticeText = noticeText,
+        )
+    }
+
+    private fun confirmOutcome(
+        confirmation: StandupAnswerConfirmation,
+        userId: String,
+        idempotencyKey: UUID,
+        noticeText: String,
+    ) {
         val content = MessageContent.Text(headline = null, markdown = noticeText)
-        when (val confirmation = payload.confirmation) {
+        when (confirmation) {
             is StandupAnswerConfirmation.UpdateNotice ->
                 stageConfirmation(
-                    event = event,
+                    userId = userId,
+                    idempotencyKey = idempotencyKey,
                     channel = confirmation.ref.conversation,
                     message =
                         OutboundMessage.UpdateMessage(
@@ -78,9 +134,10 @@ class StandupAnswerService(
                 )
 
             is StandupAnswerConfirmation.Ephemeral -> {
-                val requester = UserRef(id = payload.userId)
+                val requester = UserRef(id = userId)
                 stageConfirmation(
-                    event = event,
+                    userId = userId,
+                    idempotencyKey = idempotencyKey,
                     channel = confirmation.channel,
                     message =
                         OutboundMessage.Ephemeral(
@@ -144,15 +201,16 @@ class StandupAnswerService(
     }
 
     private fun stageConfirmation(
-        event: RecordStandupAnswerEvent,
+        userId: String,
+        idempotencyKey: UUID,
         channel: ConversationTarget,
         message: OutboundMessage,
     ) {
         val basicInfo =
             CommandBasicInfo.forOutbound(
-                publisherId = event.payload.userId,
+                publisherId = userId,
                 channel = channel.id,
-                idempotencyKey = event.idempotencyKey,
+                idempotencyKey = idempotencyKey,
             )
         outboundStager.stage(message = message, basicInfo = basicInfo)?.let { eventPublisher.publishOne(event = it) }
     }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-20 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # domain/command/context (test)
 
@@ -30,7 +30,7 @@ All specs are Kotest `BehaviorSpec`s.
 | `ReplaceMessageContextTest.kt` | `ReplaceMessageContext`: `SIMPLE` / `REPLACE_TEXT`; both `runCommand` and `handleInteraction` enqueue a `ReplaceMessage` on the reply handle |
 | `RescheduleMeetingContextTest.kt` | `form.RescheduleMeetingContext`: click → `OpenModal(ModalForm.Reschedule)` with `listHandle` = the click's reply handle; a blank reply handle → the modal still opens with `listHandle = null`; malformed uid → no effects |
 | `StandupSlashContextTest.kt` | `form.StandupSlashContext` (every requester ephemeral is asserted to carry its `directFallbackOf` copy for `TEST_USER_ID`): metadata stays `PIPELINE` / `STANDUP_SETUP_REQUEST` for every sub-command; `SETUP` → `OpenModal(ModalForm.StandupSetup)` on the trigger with requester and command channel; `LIST` → only `ListStandupRoutines`; `STOP` with options `["Daily", "", "Sync"]` → `StopStandupRoutine("Daily Sync")`; options `["  Daily ", "Sync\t"]` → `StopStandupRoutine("Daily Sync")` (`Routine.normalizeName`); `STOP` with blank options → `ok = false` and one `Ephemeral` "Usage: `/standup stop <routine-name>`" to `recipient = UserRef(TEST_USER_ID)`; `ANSWER`: no candidates → requester-only "No standup is collecting your answer in this channel right now." and success; one candidate → `OpenModal(StandupFill)` on the slash trigger with a blank-ts origin notice; several without a name → failed with the escaped open names and usage; a name (`"  retro", "", "&", "PLANNING "`) matches case-insensitively after normalization; an unknown name → failed with the escaped echo, no modal |
-| `StandupFillContextTest.kt` | `form.StandupFillContext`: Fill click with `routingExtras = [sessionUid, routineUid]` → `OpenModal(ModalForm.StandupFill)` carrying the origin notice ref; malformed extras → no intents |
+| `StandupFillContextTest.kt` | `form.StandupFillContext`: Fill click with `routingExtras = [sessionUid, routineUid]` → `OpenModal(ModalForm.StandupFill)` carrying the origin notice ref and no skip; Skip click (`REJECT`) → exactly one `RecordStandupSkip` for the actor with `UpdateNotice` on the DM prompt and no `OpenModal`; malformed extras → no intents, for either button |
 | `SubmissionContextsTest.kt` | All seven `Submission` leaves plus `IgnoredSubmissionContext`: each holds an already-parsed model and `accept` translates it into effects (persistence before UI for decline, a standup answer with responses yielding `RecordStandupAnswer(notice = the Update target)` and no `UpdateMessage`, a dropped over-long note recorded as `OTHER` without detail and announced in the notice, standup empty-answer notice update, empty CVE key lists); Ignored returns success with an empty queue; a standup answer with an `Ephemeral` confirmation carries it on the intent (and records nothing for empty answers) |
 | `TextResponseContextTest.kt` | `TextResponseContext`: `Ephemeral(Text)` in the command channel to `UserRef(publisherId)`, no headline, `detailType` null |
 

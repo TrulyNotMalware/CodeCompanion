@@ -238,7 +238,7 @@ class StandupSchedulingService(
             return
         }
 
-        val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds
+        val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds - candidate.skippedUserIds
         if (nonResponders.isEmpty()) return
 
         val outcome: Result<Boolean> =

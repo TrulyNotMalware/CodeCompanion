@@ -34,6 +34,7 @@ open class StandupRepositoryImpl(
             dmSentAt = dmSentAt,
             dmStatus = dmStatus,
             failureReason = failureReason,
+            skippedAt = skippedAt,
         )
 
     @Transactional
@@ -123,6 +124,18 @@ open class StandupRepositoryImpl(
         return AnswerRecordResult.RECORDED
     }
 
+    @Transactional
+    override fun recordSkip(sessionUid: UUID, userId: String, skippedAt: Instant): AnswerRecordResult {
+        val session =
+            jpaStandupSessionRepository.findLockedBySessionUid(sessionUid = sessionUid)
+                ?: return AnswerRecordResult.SESSION_NOT_FOUND
+        if (lockedStatusOf(session = session) != SessionStatus.COLLECTING || !skippedAt.isBefore(session.cutoffAt)) {
+            return AnswerRecordResult.SESSION_CLOSED
+        }
+        jpaSessionDispatchRepository.markMemberSkipped(sessionId = session.id, userId = userId, now = skippedAt)
+        return AnswerRecordResult.RECORDED
+    }
+
     private fun lockedStatusOf(session: StandupSessionSchema): SessionStatus =
         SessionStatus.valueOf(jpaStandupSessionRepository.findLockedStatus(id = session.id))
 
@@ -189,6 +202,11 @@ open class StandupRepositoryImpl(
                             .map { it.userId }
                             .toSet(),
                     answeredUserIds = schema.answers.map { it.userId }.toSet(),
+                    skippedUserIds =
+                        schema.dispatches
+                            .filter { it.skippedAt != null }
+                            .map { it.userId }
+                            .toSet(),
                 )
             }
 

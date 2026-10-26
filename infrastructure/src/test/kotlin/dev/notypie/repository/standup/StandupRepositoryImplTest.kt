@@ -78,6 +78,9 @@ class StandupRepositoryImplTest
                     )
                 }
 
+            fun skip(sessionUid: UUID, skippedAt: Instant) =
+                inTx { repository.recordSkip(sessionUid = sessionUid, userId = "U_A", skippedAt = skippedAt) }
+
             fun createActiveRoutine(name: String, creatorId: String, commandChannel: String) =
                 inTx {
                     repository.createRoutine(
@@ -405,6 +408,68 @@ class StandupRepositoryImplTest
                     then("the summary read waits for the answer's commit and includes it") {
                         answerResult.get() shouldBe AnswerRecordResult.RECORDED
                         summaryRead.answers.map { it.userId } shouldContainExactly listOf("U_A")
+                    }
+                }
+            }
+
+            given("recordSkip") {
+                `when`("a member skips a collecting session and clicks Skip again later") {
+                    val sessionUid = openSession()
+                    val first = skip(sessionUid = sessionUid, skippedAt = cutoffAt.minusSeconds(600L))
+                    val second = skip(sessionUid = sessionUid, skippedAt = cutoffAt.minusSeconds(300L))
+                    val nudgeCandidate =
+                        inTx {
+                            repository
+                                .findCollectingSessionsForNudge(
+                                    now = cutoffAt.minusSeconds(60L),
+                                    nudgeWindowEnd = cutoffAt,
+                                ).single { it.sessionUid == sessionUid }
+                        }
+
+                    then("both are recorded, the first skip time is kept, and the nudge sees the member as skipped") {
+                        first shouldBe AnswerRecordResult.RECORDED
+                        second shouldBe AnswerRecordResult.RECORDED
+                        val dispatch = repository.findSession(sessionUid = sessionUid)!!.dispatches.single()
+                        dispatch.skippedAt shouldBe cutoffAt.minusSeconds(600L)
+                        dispatch.dmStatus shouldBe DispatchStatus.PENDING
+                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                        nudgeCandidate.skippedUserIds shouldBe setOf("U_A")
+                    }
+                }
+
+                `when`("the session was already summarized") {
+                    val sessionUid = openSession(status = SessionStatus.SUMMARIZED, summaryMessageTs = "outbox:1")
+                    val result = skip(sessionUid = sessionUid, skippedAt = cutoffAt.minusSeconds(60L))
+
+                    then("it is rejected as closed and the dispatch keeps no skip") {
+                        result shouldBe AnswerRecordResult.SESSION_CLOSED
+                        repository
+                            .findSession(sessionUid = sessionUid)!!
+                            .dispatches
+                            .single()
+                            .skippedAt shouldBe null
+                    }
+                }
+
+                `when`("the session is still COLLECTING but the skip arrives at the cutoff") {
+                    val sessionUid = openSession()
+                    val result = skip(sessionUid = sessionUid, skippedAt = cutoffAt)
+
+                    then("it is rejected as closed, since the summary may already be reading the session") {
+                        result shouldBe AnswerRecordResult.SESSION_CLOSED
+                        repository
+                            .findSession(sessionUid = sessionUid)!!
+                            .dispatches
+                            .single()
+                            .skippedAt shouldBe null
+                    }
+                }
+
+                `when`("the session uid is unknown") {
+                    val result = skip(sessionUid = UUID.randomUUID(), skippedAt = cutoffAt.minusSeconds(60L))
+
+                    then("it reports SESSION_NOT_FOUND") {
+                        result shouldBe AnswerRecordResult.SESSION_NOT_FOUND
                     }
                 }
             }

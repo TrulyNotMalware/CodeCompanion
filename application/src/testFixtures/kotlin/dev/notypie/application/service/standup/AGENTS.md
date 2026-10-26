@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
 
 # application/src/testFixtures/kotlin/dev/notypie/application/service/standup
 
@@ -10,7 +10,7 @@ which members still owe an answer before cutoff.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `NudgeCandidateSessionCreator.kt` | `createNudgeCandidateSession(sessionId = 1L, sessionUid = random, routineUid = random, cutoffAt = 2026-05-01T02:00:00Z, sentMemberIds = {}, answeredUserIds = {})` |
+| `NudgeCandidateSessionCreator.kt` | `createNudgeCandidateSession(sessionId = 1L, sessionUid = random, routineUid = random, cutoffAt = 2026-05-01T02:00:00Z, sentMemberIds = {}, answeredUserIds = {}, skippedUserIds = {})` |
 
 ## For AI Agents
 

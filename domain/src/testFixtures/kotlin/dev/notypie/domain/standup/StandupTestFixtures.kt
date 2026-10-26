@@ -83,6 +83,7 @@ fun createSessionDispatch(
     dmSentAt: Instant? = null,
     dmStatus: DispatchStatus = DispatchStatus.PENDING,
     failureReason: String? = null,
+    skippedAt: Instant? = null,
 ): SessionDispatch =
     SessionDispatch(
         userId = userId,
@@ -90,6 +91,7 @@ fun createSessionDispatch(
         dmSentAt = dmSentAt,
         dmStatus = dmStatus,
         failureReason = failureReason,
+        skippedAt = skippedAt,
     )
 
 fun createStandupAnswer(
@@ -199,6 +201,7 @@ fun createSessionDispatchDto(
     dmStatus: dev.notypie.domain.standup.entity.enums.DispatchStatus =
         dev.notypie.domain.standup.entity.enums.DispatchStatus.PENDING,
     failureReason: String? = null,
+    skippedAt: Instant? = null,
 ): dev.notypie.domain.standup.dto.SessionDispatchDto =
     dev.notypie.domain.standup.dto.SessionDispatchDto(
         id = id,
@@ -207,4 +210,5 @@ fun createSessionDispatchDto(
         dmSentAt = dmSentAt,
         dmStatus = dmStatus,
         failureReason = failureReason,
+        skippedAt = skippedAt,
     )

@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-10-20_
+_type: architecture · updated: 2026-10-26_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -95,7 +95,7 @@ _type: architecture · updated: 2026-10-20_
   이전 없음). 새 shape는 그 shape를 쓰는 행에만 새 버전을 찍고 같은 변경에서 `SUPPORTED`에 넣으며, drain 창이
   보장된 뒤에만 옛 버전을 뺀다. 적용 예: `ReplaceMessage` + fallback 행은 V4(2026-10), `MessageContent.AgentQuestion`(`/ask` 질문 루트
   메시지)을 담은 행은 V5(2026-10-12) — 새 콘텐츠 subtype도 "새 shape"라, 그것을 모르는 바이너리가 디코딩 실패(`FAILURE`) 대신 보류하게 한다;
-  `Ephemeral`/`ChannelMessage`에 `fallback: DirectReply`(봇이 없는 채널의 DM 폴백, 결정 #42)가 있는 행은 V6(2026-10-14). 스탬프는 머리와
+  `Ephemeral`/`ChannelMessage`에 `fallback: DirectReply`(봇이 없는 채널의 DM 폴백, 결정 #42)가 있는 행은 V6(2026-10-14). 반대로 옛 바이너리가 그 필드를 몰라도 내용이나 전달을 잃지 않고 표시만 옛 동작으로 돌아가는 선택 필드는 새 버전을 찍지 않는다(`MessageContent.StandupSummary.skippedUserIds = emptySet()`, 결정 #52, 2026-10-26). 스탬프는 머리와
   continuation의 모든 조각이 필요로 하는 **가장 높은** 버전이다 — 이전의 first-match `when`은 V5 질문에 폴백이 붙어도 V5로 찍었을 것이고,
   continuation 안의 `ReplaceMessage.fallback`을 V3으로 찍던 공백(2026-10-11 캘린더 리뷰 후속 목록의 A8)도 같은 버그였다. 거의 모든 슬래시 답장 행이 V6이므로 V6을 모르는
   바이너리는 그 행을 보류한다(롤아웃 중 구 레플리카, 롤백). **V7(2026-10-20, 결정 #50)부터는 모든 행이 V7이다** — 봉투의

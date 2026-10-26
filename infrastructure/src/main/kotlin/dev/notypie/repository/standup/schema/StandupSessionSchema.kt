@@ -103,6 +103,8 @@ class SessionDispatchSchema(
     val failureReason: String? = null,
     @field:Column(name = "claim_token", length = 36)
     val claimToken: String? = null,
+    @field:Column(name = "skipped_at")
+    val skippedAt: Instant? = null,
     @field:CreationTimestamp
     @field:Column(name = "created_at", nullable = false, updatable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),
@@ -151,6 +153,7 @@ fun StandupSession.toSchema(): StandupSessionSchema {
                 dmSentAt = dispatch.dmSentAt,
                 dmStatus = dispatch.dmStatus,
                 failureReason = dispatch.failureReason,
+                skippedAt = dispatch.skippedAt,
             )
         }
     val answerRows =
@@ -186,6 +189,7 @@ fun StandupSessionSchema.toDomainEntity(): StandupSession {
                     dmSentAt = row.dmSentAt,
                     dmStatus = row.dmStatus,
                     failureReason = row.failureReason,
+                    skippedAt = row.skippedAt,
                 ),
         )
     }
@@ -220,6 +224,7 @@ fun StandupSessionSchema.toStandupSessionDto(): StandupSessionDto =
                     dmSentAt = row.dmSentAt,
                     dmStatus = row.dmStatus,
                     failureReason = row.failureReason,
+                    skippedAt = row.skippedAt,
                 )
             },
         answers =

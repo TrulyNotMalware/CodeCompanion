@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-20 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
 
 # domain/command/inbound
 
@@ -44,7 +44,7 @@ a Slack payload.
   `InboundSubmission` variant here, its mapping in the infra mapper, a `*Parsed` model + leaf under
   `entity/context/form/`, and the `SubmissionRouter` branch (the exhaustive `when` forces it).
 - `isComplete()` = primary action, selected, and every field either selected or of an `alwaysComplete`
-  kind (`TEXT`, `TOGGLE`). `RequestMeetingContext` relies on it for "Please select all options".
+  kind (`TEXT`, `TOGGLE`). `RequestMeetingContext` no longer calls it: the `/meetup` form has an optional, possibly unselected end `TIME` field.
 - Names are deliberately neutral: `DomainLayeringGuardTest` fails on the identifiers `responseUrl` /
   `triggerId` anywhere in domain code. Use `ReplyHandle` / `TriggerHandle` / `MessageHandle`; the
   Slack origin may only be mentioned in comments.
