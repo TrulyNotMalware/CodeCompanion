@@ -188,6 +188,17 @@ class RoutineTest :
                 }
             }
 
+            `when`("a name separates words with NBSP, ideographic space or a mixed run") {
+                then("every run of Unicode whitespace collapses to one ASCII space") {
+                    Routine.normalizeName(raw = "Daily\u00A0Sync") shouldBe "Daily Sync"
+                    Routine.normalizeName(raw = "Daily\u3000Sync") shouldBe "Daily Sync"
+                    Routine.normalizeName(raw = "Daily\u0085Sync") shouldBe "Daily Sync"
+                    Routine.normalizeName(raw = "\u0085Daily\u0085Sync\u0085") shouldBe "Daily Sync"
+                    Routine.normalizeName(raw = "\u0085") shouldBe ""
+                    Routine.normalizeName(raw = " Daily \u00A0\u3000 \tSync\u00A0") shouldBe "Daily Sync"
+                }
+            }
+
             `when`("a name is blank") {
                 then("it normalizes to an empty string") {
                     Routine.normalizeName(raw = " \t ") shouldBe ""

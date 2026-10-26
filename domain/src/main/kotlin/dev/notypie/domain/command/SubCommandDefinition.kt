@@ -38,4 +38,4 @@ internal inline fun <reified T> findSubCommandByIdentifier(
     identifier: String,
 ): T?
         where T : Enum<T>, T : SubCommandDefinition =
-    enumValues<T>().find { it.subCommandIdentifier == identifier }
+    enumValues<T>().find { it.subCommandIdentifier.equals(other = identifier, ignoreCase = true) }

@@ -68,9 +68,10 @@ class Routine(
                 DayOfWeek.FRIDAY,
             )
         val DEFAULT_CUTOFF_OFFSET: Duration = Duration.ofHours(1L)
-        private val WHITESPACE = Regex("\\s+")
+        private val WHITESPACE: Regex = Regex(pattern = "[\\s\\p{Z}\\u0085]+")
 
-        fun normalizeName(raw: String): String = raw.trim().split(WHITESPACE).joinToString(separator = " ")
+        fun normalizeName(raw: String): String =
+            raw.split(WHITESPACE).filter { it.isNotEmpty() }.joinToString(separator = " ")
     }
 
     fun addMember(member: RoutineMember) {

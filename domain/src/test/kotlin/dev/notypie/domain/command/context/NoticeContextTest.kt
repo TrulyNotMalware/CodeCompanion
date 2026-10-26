@@ -10,8 +10,6 @@ import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
-import io.kotest.matchers.string.shouldContain
-import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.LinkedList
 
@@ -21,13 +19,13 @@ class NoticeContextTest :
 
         given("NoticeContext with users and commands") {
             val users = LinkedList(listOf("U001", "U002"))
-            val commands = LinkedList(listOf("deploy", "notify", "check"))
+            val message = "deploy notify check"
             val intentQueue = createIntentQueue()
 
             val context =
                 NoticeContext(
                     users = users,
-                    commands = commands,
+                    message = message,
                     commandBasicInfo = testCommandBasicInfo,
                     intents = intentQueue,
                 )
@@ -65,15 +63,15 @@ class NoticeContextTest :
             }
         }
 
-        given("NoticeContext responseText uses space separator") {
+        given("NoticeContext keeps the message text as given") {
             val users = LinkedList(listOf("U001"))
-            val commands = LinkedList(listOf("alpha", "beta", "gamma"))
+            val message = "alpha beta\ngamma"
             val intentQueue = createIntentQueue()
 
             val context =
                 NoticeContext(
                     users = users,
-                    commands = commands,
+                    message = message,
                     commandBasicInfo = testCommandBasicInfo,
                     intents = intentQueue,
                 )
@@ -81,23 +79,26 @@ class NoticeContextTest :
             `when`("runCommand is called") {
                 context.runCommand()
 
-                then("responseText should join commands with space, not commas") {
-                    val responseText = commands.joinToString(separator = " ")
-                    responseText shouldContain "alpha beta gamma"
-                    responseText shouldNotContain ","
+                then("the notice carries the message with its line break") {
+                    intentQueue
+                        .snapshot()
+                        .single()
+                        .shouldBeInstanceOf<OutboundMessage.Notice>()
+                        .message shouldBe
+                        "alpha beta\ngamma"
                 }
             }
         }
 
         given("NoticeContext with empty users and commands") {
             val users = LinkedList<String>()
-            val commands = LinkedList<String>()
+            val message = ""
             val intentQueue = createIntentQueue()
 
             val context =
                 NoticeContext(
                     users = users,
-                    commands = commands,
+                    message = message,
                     commandBasicInfo = testCommandBasicInfo,
                     intents = intentQueue,
                 )

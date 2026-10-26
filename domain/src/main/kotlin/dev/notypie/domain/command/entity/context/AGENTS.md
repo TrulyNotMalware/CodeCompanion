@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-22 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
 
 # domain/command/entity/context
 
@@ -18,7 +18,7 @@ live in `form/`.
 | `StatusContext.kt` | `@bot status` → `CommandIntent.StatusReport` (`STATUS_REPORT`) |
 | `RoleManagementContext.kt` | `grant` / `revoke` / `roles` — forwards the intent the parser built (`SIMPLE_TEXT`) |
 | `IntentContext.kt` | Queues the one intent the parser built (`SIMPLE_TEXT`): `cve ...` admin mentions and `usage [days]` (`AgentUsageReport`) |
-| `NoticeContext.kt` | `notice @u1 @u2 text` → `OutboundMessage.Notice(mentions, message)` (`SIMPLE_TEXT`) |
+| `NoticeContext.kt` | `notice @u1 @u2 text` → `OutboundMessage.Notice(mentions, message)` (`SIMPLE_TEXT`). Takes `message: String` as built by the parser's `noticeBody()` from the restored mention text (line breaks kept, mention markup dropped, runs of spaces collapsed), not a token queue |
 | `TextResponseContext.kt` | `Ephemeral` in the command channel to `recipient = UserRef(publisherId)`, no headline (`SIMPLE_TEXT`) — help, usage, permission-denied, "Command Not supported." |
 | `EphemeralTextResponseContext.kt` | `ResponseContext`; ephemeral text, `isOk` selects `success` / `fail` |
 | `ReplaceMessageContext.kt` | `ReplaceMessage` through a reply handle (`REPLACE_TEXT`); same behaviour from `runCommand` and `handleInteraction` |

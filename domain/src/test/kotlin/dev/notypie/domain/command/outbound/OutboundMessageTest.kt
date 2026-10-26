@@ -52,6 +52,7 @@ class OutboundMessageTest :
                             requesterId = requesterId,
                             channel = channel,
                             listHandle = handle,
+                            currentStartAt = null,
                         ),
                         ModalForm.AddParticipant(
                             meetingUid = meetingUid,
@@ -153,10 +154,12 @@ class OutboundMessageTest :
                             requesterId = "U1",
                             channel = rescheduleChannel,
                             listHandle = null,
+                            currentStartAt = LocalDateTime.of(2026, 11, 3, 10, 0),
                         )
                     reschedule.meetingUid shouldBe meetingUid
                     reschedule.requesterId shouldBe "U1"
                     reschedule.channel shouldBe rescheduleChannel
+                    reschedule.currentStartAt shouldBe LocalDateTime.of(2026, 11, 3, 10, 0)
 
                     val addChannel = ConversationTarget(id = "C_ADD")
                     val addParticipant =

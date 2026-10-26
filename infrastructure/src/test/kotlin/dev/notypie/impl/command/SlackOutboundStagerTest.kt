@@ -1,5 +1,6 @@
 package dev.notypie.impl.command
 
+import ch.qos.logback.classic.Level
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.modals.ApprovalContents
 import dev.notypie.domain.command.entity.CommandDetailType
@@ -14,18 +15,27 @@ import dev.notypie.domain.command.outbound.TopicOption
 import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.standup.createRoutineDto
 import dev.notypie.domain.standup.createStandupSessionDto
+import dev.notypie.impl.command.event.OpenViewEvent
 import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.createOpenViewEvent
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.messagesAt
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
+import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.clearMocks
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 
 private const val LIST_RESPONSE_URL = "https://hooks.slack.com/actions/T1/1/list"
@@ -151,6 +161,7 @@ class SlackOutboundStagerTest :
 
         given("an OpenModal with a Reschedule form") {
             val meetingUid = UUID.randomUUID()
+            val meetingStartAt = LocalDateTime.of(2026, 11, 3, 10, 0)
             val message =
                 OutboundMessage.OpenModal(
                     handle = ModalOpenHandle(raw = "trigger-reschedule"),
@@ -160,6 +171,7 @@ class SlackOutboundStagerTest :
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
                             listHandle = ResponseReplaceHandle(raw = LIST_RESPONSE_URL),
+                            currentStartAt = meetingStartAt,
                         ),
                 )
 
@@ -177,9 +189,12 @@ class SlackOutboundStagerTest :
                     )
                 } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST)
 
-                stager.stage(message = message, basicInfo = basicInfo)
+                val (_, logs) =
+                    captureLogs(loggerName = SlackOutboundStager::class.java.name) {
+                        stager.stage(message = message, basicInfo = basicInfo)
+                    }
 
-                then("delegates to openRescheduleMeetingModalRequest with the ferried channel and list response URL") {
+                then("delegates with the ferried channel, list response URL and the meeting's carried start") {
                     verify(exactly = 1) {
                         slackEventBuilder.openRescheduleMeetingModalRequest(
                             commandBasicInfo = basicInfo,
@@ -188,10 +203,80 @@ class SlackOutboundStagerTest :
                             meetingUid = meetingUid,
                             requesterId = "U_HOST",
                             channel = "C_LIST",
-                            currentStartAt = any(),
+                            currentStartAt = meetingStartAt,
                             listResponseUrl = LIST_RESPONSE_URL,
                         )
                     }
+                }
+
+                then("nothing is logged at WARN") {
+                    logs.messagesAt(level = Level.WARN).shouldBeEmpty()
+                }
+            }
+        }
+
+        given("an OpenModal with a Reschedule form from a list rendered before the start was carried") {
+            val meetingUid = UUID.randomUUID()
+            val message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = "trigger-reschedule-old"),
+                    form =
+                        ModalForm.Reschedule(
+                            meetingUid = meetingUid,
+                            requesterId = "U_HOST",
+                            channel = ConversationTarget(id = "C_LIST"),
+                            listHandle = null,
+                            currentStartAt = null,
+                        ),
+                )
+
+            `when`("stage is called") {
+                val startSlot = slot<LocalDateTime>()
+                every {
+                    slackEventBuilder.openRescheduleMeetingModalRequest(
+                        commandBasicInfo = any(),
+                        commandDetailType = any(),
+                        triggerId = any(),
+                        meetingUid = any(),
+                        requesterId = any(),
+                        channel = any(),
+                        currentStartAt = capture(startSlot),
+                        listResponseUrl = any(),
+                    )
+                } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST)
+
+                val before = LocalDateTime.now()
+                val (event, logs) =
+                    captureLogs(loggerName = SlackOutboundStager::class.java.name) {
+                        stager.stage(message = message, basicInfo = basicInfo)
+                    }
+                val after = LocalDateTime.now()
+
+                then("the modal still opens, pre-filled with the current time as before") {
+                    event.shouldBeInstanceOf<OpenViewEvent>()
+                    verify(exactly = 1) {
+                        slackEventBuilder.openRescheduleMeetingModalRequest(
+                            commandBasicInfo = basicInfo,
+                            commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST,
+                            triggerId = "trigger-reschedule-old",
+                            meetingUid = meetingUid,
+                            requesterId = "U_HOST",
+                            channel = "C_LIST",
+                            currentStartAt = any(),
+                            listResponseUrl = "",
+                        )
+                    }
+                    startSlot.captured shouldBeGreaterThanOrEqualTo before
+                    startSlot.captured shouldBeLessThanOrEqualTo after
+                }
+
+                then("one WARN names the meeting uid") {
+                    logs.messagesAt(level = Level.WARN) shouldContainExactly
+                        listOf(
+                            "Reschedule click carried no usable meeting start " +
+                                "(a list rendered by an earlier release or an unparsable value); " +
+                                "pre-filling the current time for meetingUid=$meetingUid",
+                        )
                 }
             }
         }
@@ -206,6 +291,7 @@ class SlackOutboundStagerTest :
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
                             listHandle = null,
+                            currentStartAt = null,
                         ),
                 )
 

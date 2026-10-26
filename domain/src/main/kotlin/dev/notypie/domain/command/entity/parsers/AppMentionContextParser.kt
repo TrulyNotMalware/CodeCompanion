@@ -15,7 +15,10 @@ import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.MentionInvocation
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.common.escapeMarkup
 import java.util.*
+
+private val HORIZONTAL_SPACES: Regex = Regex(pattern = "[ \\t]+")
 
 internal class AppMentionContextParser(
     private val commandData: InboundCommand,
@@ -59,23 +62,29 @@ internal class AppMentionContextParser(
             Anything that isn't a command above is treated as `ask`.
             `status`, `usage`, `notice` and `ask` require a granted role — ask an admin if you need access.
             Replies to mention commands are visible only to you; `ask` answers and `notice` messages are posted to the channel.
-            """.trimIndent()
+            """.trimIndent().escapeMarkup()
 
-        internal const val GRANT_USAGE: String =
+        internal val GRANT_USAGE: String =
             "Usage: `@CodeCompanion grant @user <user|ai_user|developer|admin>` — mention exactly one user and one role."
+                .escapeMarkup()
 
-        internal const val REVOKE_USAGE: String =
-            "Usage: `@CodeCompanion revoke @user` — mention exactly one user."
+        internal val REVOKE_USAGE: String =
+            "Usage: `@CodeCompanion revoke @user` — mention exactly one user.".escapeMarkup()
 
-        internal const val ROLES_USAGE: String = "Usage: `@CodeCompanion roles` — no arguments."
+        internal val ROLES_USAGE: String = "Usage: `@CodeCompanion roles` — no arguments.".escapeMarkup()
 
-        internal const val CVE_USAGE: String =
-            "Usage: `@CodeCompanion cve topics` · `cve topic activate|deactivate <topic-key>` · " +
-                "`cve retry all|<event-id>`."
+        internal val CVE_USAGE: String =
+            (
+                "Usage: `@CodeCompanion cve topics` · `cve topic activate|deactivate <topic-key>` · " +
+                    "`cve retry all|<event-id>`."
+            ).escapeMarkup()
 
-        internal const val USAGE_USAGE: String =
-            "Usage: `@CodeCompanion usage [days]` — days between 1 and ${CommandIntent.AgentUsageReport.MAX_DAYS}, " +
-                "default ${CommandIntent.AgentUsageReport.DEFAULT_DAYS}."
+        internal val USAGE_USAGE: String =
+            (
+                "Usage: `@CodeCompanion usage [days]` — " +
+                    "days between 1 and ${CommandIntent.AgentUsageReport.MAX_DAYS}, " +
+                    "default ${CommandIntent.AgentUsageReport.DEFAULT_DAYS}."
+            ).escapeMarkup()
     }
 
     override fun parseContext(idempotencyKey: UUID): CommandContext<NoSubCommands> {
@@ -88,7 +97,7 @@ internal class AppMentionContextParser(
             CommandSet.NOTICE -> {
                 NoticeContext(
                     users = LinkedList(mention.mentionedUserIds),
-                    commands = LinkedList(mention.commandTokens.drop(1)),
+                    message = noticeBody(),
                     commandBasicInfo = commandData.extractBasicInfo(idempotencyKey = idempotencyKey),
                     intents = intents,
                 )
@@ -131,16 +140,16 @@ internal class AppMentionContextParser(
     }
 
     private fun cveOpsContext(): CommandContext<NoSubCommands> {
-        val tokens = mention.commandTokens
+        val tokens = mention.commandTokens.map { it.lowercase() }
         return when {
             tokens.size == 2 && tokens[1] == "topics" -> intentContext(intent = CommandIntent.CveListTopics)
             tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "activate" ->
                 intentContext(
-                    intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = true),
+                    intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3], active = true),
                 )
             tokens.size == 4 && tokens[1] == "topic" && tokens[2] == "deactivate" ->
                 intentContext(
-                    intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3].lowercase(), active = false),
+                    intent = CommandIntent.CveSetTopicActive(topicKey = tokens[3], active = false),
                 )
             tokens.size == 3 && tokens[1] == "retry" && tokens[2] == "all" ->
                 intentContext(intent = CommandIntent.CveRetryDeadLetters)
@@ -207,8 +216,24 @@ internal class AppMentionContextParser(
             return tokens.joinToString(separator = " ")
         }
         if (!dropCommandWord) return text
-        val commandWord = Regex("(?<!\\S)${Regex.escape(mention.commandTokens.first())}(?!\\S)[ \\t]*")
+        val commandWord =
+            Regex(
+                pattern =
+                    "(?<![^\\s\\p{Z}\\u0085])${Regex.escape(mention.commandTokens.first())}(?![^\\s\\p{Z}\\u0085])\\h*",
+            )
         return commandWord.replaceFirst(input = text, replacement = "").trim()
+    }
+
+    private fun noticeBody(): String {
+        val withoutMentions =
+            mention.mentionedUserIds.fold(initial = agentPrompt(dropCommandWord = true)) { body, userId ->
+                body.replace(oldValue = "<@$userId>", newValue = "")
+            }
+        return withoutMentions
+            .lines()
+            .joinToString(separator = "\n") { line ->
+                line.trim().replace(regex = HORIZONTAL_SPACES, replacement = " ")
+            }.trim()
     }
 
     private fun agentChatContext(prompt: String): AgentChatContext =

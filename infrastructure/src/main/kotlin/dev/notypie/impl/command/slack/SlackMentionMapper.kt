@@ -21,7 +21,6 @@ private const val ELEMENT_TYPE_BROADCAST = "broadcast"
 private const val ELEMENT_TYPE_DATE = "date"
 private const val LIST_STYLE_ORDERED = "ordered"
 private const val CODE_FENCE = "```"
-private const val COMMAND_DELIMITER = " "
 private val LINE_BREAK_CHARS: CharArray =
     charArrayOf('\n', '\r', '\u000B', '\u000C', '\u0085', '\u2028', '\u2029')
 
@@ -49,8 +48,7 @@ fun SlackEventCallBackRequest.toMentionInboundCommand(
             ELEMENT_TYPE_TEXT -> {
                 element
                     .extractText()
-                    ?.split(COMMAND_DELIMITER)
-                    ?.filter { it.isNotBlank() }
+                    ?.splitOnWhitespace()
                     ?.forEach { commandTokens.add(it) }
             }
         }
@@ -75,6 +73,20 @@ fun SlackEventCallBackRequest.toMentionInboundCommand(
             ),
     )
 }
+
+private fun String.splitOnWhitespace(): List<String> =
+    buildList {
+        val token = StringBuilder()
+        for (char in this@splitOnWhitespace) {
+            if (char.isWhitespace() || char in LINE_BREAK_CHARS) {
+                if (token.isNotEmpty()) add(token.toString())
+                token.setLength(0)
+            } else {
+                token.append(char)
+            }
+        }
+        if (token.isNotEmpty()) add(token.toString())
+    }
 
 internal fun List<Block>.restoreMentionText(botId: String): String =
     filter { it.type == BLOCK_TYPE_RICH_TEXT }

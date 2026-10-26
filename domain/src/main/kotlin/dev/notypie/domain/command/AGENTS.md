@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-26 -->
 
 # domain/command
 
@@ -15,7 +15,7 @@ queue and hands the effects to the infrastructure resolver/stager.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SubCommandDefinition.kt` | `SubCommand` / `SubCommandDefinition` contracts — the parsed sub-command a context dispatches on |
+| `SubCommandDefinition.kt` | `SubCommand` / `SubCommandDefinition` contracts — the parsed sub-command a context dispatches on; `findSubCommandByIdentifier` matches case-insensitively |
 | `EventQueue.kt` | `EventQueue` / `DefaultEventQueue` — ordered, drainable queue of resolved command events |
 
 ## Subdirectories

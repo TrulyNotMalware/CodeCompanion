@@ -41,7 +41,11 @@ class StandupSlashServiceImpl(
     }
 
     private fun findAnswerCandidates(commandData: InboundCommand): List<StandupAnswerCandidate> {
-        if (commandData.subCommands.firstOrNull() != StandupSubCommandDefinition.ANSWER.subCommandIdentifier) {
+        val isAnswer =
+            commandData.subCommands
+                .firstOrNull()
+                ?.equals(other = StandupSubCommandDefinition.ANSWER.subCommandIdentifier, ignoreCase = true) == true
+        if (!isAnswer) {
             return emptyList()
         }
         val now = clock.instant()

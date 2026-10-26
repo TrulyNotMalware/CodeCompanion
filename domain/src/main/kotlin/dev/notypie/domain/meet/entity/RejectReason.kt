@@ -11,7 +11,7 @@ enum class RejectReason(
     PRIOR_COMMITMENT("Prior commitment"),
     REQUEST_DELAY("Delay request"),
     VACATION("Vacation"),
-    PERSONAL_REASON("PERSONAL reason"),
+    PERSONAL_REASON("Personal reason"),
     OTHER("Other"),
     ;
 

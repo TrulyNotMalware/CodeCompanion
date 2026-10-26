@@ -425,6 +425,26 @@ class SlackInteractionRequestParserTest :
                 }
             }
 
+            `when`("an ephemeral /meetup list's Reschedule button value carries the meeting's start as a 4th token") {
+                val listKey = UUID.randomUUID()
+                val meetingUid = UUID.randomUUID()
+                val payload =
+                    createBlockActionPayloadJson(
+                        idempotencyKey = listKey,
+                        isEphemeral = true,
+                        buttonType = ButtonType.PRIMARY,
+                        buttonValue = "$listKey,MEETING_RESCHEDULE_REQUEST,$meetingUid,2026-11-03T10:00:00",
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("both tokens after the type surface as routingExtras and the inbound mapper keeps them") {
+                    result.type shouldBe CommandDetailType.MEETING_RESCHEDULE_REQUEST
+                    result.routingExtras shouldBe listOf(meetingUid.toString(), "2026-11-03T10:00:00")
+                    result.toInbound().routingExtras shouldBe listOf(meetingUid.toString(), "2026-11-03T10:00:00")
+                }
+            }
+
             `when`("message text is only an idempotencyKey (1 token)") {
                 val idempotencyKey = UUID.randomUUID()
                 val payload =
