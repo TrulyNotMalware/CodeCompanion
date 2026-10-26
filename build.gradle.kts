@@ -1,7 +1,7 @@
 import org.jlleitschuh.gradle.ktlint.tasks.GenerateReportsTask
 
 plugins {
-    id("org.springframework.boot") version "4.1.1" apply false
+    id("org.springframework.boot") version "4.1.2" apply false
     id("java-library")
     id("java-test-fixtures")
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
@@ -24,10 +24,10 @@ extra["kotestVersion"] = "6.2.6"
 extra["slackSdkVersion"] = "1.52.0"
 extra["mockkVersion"] = "1.14.11"
 extra["springMockkVersion"] = "5.0.1"
-extra["springBootVersion"] = "4.1.1"
+extra["springBootVersion"] = "4.1.2"
 extra["jacksonVersion"] = "3.2.3"
 extra["kotlinLoggingVersion"] = "8.0.4"
-extra["springAiVersion"] = "2.0.1"
+extra["springAiVersion"] = "2.0.2"
 
 val kotestVersion = extra["kotestVersion"] as String
 val mockkVersion = extra["mockkVersion"] as String
