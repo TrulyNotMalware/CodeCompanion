@@ -89,7 +89,11 @@ class AgentChatContextTest :
             }
         }
 
-        mapOf("only spaces" to "   ", "only a NEL (U+0085)" to "\u0085").forEach { (label, prompt) ->
+        mapOf(
+            "only spaces" to "   ",
+            "only a NEL (U+0085)" to "\u0085",
+            "only zero-width characters (U+200B, U+FEFF)" to "\u200B\uFEFF",
+        ).forEach { (label, prompt) ->
             given("AgentChatContext with a blank prompt of $label") {
                 val intentQueue = createIntentQueue()
                 val basicInfo = createCommandBasicInfo()

@@ -141,29 +141,71 @@ class SafeTextTest :
             }
         }
 
-        given("isBlankAcrossLineBreaks") {
+        given("isVisiblyBlank") {
             `when`("the text is only a NEL (U+0085), which String.isBlank does not count as whitespace") {
-                then("it is blank, because splitLineBreaks treats NEL as a line break") {
-                    "\u0085".isBlankAcrossLineBreaks() shouldBe true
+                then("it is blank") {
+                    "\u0085".isVisiblyBlank() shouldBe true
                 }
             }
 
             `when`("NELs are mixed with spaces, tabs and U+2028") {
                 then("it is blank") {
-                    " \u0085\t\u2028 \u0085\u0085 ".isBlankAcrossLineBreaks() shouldBe true
+                    " \u0085\t\u2028 \u0085\u0085 ".isVisiblyBlank() shouldBe true
                 }
             }
 
             `when`("NELs surround real text") {
                 then("it is not blank") {
-                    "\u0085what is kotlin?\u0085".isBlankAcrossLineBreaks() shouldBe false
+                    "\u0085what is kotlin?\u0085".isVisiblyBlank() shouldBe false
+                }
+            }
+
+            `when`("the text is only line breaks: CRLF, CR, VT, FF, U+2028 and U+2029") {
+                then("it is blank") {
+                    "\r\n\r\u000B\u000C\u2028\u2029".isVisiblyBlank() shouldBe true
                 }
             }
 
             `when`("the text is empty or only spaces") {
                 then("it is blank, as String.isBlank says") {
-                    "".isBlankAcrossLineBreaks() shouldBe true
-                    "   ".isBlankAcrossLineBreaks() shouldBe true
+                    "".isVisiblyBlank() shouldBe true
+                    "   ".isVisiblyBlank() shouldBe true
+                }
+            }
+
+            `when`("the text is only zero-width and other format characters, which String.isBlank keeps") {
+                then("it is blank") {
+                    "\u200B\u200C\u200D\u2060\uFEFF\u00AD".isVisiblyBlank() shouldBe true
+                }
+            }
+
+            `when`("format characters are mixed with spaces and line breaks") {
+                then("it is blank") {
+                    " \u200B\n\uFEFF\u0085 \u2028\u200D ".isVisiblyBlank() shouldBe true
+                }
+            }
+
+            `when`("the text is only a format character outside the BMP (U+E0001, a surrogate pair)") {
+                then("it is blank") {
+                    "\uDB40\uDC01".isVisiblyBlank() shouldBe true
+                }
+            }
+
+            `when`("format characters surround real text") {
+                then("it is not blank") {
+                    "\u200Bwhat is kotlin?\uFEFF".isVisiblyBlank() shouldBe false
+                }
+            }
+
+            `when`("the text is only control characters that are not whitespace (U+0001, U+007F, U+009B)") {
+                then("it is blank") {
+                    "\u0001\u007F\u009B".isVisiblyBlank() shouldBe true
+                }
+            }
+
+            `when`("control characters surround real text") {
+                then("it is not blank") {
+                    "\u0001what is kotlin?\u007F".isVisiblyBlank() shouldBe false
                 }
             }
         }

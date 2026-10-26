@@ -184,6 +184,27 @@ class SlackBlockLimitsTest :
             }
         }
 
+        given("hardWrap") {
+            `when`("the last space in the window is past half of it") {
+                then("the piece ends right after that space") {
+                    "aaaaaa bbbbbbbb".hardWrap(maxLength = 10) shouldBe listOf("aaaaaa ", "bbbbbbbb")
+                }
+            }
+
+            `when`("the last space in the window sits exactly at half of it") {
+                then("the piece is cut at the limit instead") {
+                    "aaaaa bbbbbbbbb".hardWrap(maxLength = 10) shouldBe listOf("aaaaa bbbb", "bbbbb")
+                }
+            }
+
+            `when`("a run of spaces is longer than the limit") {
+                then("its whitespace-only pieces are kept") {
+                    ("a".repeat(n = 10) + " ".repeat(n = 15)).hardWrap(maxLength = 10) shouldBe
+                        listOf("a".repeat(n = 10), " ".repeat(n = 10), " ".repeat(n = 5))
+                }
+            }
+        }
+
         given("truncatePlainText") {
             `when`("the text is over the limit") {
                 then("it is cut to the limit and ends with an ellipsis") {
