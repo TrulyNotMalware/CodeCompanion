@@ -83,6 +83,11 @@ class StandupSummaryService(
                         members = routine.members,
                         answers = session.answers.boundedForSummary(),
                         questions = routine.questions,
+                        skippedUserIds =
+                            session.dispatches
+                                .filter { it.skippedAt != null }
+                                .map { it.userId }
+                                .toSet(),
                     )
                 val commandBasicInfo =
                     CommandBasicInfo.forOutbound(publisherId = routine.creatorId, channel = routine.summaryChannel)

@@ -11,6 +11,7 @@ import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
+import dev.notypie.domain.command.entity.event.RecordStandupSkipEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.StandupOpsAction
 import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
@@ -287,6 +288,37 @@ class SlackIntentResolverTest :
                 then("the ephemeral confirmation reaches the payload so the service can answer in the channel") {
                     record.payload.confirmation shouldBe
                         StandupAnswerConfirmation.Ephemeral(channel = ConversationTarget(id = "C_CMD"))
+                }
+            }
+        }
+
+        given("RecordStandupSkip intent") {
+            val sessionUid = UUID.randomUUID()
+            val updateNotice =
+                StandupAnswerConfirmation.UpdateNotice(
+                    ref = MessageRef(conversation = ConversationTarget(id = "D_NOTICE"), messageId = "1.3"),
+                )
+            val intent =
+                CommandIntent.RecordStandupSkip(
+                    sessionUid = sessionUid,
+                    userId = "U_STANDUP",
+                    confirmation = updateNotice,
+                )
+
+            `when`("resolveAll is called") {
+                val event =
+                    resolver
+                        .resolveAll(intents = listOf(intent), basicInfo = basicInfo)
+                        .single()
+
+                then("it produces an internal RecordStandupSkipEvent carrying the member and the DM prompt to fold") {
+                    val skip = event.shouldBeInstanceOf<RecordStandupSkipEvent>()
+                    skip.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    skip.isInternal shouldBe true
+                    skip.payload.sessionUid shouldBe sessionUid
+                    skip.payload.userId shouldBe "U_STANDUP"
+                    skip.payload.confirmation shouldBe updateNotice
+                    skip.type shouldBe CommandDetailType.STANDUP_ANSWER_SUBMIT
                 }
             }
         }

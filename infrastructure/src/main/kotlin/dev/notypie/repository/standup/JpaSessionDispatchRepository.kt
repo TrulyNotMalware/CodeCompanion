@@ -96,6 +96,22 @@ interface JpaSessionDispatchRepository : JpaRepository<SessionDispatchSchema, Lo
     @Query(
         value = """
             UPDATE standup_session_dispatch
+            SET skipped_at = :now, updated_at = :now
+            WHERE session_id = :sessionId AND user_id = :userId AND skipped_at IS NULL
+        """,
+        nativeQuery = true,
+    )
+    fun markMemberSkipped(
+        @Param("sessionId") sessionId: Long,
+        @Param("userId") userId: String,
+        @Param("now") now: Instant,
+    ): Int
+
+    @Modifying
+    @Transactional
+    @Query(
+        value = """
+            UPDATE standup_session_dispatch
             SET dm_status = 'PENDING', claim_token = NULL, updated_at = :now
             WHERE dm_status = 'SENDING' AND updated_at < :olderThan
         """,

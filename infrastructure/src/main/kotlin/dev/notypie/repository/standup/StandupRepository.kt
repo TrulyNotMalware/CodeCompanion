@@ -33,6 +33,7 @@ data class NudgeCandidateSession(
     val cutoffAt: Instant,
     val sentMemberIds: Set<String>,
     val answeredUserIds: Set<String>,
+    val skippedUserIds: Set<String>,
 )
 
 enum class AnswerRecordResult {
@@ -68,6 +69,8 @@ interface StandupRepository {
         responses: List<String>,
         submittedAt: Instant,
     ): AnswerRecordResult
+
+    fun recordSkip(sessionUid: UUID, userId: String, skippedAt: Instant): AnswerRecordResult
 
     fun claimDispatch(dispatchId: Long, claimToken: String, now: Instant): Boolean
 

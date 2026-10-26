@@ -86,6 +86,7 @@ class ModalTemplateBuilderTest :
                             members = members,
                             answers = answers,
                             questions = questions,
+                            skippedUserIds = emptySet(),
                         ).template
                 val texts = blocks.map { it.shouldBeInstanceOf<SectionBlock>().text.text }
 
@@ -117,6 +118,7 @@ class ModalTemplateBuilderTest :
                                     createStandupAnswerDto(userId = "U1", responses = listOf("shipped", "")),
                                 ),
                             questions = listOf("Yesterday?", "Today?"),
+                            skippedUserIds = emptySet(),
                         ).template
                         .map { it.shouldBeInstanceOf<SectionBlock>().text.text }
 
@@ -126,6 +128,37 @@ class ModalTemplateBuilderTest :
                             "*Daily — 2026-05-01*",
                             "<@U1>\n• *Yesterday?* shipped\n• *Today?* (blank)",
                             "<@U2> _(no response)_",
+                        )
+                }
+            }
+        }
+
+        given("standupSummaryTemplate for members who skipped the prompt") {
+            `when`("one member skipped without answering and another answered after skipping") {
+                val texts =
+                    templateBuilder
+                        .standupSummaryTemplate(
+                            routineName = "Daily",
+                            sessionDate = LocalDate.of(2026, 5, 1),
+                            members =
+                                listOf(
+                                    createRoutineMemberDto(userId = "U1"),
+                                    createRoutineMemberDto(userId = "U2"),
+                                    createRoutineMemberDto(userId = "U3"),
+                                ),
+                            answers = listOf(createStandupAnswerDto(userId = "U2", responses = listOf("shipped"))),
+                            questions = listOf("Yesterday?"),
+                            skippedUserIds = setOf("U1", "U2"),
+                        ).template
+                        .map { it.shouldBeInstanceOf<SectionBlock>().text.text }
+
+                then("the skip is marked, an answer wins over a skip, and a silent member still has no response") {
+                    texts shouldBe
+                        listOf(
+                            "*Daily — 2026-05-01*",
+                            "<@U1> _(skipped)_",
+                            "<@U2>\n• *Yesterday?* shipped",
+                            "<@U3> _(no response)_",
                         )
                 }
             }
@@ -145,6 +178,7 @@ class ModalTemplateBuilderTest :
                             members = listOf(createRoutineMemberDto(userId = "U_ESC")),
                             answers = listOf(createStandupAnswerDto(userId = "U_ESC", responses = listOf(hostile))),
                             questions = listOf(hostile),
+                            skippedUserIds = emptySet(),
                         ).template
                         .map { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
 
@@ -184,6 +218,7 @@ class ModalTemplateBuilderTest :
                                     )
                                 },
                             questions = questions,
+                            skippedUserIds = emptySet(),
                         ).template
                         .map { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
 
@@ -211,6 +246,7 @@ class ModalTemplateBuilderTest :
                                     ),
                                 ),
                             questions = listOf("Yesterday?"),
+                            skippedUserIds = emptySet(),
                         ).template[1]
                         .let { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }
 
@@ -241,10 +277,11 @@ class ModalTemplateBuilderTest :
                         members = members,
                         answers = answers,
                         questions = questions,
+                        skippedUserIds = emptySet(),
                     )
 
                 then("every part renders within the message block-text budget and block count") {
-                    (parts.size > 1) shouldBe true
+                    parts.size shouldBeGreaterThan 1
                     parts.forEach { part ->
                         val blocks =
                             templateBuilder
@@ -254,6 +291,7 @@ class ModalTemplateBuilderTest :
                                     members = part.members,
                                     answers = part.answers,
                                     questions = part.questions,
+                                    skippedUserIds = part.skippedUserIds,
                                 ).template
                         blocks.size shouldBeLessThanOrEqual SlackBlockLimits.MESSAGE_MAX_BLOCKS
                         blocks.sumOf {
@@ -280,6 +318,7 @@ class ModalTemplateBuilderTest :
                         members = listOf(createRoutineMemberDto(userId = "U1"), createRoutineMemberDto(userId = "U2")),
                         answers = listOf(createStandupAnswerDto(userId = "U1", responses = listOf("shipped"))),
                         questions = listOf("Yesterday?"),
+                        skippedUserIds = emptySet(),
                     )
                 val empty =
                     ModalTemplateBuilder.standupSummaryParts(
@@ -288,6 +327,7 @@ class ModalTemplateBuilderTest :
                         members = emptyList(),
                         answers = emptyList(),
                         questions = listOf("Yesterday?"),
+                        skippedUserIds = emptySet(),
                     )
 
                 then("there is exactly one part with the plain routine name") {
@@ -295,6 +335,39 @@ class ModalTemplateBuilderTest :
                     small.single().members.map { it.userId } shouldBe listOf("U1", "U2")
                     empty.map { it.routineName } shouldBe listOf("Daily")
                     empty.single().members shouldBe emptyList()
+                }
+            }
+
+            `when`("members skipped in a routine whose summary is split") {
+                val questions = (1..8).map { index -> "Q$index " + "q".repeat(n = 196) }
+                val members = (1..30).map { createRoutineMemberDto(userId = "U0123456789$it") }
+                val parts =
+                    ModalTemplateBuilder.standupSummaryParts(
+                        routineName = "Daily",
+                        sessionDate = sessionDate,
+                        members = members,
+                        answers =
+                            members.drop(n = 1).dropLast(n = 1).map { member ->
+                                createStandupAnswerDto(
+                                    userId = member.userId,
+                                    responses = questions.map { "b".repeat(n = 300) },
+                                )
+                            },
+                        questions = questions,
+                        skippedUserIds =
+                            setOf(
+                                members.first().userId,
+                                members[1].userId,
+                                members.last().userId,
+                                "U_NOT_A_MEMBER",
+                            ),
+                    )
+
+                then("each part carries only the unanswered skips of its own members") {
+                    parts.size shouldBeGreaterThan 1
+                    parts.first().skippedUserIds shouldBe setOf(members.first().userId)
+                    parts.last().skippedUserIds shouldBe setOf(members.last().userId)
+                    parts.drop(n = 1).dropLast(n = 1).forEach { part -> part.skippedUserIds shouldBe emptySet() }
                 }
             }
         }
@@ -1521,6 +1594,7 @@ class ModalTemplateBuilderTest :
                                         ),
                                     ),
                                 questions = questions,
+                                skippedUserIds = emptySet(),
                             ).template
                             .last()
                             .let { (it.shouldBeInstanceOf<SectionBlock>().text as MarkdownTextObject).text }

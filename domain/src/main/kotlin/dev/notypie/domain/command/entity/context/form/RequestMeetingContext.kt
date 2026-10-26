@@ -14,7 +14,6 @@ import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
 import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.inbound.isCanceled
-import dev.notypie.domain.command.inbound.isComplete
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -138,7 +137,7 @@ internal class RequestMeetingContext(
         }
 
         val formInput = MeetingFormInput.from(interaction = interaction)
-        validationErrorOrNull(formInput = formInput, interaction = interaction)?.let { return it }
+        validationErrorOrNull(formInput = formInput)?.let { return it }
 
         val meeting =
             try {
@@ -168,7 +167,7 @@ internal class RequestMeetingContext(
         )
     }
 
-    private fun validationErrorOrNull(formInput: MeetingFormInput, interaction: InboundInteraction): CommandOutput? {
+    private fun validationErrorOrNull(formInput: MeetingFormInput): CommandOutput? {
         val errorMessage =
             when {
                 formInput.participants.isEmpty() -> "Select participants"
@@ -178,8 +177,6 @@ internal class RequestMeetingContext(
                 formInput.endAt != null && !formInput.endAt.isAfter(formInput.startAt) -> {
                     "End time must be after start time."
                 }
-
-                !interaction.isComplete() -> "Please select *all options.*"
 
                 else -> return null
             }

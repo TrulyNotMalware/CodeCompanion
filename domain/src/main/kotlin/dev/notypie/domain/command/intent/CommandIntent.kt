@@ -92,6 +92,12 @@ sealed class CommandIntent : CommandEffect {
         val confirmation: StandupAnswerConfirmation,
     ) : CommandIntent()
 
+    data class RecordStandupSkip(
+        val sessionUid: UUID,
+        val userId: String,
+        val confirmation: StandupAnswerConfirmation,
+    ) : CommandIntent()
+
     data class CreateStandupRoutine(
         val name: String,
         val creatorId: String,

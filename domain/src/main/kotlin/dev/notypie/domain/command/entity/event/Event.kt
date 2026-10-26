@@ -285,6 +285,23 @@ data class RecordStandupAnswerEvent(
     override val type: CommandDetailType,
 ) : CommandEvent<RecordStandupAnswerPayload>
 
+class RecordStandupSkipPayload(
+    override val eventId: UUID = UUID.randomUUID(),
+    val sessionUid: UUID,
+    val userId: String,
+    val confirmation: StandupAnswerConfirmation,
+) : EventPayload
+
+data class RecordStandupSkipEvent(
+    override val idempotencyKey: UUID,
+    override val name: String = RecordStandupSkipEvent::class.java.simpleName,
+    override val timestamp: Long = System.currentTimeMillis(),
+    override val isInternal: Boolean = true,
+    override val destination: String = "",
+    override val payload: RecordStandupSkipPayload,
+    override val type: CommandDetailType,
+) : CommandEvent<RecordStandupSkipPayload>
+
 data class StandupCutoffEvent(
     val sessionId: Long,
     val sessionUid: UUID,

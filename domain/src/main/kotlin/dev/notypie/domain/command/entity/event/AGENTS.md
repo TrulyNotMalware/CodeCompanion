@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
 
 # domain/command/entity/event
 
@@ -12,7 +12,7 @@ implements to deliver them.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Event.kt` | `EventPayload { eventId }`; `CommandEvent<out T : EventPayload>` (`idempotencyKey`, `name`, `type: CommandDetailType`, `payload`, `destination`, `isInternal`, `timestamp`). Payload + `data class` event pairs: `GetMeetingEventPayload` / `GetMeetingListEvent` (via abstract `MeetingPayload`), `UpdateMeetingAttendance*`, `CancelMeeting*`, `RescheduleMeeting*`, `AddParticipant*` (the three payloads carry `listHandle: ResponseReplaceHandle?` from their intent), `StatusReport*`, `AgentUsageReport*` (`days`), `RoleManage*` (+ `RoleManageAction`), `CveSubscription*` (+ `CveSubscriptionAction`), `CveLatest*`, `CveOps*` (+ `CveOpsAction`), `AgentConverse*`, `RecordStandupAnswer*`, `CreateStandupRoutine*`, `StandupOps*` (+ `StandupOpsAction` `LIST` / `STOP`; `routineName` is set for `STOP` only). Plain `data class`es that are **not** `CommandEvent`s: `StandupCutoffEvent`, `DeclineModalOpenFailedEvent`, `StandupModalOpenFailedEvent`; `enum CalendarConnectionAction { CONNECT, DISCONNECT, STATUS }`, `CalendarConnectionPayload(action, userId, responseBasicInfo)` + `CalendarConnectionRequestEvent` (`type` defaults to `CALENDAR_CONNECTION`) |
+| `Event.kt` | `EventPayload { eventId }`; `CommandEvent<out T : EventPayload>` (`idempotencyKey`, `name`, `type: CommandDetailType`, `payload`, `destination`, `isInternal`, `timestamp`). Payload + `data class` event pairs: `GetMeetingEventPayload` / `GetMeetingListEvent` (via abstract `MeetingPayload`), `UpdateMeetingAttendance*`, `CancelMeeting*`, `RescheduleMeeting*`, `AddParticipant*` (the three payloads carry `listHandle: ResponseReplaceHandle?` from their intent), `StatusReport*`, `AgentUsageReport*` (`days`), `RoleManage*` (+ `RoleManageAction`), `CveSubscription*` (+ `CveSubscriptionAction`), `CveLatest*`, `CveOps*` (+ `CveOpsAction`), `AgentConverse*`, `RecordStandupAnswer*`, `RecordStandupSkip*` (`sessionUid`, `userId`, `confirmation`), `CreateStandupRoutine*`, `StandupOps*` (+ `StandupOpsAction` `LIST` / `STOP`; `routineName` is set for `STOP` only). Plain `data class`es that are **not** `CommandEvent`s: `StandupCutoffEvent`, `DeclineModalOpenFailedEvent`, `StandupModalOpenFailedEvent`; `enum CalendarConnectionAction { CONNECT, DISCONNECT, STATUS }`, `CalendarConnectionPayload(action, userId, responseBasicInfo)` + `CalendarConnectionRequestEvent` (`type` defaults to `CALENDAR_CONNECTION`) |
 | `EventPublisher.kt` | `EventPublisher.publishEvent(EventQueue<CommandEvent<EventPayload>>)` and the `publishOne(event)` extension that wraps a single event in a one-shot `DefaultEventQueue` |
 
 ## For AI Agents
@@ -25,7 +25,7 @@ implements to deliver them.
   (or `XxxEvent` for state changes).
 - Every payload that expects an asynchronous reply carries `responseBasicInfo: CommandBasicInfo` — the
   channel/app the listener answers on. `UpdateMeetingAttendancePayload` omits it because its listener does not
-  post; `RecordStandupAnswerPayload` carries `confirmation: StandupAnswerConfirmation` instead — `UpdateNotice(ref)` is the
+  post; `RecordStandupAnswerPayload` and `RecordStandupSkipPayload` carry `confirmation: StandupAnswerConfirmation` instead — `UpdateNotice(ref)` is the
   DM prompt the listener collapses with the outcome, `Ephemeral(channel)` asks for an ephemeral confirmation when the modal
   came from `/standup answer` and there is no message to collapse, `None` asks for nothing.
 - `type: CommandDetailType` on the event is the routing token that later interactions use to find

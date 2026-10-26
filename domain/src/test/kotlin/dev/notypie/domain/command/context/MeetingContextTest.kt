@@ -13,6 +13,7 @@ import dev.notypie.domain.command.entity.context.form.MeetingFormInput
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
 import dev.notypie.domain.command.entity.slash.MeetingListRange
 import dev.notypie.domain.command.entity.slash.MeetingSubCommandDefinition
+import dev.notypie.domain.command.entity.slash.RequestMeetingContextResult
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.multiUsersField
 import dev.notypie.domain.command.outbound.ConversationTarget
@@ -24,6 +25,8 @@ import dev.notypie.domain.command.outbound.directFallbackOf
 import dev.notypie.domain.command.plainTextField
 import dev.notypie.domain.command.rejectAction
 import dev.notypie.domain.command.timePickerField
+import dev.notypie.domain.command.toggleField
+import dev.notypie.domain.command.unselectedTimePickerField
 import dev.notypie.domain.meet.entity.Meeting
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.longs.shouldBeLessThanOrEqual
@@ -408,6 +411,92 @@ class MeetingContextTest :
                     val intents = intentQueue.snapshot()
                     intents.size shouldBe 1
                     intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                }
+            }
+            `when`("the production-shaped form leaves the optional end time unselected") {
+                val intentQueue = createIntentQueue()
+                val context =
+                    RequestMeetingContext(
+                        commandBasicInfo = testCommandBasicInfo,
+                        subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+                        intents = intentQueue,
+                    )
+                val meetingDate = LocalDate.now().plusDays(1)
+                val startTime = LocalTime.of(10, 0)
+                val interactionPayload =
+                    createInboundInteraction(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                        action = approveAction(isSelected = true),
+                        form =
+                            listOf(
+                                plainTextField(text = VALID_TEST_TITLE),
+                                plainTextField(text = VALID_TEST_REASON),
+                                toggleField(isSelected = false),
+                                multiUsersField(maximumSequence = 10),
+                                datePickerField(
+                                    date = meetingDate,
+                                    format = MeetingFormInput.DATE_PATTERN,
+                                ),
+                                timePickerField(
+                                    time = startTime,
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
+                                ),
+                                unselectedTimePickerField(),
+                            ),
+                    )
+                val res = context.handleInteraction(interaction = interactionPayload)
+
+                then("creates the meeting with endAt = startAt + 1h and no validation error") {
+                    res.ok shouldBe true
+                    res.status shouldBe Status.SUCCESS
+                    val meeting = res.shouldBeInstanceOf<RequestMeetingContextResult>().meeting
+                    meeting.startAt shouldBe LocalDateTime.of(meetingDate, startTime)
+                    meeting.endAt shouldBe LocalDateTime.of(meetingDate, startTime).plusHours(1)
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    intents.first().shouldBeInstanceOf<OutboundMessage.ReplaceMessage>()
+                }
+            }
+            `when`("the start time is left unselected while an end time is chosen") {
+                val intentQueue = createIntentQueue()
+                val context =
+                    RequestMeetingContext(
+                        commandBasicInfo = testCommandBasicInfo,
+                        subCommand = SubCommand.of(definition = MeetingSubCommandDefinition.NONE),
+                        intents = intentQueue,
+                    )
+                val interactionPayload =
+                    createInboundInteraction(
+                        idempotencyKey = testCommandBasicInfo.idempotencyKey,
+                        detailType = CommandDetailType.MEETING_CREATE_REQUEST,
+                        action = approveAction(isSelected = true),
+                        form =
+                            listOf(
+                                plainTextField(text = VALID_TEST_TITLE),
+                                plainTextField(text = VALID_TEST_REASON),
+                                toggleField(isSelected = false),
+                                multiUsersField(maximumSequence = 10),
+                                datePickerField(
+                                    date = LocalDate.now().plusDays(1),
+                                    format = MeetingFormInput.DATE_PATTERN,
+                                ),
+                                unselectedTimePickerField(),
+                                timePickerField(
+                                    time = LocalTime.of(11, 0),
+                                    format = MeetingFormInput.SIMPLE_TIME_PATTERN,
+                                ),
+                            ),
+                    )
+                val res = context.handleInteraction(interaction = interactionPayload)
+
+                then("rejects the request instead of treating the end time as the start") {
+                    res.ok shouldBe false
+                    val intents = intentQueue.snapshot()
+                    intents.size shouldBe 1
+                    val ephemeral = intents.first().shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                    ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        "Make sure to choose a time in the *future* rather than now."
                 }
             }
         }

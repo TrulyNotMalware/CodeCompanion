@@ -56,11 +56,16 @@ class ModalTemplateBuilder(
         fun standupSummaryHeader(routineName: String, sessionDate: LocalDate): String =
             "*${routineName.escapeMrkdwn()} — ${sessionDate.format(STANDUP_SESSION_DATE_FORMAT)}*"
 
-        fun standupSummaryMemberSection(userId: String, answer: StandupAnswerDto?, questions: List<String>): String =
+        fun standupSummaryMemberSection(
+            userId: String,
+            answer: StandupAnswerDto?,
+            skipped: Boolean,
+            questions: List<String>,
+        ): String =
             buildString {
                 append("<@$userId>")
                 if (answer == null) {
-                    append(" _(no response)_")
+                    append(if (skipped) " _(skipped)_" else " _(no response)_")
                     return@buildString
                 }
                 questions.forEachIndexed { index, question ->
@@ -79,6 +84,7 @@ class ModalTemplateBuilder(
             members: List<RoutineMemberDto>,
             answers: List<StandupAnswerDto>,
             questions: List<String>,
+            skippedUserIds: Set<String>,
         ): List<MessageContent.StandupSummary> {
             val answersByUser = answers.associateBy { it.userId }
             val budget =
@@ -91,6 +97,7 @@ class ModalTemplateBuilder(
                     standupSummaryMemberSection(
                         userId = member.userId,
                         answer = answersByUser[member.userId],
+                        skipped = member.userId in skippedUserIds,
                         questions = questions,
                     ).length
                 val current = groups.lastOrNull()
@@ -110,6 +117,11 @@ class ModalTemplateBuilder(
                     members = pageMembers,
                     answers = pageMembers.mapNotNull { answersByUser[it.userId] },
                     questions = questions,
+                    skippedUserIds =
+                        pageMembers
+                            .map { it.userId }
+                            .filter { it in skippedUserIds && it !in answersByUser }
+                            .toSet(),
                 )
             }
         }
@@ -706,6 +718,7 @@ class ModalTemplateBuilder(
         members: List<RoutineMemberDto>,
         answers: List<StandupAnswerDto>,
         questions: List<String>,
+        skippedUserIds: Set<String>,
     ): LayoutBlocks {
         val answersByUser = answers.associateBy { it.userId }
         val hiddenMembers = members.size - STANDUP_SUMMARY_MAX_MEMBER_SECTIONS
@@ -725,6 +738,7 @@ class ModalTemplateBuilder(
                                 standupSummaryMemberSection(
                                     userId = member.userId,
                                     answer = answersByUser[member.userId],
+                                    skipped = member.userId in skippedUserIds,
                                     questions = questions,
                                 ),
                             isMarkDown = true,

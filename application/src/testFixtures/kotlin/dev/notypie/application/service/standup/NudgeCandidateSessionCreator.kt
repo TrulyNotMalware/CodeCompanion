@@ -11,6 +11,7 @@ fun createNudgeCandidateSession(
     cutoffAt: Instant = Instant.parse("2026-05-01T02:00:00Z"),
     sentMemberIds: Set<String> = emptySet(),
     answeredUserIds: Set<String> = emptySet(),
+    skippedUserIds: Set<String> = emptySet(),
 ): NudgeCandidateSession =
     NudgeCandidateSession(
         sessionId = sessionId,
@@ -19,4 +20,5 @@ fun createNudgeCandidateSession(
         cutoffAt = cutoffAt,
         sentMemberIds = sentMemberIds,
         answeredUserIds = answeredUserIds,
+        skippedUserIds = skippedUserIds,
     )

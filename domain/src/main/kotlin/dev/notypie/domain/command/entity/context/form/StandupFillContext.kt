@@ -8,7 +8,10 @@ import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.CommandType
 import dev.notypie.domain.command.entity.context.ReactionContext
 import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.isCanceled
+import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.IntentQueue
+import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageRef
 import dev.notypie.domain.command.outbound.ModalForm
@@ -48,22 +51,35 @@ internal class StandupFillContext(
                     commandType = commandType,
                     commandDetailType = commandDetailType,
                 )
-        addOutbound(
-            OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = interaction.trigger.raw),
-                form =
-                    ModalForm.StandupFill(
+        val originNotice =
+            MessageRef(
+                conversation = ConversationTarget(id = interaction.channelId),
+                messageId = interaction.message?.raw.orEmpty(),
+            )
+        if (interaction.isCanceled()) {
+            addIntent(
+                intent =
+                    CommandIntent.RecordStandupSkip(
                         sessionUid = sessionUid,
-                        routineUid = routineUid,
-                        requesterId = interaction.actor.id,
-                        originNotice =
-                            MessageRef(
-                                conversation = ConversationTarget(id = interaction.channelId),
-                                messageId = interaction.message?.raw.orEmpty(),
+                        userId = interaction.actor.id,
+                        confirmation = StandupAnswerConfirmation.UpdateNotice(ref = originNotice),
+                    ),
+            )
+        } else {
+            addOutbound(
+                message =
+                    OutboundMessage.OpenModal(
+                        handle = ModalOpenHandle(raw = interaction.trigger.raw),
+                        form =
+                            ModalForm.StandupFill(
+                                sessionUid = sessionUid,
+                                routineUid = routineUid,
+                                requesterId = interaction.actor.id,
+                                originNotice = originNotice,
                             ),
                     ),
-            ),
-        )
+            )
+        }
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

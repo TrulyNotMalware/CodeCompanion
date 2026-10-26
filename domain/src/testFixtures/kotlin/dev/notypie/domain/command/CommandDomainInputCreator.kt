@@ -29,6 +29,8 @@ import dev.notypie.domain.command.entity.event.CveSubscriptionPayload
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
+import dev.notypie.domain.command.entity.event.RecordStandupSkipEvent
+import dev.notypie.domain.command.entity.event.RecordStandupSkipPayload
 import dev.notypie.domain.command.entity.event.RoleManageAction
 import dev.notypie.domain.command.entity.event.RoleManagePayload
 import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
@@ -99,6 +101,22 @@ fun createRecordStandupAnswerEvent(
             sessionUid = sessionUid,
             userId = userId,
             responses = responses,
+            confirmation = confirmation,
+        ),
+    type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+)
+
+fun createRecordStandupSkipEvent(
+    sessionUid: UUID = UUID.randomUUID(),
+    userId: String = TEST_USER_ID,
+    confirmation: StandupAnswerConfirmation = StandupAnswerConfirmation.None,
+    idempotencyKey: UUID = UUID.randomUUID(),
+) = RecordStandupSkipEvent(
+    idempotencyKey = idempotencyKey,
+    payload =
+        RecordStandupSkipPayload(
+            sessionUid = sessionUid,
+            userId = userId,
             confirmation = confirmation,
         ),
     type = CommandDetailType.STANDUP_ANSWER_SUBMIT,

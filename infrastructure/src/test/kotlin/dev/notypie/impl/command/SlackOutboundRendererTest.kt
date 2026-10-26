@@ -301,6 +301,7 @@ class SlackOutboundRendererTest :
                             members = members,
                             answers = emptyList(),
                             questions = listOf("What did you do yesterday?"),
+                            skippedUserIds = setOf(members.single().userId),
                         ),
                 )
 
@@ -313,12 +314,13 @@ class SlackOutboundRendererTest :
                         members = any(),
                         answers = any(),
                         questions = any(),
+                        skippedUserIds = any(),
                     )
                 } returns stubEvent
 
                 val payload = renderer.render(message = message, basicInfo = basicInfo)
 
-                then("delegates to standupSummaryRequest with the summary fields") {
+                then("delegates to standupSummaryRequest with the summary fields, the skipped members included") {
                     payload shouldBe stubEvent.payload
                     verify(exactly = 1) {
                         slackEventBuilder.standupSummaryRequest(
@@ -328,6 +330,7 @@ class SlackOutboundRendererTest :
                             members = members,
                             answers = emptyList(),
                             questions = listOf("What did you do yesterday?"),
+                            skippedUserIds = setOf(members.single().userId),
                         )
                     }
                 }

@@ -65,6 +65,7 @@ class SlackOutboundRenderer(
                             members = content.members,
                             answers = content.answers,
                             questions = content.questions,
+                            skippedUserIds = content.skippedUserIds,
                         )
 
                     is MessageContent.AgentQuestion ->

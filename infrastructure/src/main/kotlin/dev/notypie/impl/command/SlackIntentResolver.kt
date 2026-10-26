@@ -29,6 +29,8 @@ import dev.notypie.domain.command.entity.event.GetMeetingEventPayload
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerPayload
+import dev.notypie.domain.command.entity.event.RecordStandupSkipEvent
+import dev.notypie.domain.command.entity.event.RecordStandupSkipPayload
 import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingPayload
 import dev.notypie.domain.command.entity.event.RoleManageAction
@@ -226,6 +228,19 @@ class SlackIntentResolver {
                             sessionUid = intent.sessionUid,
                             userId = intent.userId,
                             responses = intent.responses,
+                            confirmation = intent.confirmation,
+                        ),
+                    type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
+                )
+            }
+
+            is CommandIntent.RecordStandupSkip -> {
+                RecordStandupSkipEvent(
+                    idempotencyKey = basicInfo.idempotencyKey,
+                    payload =
+                        RecordStandupSkipPayload(
+                            sessionUid = intent.sessionUid,
+                            userId = intent.userId,
                             confirmation = intent.confirmation,
                         ),
                     type = CommandDetailType.STANDUP_ANSWER_SUBMIT,
