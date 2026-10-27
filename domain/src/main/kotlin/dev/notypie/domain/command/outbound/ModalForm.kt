@@ -1,5 +1,6 @@
 package dev.notypie.domain.command.outbound
 
+import java.time.LocalDateTime
 import java.util.UUID
 
 sealed interface ModalForm {
@@ -8,6 +9,7 @@ sealed interface ModalForm {
         val requesterId: String,
         val channel: ConversationTarget,
         val listHandle: ResponseReplaceHandle?,
+        val currentStartAt: LocalDateTime?,
     ) : ModalForm
 
     data class AddParticipant(

@@ -211,13 +211,15 @@ class ModalTemplateBuilder(
                         mkdIntroduceComment = "*Publisher* :",
                     ),
             )
-            add(
-                block =
-                    modalBlockBuilder.textBlock(
-                        "*${approvalContents.subTitle.escapeMrkdwn()}*",
-                        isMarkDown = true,
-                    ),
-            )
+            if (approvalContents.subTitle.isNotBlank()) {
+                add(
+                    block =
+                        modalBlockBuilder.textBlock(
+                            "*${approvalContents.subTitle.escapeMrkdwn()}*",
+                            isMarkDown = true,
+                        ),
+                )
+            }
             add(layout = modalBlockBuilder.approvalBlock(approvalContents = approvalContents))
         }
     }
@@ -268,6 +270,7 @@ class ModalTemplateBuilder(
                         layout =
                             modalBlockBuilder.hostMeetingActionsBlock(
                                 meetingUid = meeting.meetingUid,
+                                meetingStartAt = meeting.startAt,
                                 listIdempotencyKey = listIdempotencyKey,
                             ),
                     )

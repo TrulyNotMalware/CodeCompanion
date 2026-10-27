@@ -159,6 +159,60 @@ class SlackMentionMapperTest :
             }
         }
 
+        given("command text separated by line breaks or other Unicode whitespace") {
+            `when`("a line break follows the mention") {
+                val mention = mapWith(createUserElement(userId = botId), createTextElement(text = "\nhelp"))
+
+                then("the first command token is the bare word") {
+                    mention.commandTokens shouldBe listOf("help")
+                }
+
+                then("mentioned user ids are unaffected") {
+                    mention.mentionedUserIds shouldBe emptyList()
+                }
+            }
+
+            `when`("a next-line character (U+0085) follows the mention") {
+                val mention = mapWith(createUserElement(userId = botId), createTextElement(text = "\u0085help"))
+
+                then("the first command token is the bare word") {
+                    mention.commandTokens shouldBe listOf("help")
+                }
+            }
+
+            `when`("a line break sits between two words") {
+                val mention =
+                    mapWith(
+                        createUserElement(userId = "U_OTHER"),
+                        createTextElement(text = "help\nextra"),
+                    )
+
+                then("both words become tokens") {
+                    mention.commandTokens shouldBe listOf("help", "extra")
+                }
+
+                then("mentioned user ids are unaffected") {
+                    mention.mentionedUserIds shouldBe listOf("U_OTHER")
+                }
+            }
+
+            `when`("a CRLF precedes the command") {
+                val mention = mapWith(createTextElement(text = "\r\nstatus now"))
+
+                then("the CRLF is dropped") {
+                    mention.commandTokens shouldBe listOf("status", "now")
+                }
+            }
+
+            `when`("a Unicode line separator precedes the command") {
+                val mention = mapWith(createTextElement(text = "\u2028help\u00A0extra"))
+
+                then("U+2028 and a no-break space also separate tokens") {
+                    mention.commandTokens shouldBe listOf("help", "extra")
+                }
+            }
+        }
+
         given("an event with no rich_text block (empty blocks)") {
             `when`("flattened") {
                 val request =

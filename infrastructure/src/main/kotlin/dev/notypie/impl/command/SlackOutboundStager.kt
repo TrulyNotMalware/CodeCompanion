@@ -58,6 +58,15 @@ class SlackOutboundStager(
                     log.warn { "Blank triggerId; cannot open reschedule modal for meetingUid=${form.meetingUid}" }
                     null
                 } else {
+                    val currentStartAt =
+                        form.currentStartAt ?: run {
+                            log.warn {
+                                "Reschedule click carried no usable meeting start " +
+                                    "(a list rendered by an earlier release or an unparsable value); " +
+                                    "pre-filling the current time for meetingUid=${form.meetingUid}"
+                            }
+                            LocalDateTime.now()
+                        }
                     slackEventBuilder.openRescheduleMeetingModalRequest(
                         commandBasicInfo = basicInfo,
                         commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST,
@@ -65,7 +74,7 @@ class SlackOutboundStager(
                         meetingUid = form.meetingUid,
                         requesterId = form.requesterId,
                         channel = form.channel.id,
-                        currentStartAt = LocalDateTime.now(),
+                        currentStartAt = currentStartAt,
                         listResponseUrl = form.listHandle?.raw.orEmpty(),
                     )
                 }

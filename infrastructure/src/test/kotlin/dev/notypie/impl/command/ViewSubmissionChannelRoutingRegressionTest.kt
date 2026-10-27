@@ -1,9 +1,13 @@
 package dev.notypie.impl.command
 
+import com.slack.api.model.block.ActionsBlock
+import com.slack.api.model.block.element.ButtonElement
 import com.slack.api.model.view.View
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.TEST_BOT_TOKEN
+import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
@@ -12,11 +16,16 @@ import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
 import dev.notypie.domain.command.intent.StandupAnswerConfirmation
 import dev.notypie.domain.command.outbound.ConversationTarget
+import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.ResponseReplaceHandle
+import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.impl.command.event.OpenViewEvent
 import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.templates.AddParticipantModalIds
+import dev.notypie.templates.ButtonType
 import dev.notypie.templates.DeclineReasonModalIds
+import dev.notypie.templates.MeetingActionIds
 import dev.notypie.templates.ModalBlockBuilder
 import dev.notypie.templates.ModalTemplateBuilder
 import dev.notypie.templates.RescheduleMeetingModalIds
@@ -421,6 +430,59 @@ class ViewSubmissionChannelRoutingRegressionTest :
 
                 then("there is no list to close, so the host gets the ephemeral reply as before") {
                     submission.shouldBeInstanceOf<InboundSubmission.RescheduleMeeting>().listHandle.shouldBeNull()
+                }
+            }
+        }
+
+        given("the /meetup list's Reschedule button opens the reschedule modal on the meeting's start") {
+            val meetingUid = UUID.randomUUID()
+            val meetingStartAt = LocalDateTime.of(2099, 11, 3, 10, 0)
+            val list =
+                templateBuilder.meetingListFormTemplate(
+                    meetings =
+                        listOf(
+                            createMeetingDto(meetingUid = meetingUid, creator = TEST_USER_ID, startAt = meetingStartAt),
+                        ),
+                    currentUserId = TEST_USER_ID,
+                    listIdempotencyKey = UUID.randomUUID(),
+                )
+            val rescheduleButtonValue =
+                list.template
+                    .filterIsInstance<ActionsBlock>()
+                    .single()
+                    .elements
+                    .filterIsInstance<ButtonElement>()
+                    .single { it.actionId == "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid" }
+                    .value
+            val stager =
+                SlackOutboundStager(
+                    slackEventBuilder =
+                        SlackApiEventConstructor(botToken = TEST_BOT_TOKEN, templateBuilder = templateBuilder),
+                    standupRepository = mockk(),
+                )
+
+            `when`("the click runs through the real parser, domain command and stager") {
+                val (_, effects) =
+                    runThroughDomain(
+                        viewSubmissionPayload =
+                            createBlockActionPayloadJson(
+                                isEphemeral = true,
+                                buttonType = ButtonType.PRIMARY,
+                                buttonValue = rescheduleButtonValue,
+                            ),
+                    )
+                val open = effects.filterIsInstance<OutboundMessage.OpenModal>().single()
+                val modalJson =
+                    stager
+                        .stage(message = open, basicInfo = createCommandBasicInfo())
+                        .shouldBeInstanceOf<OpenViewEvent>()
+                        .payload
+                        .viewJson
+
+                then("the form carries the meeting's start and the pickers open on it, not on today") {
+                    open.form.shouldBeInstanceOf<ModalForm.Reschedule>().currentStartAt shouldBe meetingStartAt
+                    modalJson shouldContain "\"initial_date\":\"2099-11-03\""
+                    modalJson shouldContain "\"initial_time\":\"10:00\""
                 }
             }
         }

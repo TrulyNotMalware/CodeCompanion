@@ -14,6 +14,7 @@ import dev.notypie.domain.command.outbound.ModalForm
 import dev.notypie.domain.command.outbound.ModalOpenHandle
 import dev.notypie.domain.command.outbound.OutboundMessage
 import dev.notypie.domain.command.outbound.replaceHandleOrNull
+import java.time.LocalDateTime
 import java.util.UUID
 
 internal class RescheduleMeetingContext(
@@ -35,6 +36,10 @@ internal class RescheduleMeetingContext(
                 .firstOrNull()
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return successOutput()
+        val currentStartAt =
+            interaction.routingExtras
+                .getOrNull(index = 1)
+                ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
         addOutbound(
             OutboundMessage.OpenModal(
                 handle = ModalOpenHandle(raw = interaction.trigger.raw),
@@ -44,6 +49,7 @@ internal class RescheduleMeetingContext(
                         requesterId = interaction.actor.id,
                         channel = ConversationTarget(id = interaction.channelId),
                         listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
+                        currentStartAt = currentStartAt,
                     ),
             ),
         )

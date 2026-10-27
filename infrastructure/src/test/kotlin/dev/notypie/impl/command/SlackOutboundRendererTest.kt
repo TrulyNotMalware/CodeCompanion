@@ -958,6 +958,7 @@ class SlackOutboundRendererTest :
                             requesterId = "U_HOST",
                             channel = ConversationTarget(id = "C_LIST"),
                             listHandle = null,
+                            currentStartAt = null,
                         ),
                 )
 

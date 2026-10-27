@@ -52,6 +52,14 @@ class StandupCommandTest :
                 }
             }
 
+            `when`("subcommand is typed with mixed case") {
+                val definition = standupCommand(subCommands = listOf("Stop", "daily")).findSubCommandDefinition()
+
+                then("it resolves like the lowercase form") {
+                    definition shouldBe StandupSubCommandDefinition.STOP
+                }
+            }
+
             `when`("subcommand is 'stop'") {
                 val definition = standupCommand(subCommands = listOf("stop", "daily")).findSubCommandDefinition()
 

@@ -90,6 +90,14 @@ class SubCommandDefinitionTest :
                 }
             }
 
+            `when`("identifier differs from the enum value only by case") {
+                val result = findSubCommandByIdentifier<MeetingSubCommandDefinition>(identifier = "LIST")
+
+                then("should return the matching definition") {
+                    result shouldBe MeetingSubCommandDefinition.LIST
+                }
+            }
+
             `when`("identifier is empty string") {
                 val result = findSubCommandByIdentifier<MeetingSubCommandDefinition>(identifier = "")
 

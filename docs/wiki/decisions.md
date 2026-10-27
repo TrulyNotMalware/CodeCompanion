@@ -634,6 +634,36 @@ _type: decision · updated: 2026-10-26_
     `StandupSchedulingService.kt`, `StandupSummaryService.kt`), `repository/standup/AGENTS.md`, `db/migration/AGENTS.md`(V29),
     `StandupFillContextTest`, `StandupAnswerServiceTest`, `StandupSchedulingServiceTest`, `StandupSummaryServiceTest`,
     `StandupRepositoryImplTest`, `ModalTemplateBuilderTest`, `OutboundMessageCodecTest`.
+53. **`/meetup list`의 Reschedule 버튼은 회의의 현재 시작 시각을 버튼 값의 네 번째 토큰으로 싣고, 재조정 모달은 그 값으로 날짜·시간
+    선택기를 채운다. 그 토큰이 없는 이전 릴리스의 버튼만 지금 시각으로 연다 (2026-10-26).** 호스트 버튼
+    (`ModalBlockBuilder.hostMeetingActionsBlock`)의 Reschedule 값은 `<listKey>,MEETING_RESCHEDULE_REQUEST,<meetingUid>,<startAt>`이고
+    `<startAt>`은 `MeetingDto.startAt`을 `DateTimeFormatter.ISO_LOCAL_DATE_TIME`으로 쓴 것이다(`2026-11-03T10:00:00`). Add participant·Cancel
+    값은 세 토큰 그대로다. 파서는 타입 뒤의 토큰을 모두 `routingExtras`로 넘기고(토큰마다 `URLDecoder`를 거치지만 ISO 문자열에는 바뀌는
+    문자가 없다), 매퍼(`SlackInboundMapper`)는 목록 핸들을 든 제출에서만 `[2]`를 빼므로 block action의 `routingExtras`는
+    `[meetingUid, startAt]` 그대로 도메인에 닿는다. `RescheduleMeetingContext`가 `[1]`을 `LocalDateTime.parse`로 읽어(`runCatching`,
+    실패하면 `null`) `ModalForm.Reschedule.currentStartAt`에 싣고, `SlackOutboundStager`가 그 값을
+    `openRescheduleMeetingModalRequest(currentStartAt = …)`에 넘긴다. 이유: 그전까지 스테이저는 늘 `LocalDateTime.now()`를 넘겨 모달이
+    오늘 날짜·지금 시각으로 열렸다. 시간만 고친 호스트는 회의를 오늘로 옮겼고, `MeetingRescheduleService`는 과거 시각만 거절하므로
+    "오늘, 더 늦은 시각"은 통과해 참가자에게 공지되고 Google Calendar 미러에도 반영됐다(리뷰 G-01; 검증 레인 V4a가 실제 시작을 주는 다른
+    경로가 없고 스테이저에는 `MeetingRepository`가 없음을 확인했다).
+    - **이력.** 처음 커밋 `dc2b9044`(2026-08-25)는 그 호출 위에 "Message carries no stored start; the host adjusts both pickers anyway."라는
+      주석으로 이 한계를 적었지만, 주석 정리 `90c747ab`(2026-09-21)가 그 줄을 지워 기록이 남지 않았고 매개변수 이름 `currentStartAt`은
+      받는 값과 반대로 읽혔다. 이름은 그대로 둔다 — 이제 받는 값이 이름과 맞는다.
+    - **`currentStartAt`은 nullable이다 — 이전 버튼 때문에.** 이전 릴리스가 그린 목록 메시지는 배포 뒤에도 눌리고 세 토큰만 싣는다. 그
+      부재를 나타내야 하므로 도메인은 `null`을 싣고 `now()`로 메우지 않는다. 파싱할 수 없는 네 번째 토큰도 `null`이다. `null`이면
+      스테이저가 회의 uid를 남기는 WARN 하나와 함께 `LocalDateTime.now()`로 옛 동작을 지킨다(스테이저에는 `Clock`이 없다). 이 폴백은 이전
+      버튼만을 위한 것이다 — 새 목록의 버튼은 늘 시작을 싣는다.
+    - **값은 목록을 그린 시점의 시작이다.** 목록을 그린 뒤 다른 목록에서 재조정했다면 옛 목록의 버튼은 옛 시작을 채운다. 선택기의
+      초기값일 뿐이고 호스트가 보고 고치므로 수용한다.
+    - **마이그레이션·아웃박스 영향 없음.** `ModalForm`은 아웃박스로 가지 않고(모달은 trigger 만료 때문에 스테이저가 그 자리에서 렌더링한다)
+      버튼 값은 Slack 메시지에만 있다. Reschedule 값은 약 120자다.
+    - **기각:** ① 스테이저에서 `MeetingRepository`로 시작을 조회 — `views.open`의 trigger가 약 3초 안에 쓰여야 하는 동기 경로에 DB 읽기를
+      더하고 스테이저를 회의 저장소에 묶는다. 목록을 그릴 때 이미 가진 값을 다시 읽을 이유가 없다; ② `Clock` 주입만 — 테스트에서 시각을
+      고정할 수 있을 뿐 모달은 여전히 오늘로 열려 결함이 남는다.
+    상태: 유지. 근거: `templates/AGENTS.md`(`ModalBlockBuilder.kt`, `ModalTemplateBuilder.kt`), `impl/command/AGENTS.md`
+    (`SlackOutboundStager.kt`), `entity/context/form/AGENTS.md`(`RescheduleMeetingContext.kt`), `command/outbound/AGENTS.md`(`ModalForm.kt`),
+    `RescheduleMeetingContextTest`, `OutboundMessageTest`, `SlackOutboundStagerTest`, `ModalTemplateBuilderTest`,
+    `SlackInteractionRequestParserTest`, `ViewSubmissionChannelRoutingRegressionTest`.
 
 ## 빌드·런타임
 
@@ -999,6 +1029,13 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `db/migration/V29__add_standup_session_dispatch_skipped_at.sql`, 스펙 `StandupFillContextTest`·`SlackIntentResolverTest`·`StandupRepositoryImplTest`·
   `ModalTemplateBuilderTest`·`OutboundMessageCodecTest`·`SlackOutboundRendererTest`·`StandupAnswerServiceTest`·`StandupSchedulingServiceTest`·
   `StandupSummaryServiceTest`; 리뷰 F-01과 사용자 선택(2026-10-26, 세션 기록)
+- 재조정 모달의 현재 시작(#53): `infrastructure/src/main/kotlin/dev/notypie/templates/{ModalBlockBuilder,ModalTemplateBuilder}.kt`
+  (`hostMeetingActionsBlock`, `meetingListFormTemplate`), `impl/command/{SlackOutboundStager,SlackInteractionRequestParser,SlackInboundMapper}.kt`,
+  `domain/src/main/kotlin/dev/notypie/domain/command/entity/context/form/RescheduleMeetingContext.kt`, `outbound/ModalForm.kt`,
+  `application/.../service/meeting/MeetingRescheduleService.kt`(과거 시각만 거절), `git log -S 'Message carries no stored start'`
+  (`dc2b9044` 추가, `90c747ab` 삭제), 스펙 `RescheduleMeetingContextTest`·`OutboundMessageTest`·`SlackOutboundStagerTest`·
+  `ModalTemplateBuilderTest`·`SlackInteractionRequestParserTest`·`ViewSubmissionChannelRoutingRegressionTest`; 리뷰 G-01과 검증 레인 V4a
+  (2026-10-26, 세션 기록)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

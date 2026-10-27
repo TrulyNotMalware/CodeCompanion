@@ -156,6 +156,27 @@ class StandupSlashServiceImplTest :
             }
         }
 
+        given("/standup Answer typed with a capital letter from a member whose routine is collecting today") {
+            val routine = createRoutineDto(routineTimezone = seoul, members = membership)
+            val session =
+                createStandupSessionDto(routineUid = routine.routineUid, sessionDate = monday, cutoffAt = mondayCutoff)
+            val repository =
+                repositoryWith(routine = routine, sessionsByDate = mapOf(sunday to null, monday to session))
+
+            `when`("the service handles it") {
+                val effects =
+                    runStandupSlash(
+                        repository = repository,
+                        clock = mondayMorningInSeoul,
+                        subCommands = listOf("Answer"),
+                    )
+
+                then("the candidate is preloaded regardless of case and the answer modal opens") {
+                    effects.openedAnswerForm().sessionUid shouldBe session.sessionUid
+                }
+            }
+        }
+
         given("/standup answer in a channel where other routines do not qualify") {
             val collecting = createRoutineDto(name = "Collecting", routineTimezone = seoul, members = membership)
             val notAMember =

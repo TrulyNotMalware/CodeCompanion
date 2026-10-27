@@ -28,9 +28,10 @@ a Slack payload.
   writer (`infrastructure/templates/InteractiveIds.kt`) and reader (`SlackInboundMapper.kt`). Change
   all sides together: a drifted key does not fail, it makes `InboundForm.value(key)` return `""`.
 - Routing is positional. A button value is `<idempotencyKey>,<DETAIL_TYPE>,<extra...>`, and the parser
-  exposes the tail as `routingExtras`: `[meetingUid]` for `CANCEL_MEETING`, `MEETING_RESCHEDULE_REQUEST`,
-  `MEETING_ADD_PARTICIPANT_REQUEST`; `[sessionUid, routineUid]` for `STANDUP_PROMPT`; `[meetingTitle]`
-  for `MEETING_APPROVAL_REQUEST`. Modal submissions reuse `idempotencyKey` for the meeting uid from
+  exposes the tail as `routingExtras`: `[meetingUid]` for `CANCEL_MEETING` and
+  `MEETING_ADD_PARTICIPANT_REQUEST`; `[meetingUid, startAt]` (ISO local date-time) for
+  `MEETING_RESCHEDULE_REQUEST` (a list rendered before decision #53 still sends `[meetingUid]`);
+  `[sessionUid, routineUid]` for `STANDUP_PROMPT`; `[meetingTitle]` for `MEETING_APPROVAL_REQUEST`. Modal submissions reuse `idempotencyKey` for the meeting uid from
   `private_metadata`, which is why it is a `String`, not a `UUID`. The reschedule and add-participant modals'
   extras are `[requesterId, deliveryChannel]` plus, when opened from a `/meetup list` row, `[2]` = the list
   message's reply handle; the mapper moves that one into `submission.listHandle` and drops only that slot from the

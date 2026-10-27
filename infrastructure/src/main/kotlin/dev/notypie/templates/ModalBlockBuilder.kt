@@ -8,6 +8,8 @@ import dev.notypie.impl.command.slack.States
 import dev.notypie.templates.dto.CheckBoxOptions
 import dev.notypie.templates.dto.InteractionLayoutBlock
 import dev.notypie.templates.dto.InteractiveObject
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 class ModalBlockBuilder(
@@ -82,9 +84,15 @@ class ModalBlockBuilder(
         return toInteractionLayout(cancelButton.state, layout = layout)
     }
 
-    fun hostMeetingActionsBlock(meetingUid: UUID, listIdempotencyKey: UUID): InteractionLayoutBlock {
+    fun hostMeetingActionsBlock(
+        meetingUid: UUID,
+        meetingStartAt: LocalDateTime,
+        listIdempotencyKey: UUID,
+    ): InteractionLayoutBlock {
         fun routingValue(detailType: CommandDetailType) = "$listIdempotencyKey,${detailType.name},$meetingUid"
-        val rescheduleRoutingValue = routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)
+        val rescheduleRoutingValue =
+            "${routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)}," +
+                meetingStartAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         val addParticipantRoutingValue = routingValue(CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
         val cancelRoutingValue = routingValue(CommandDetailType.CANCEL_MEETING)
         val rescheduleButton: InteractiveObject =

@@ -23,6 +23,8 @@ import dev.notypie.domain.command.outbound.UserRef
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
 
@@ -50,15 +52,39 @@ class AppMentionContextParserTest :
             hasCommandStructure: Boolean = true,
             message: MessageHandle? = null,
             thread: MessageHandle? = null,
+            text: String = "",
         ) = MentionInvocation(
             mentionedUserIds = userIds,
             commandTokens = tokens,
             hasCommandStructure = hasCommandStructure,
             message = message,
             thread = thread,
+            text = text,
         )
 
         given("parseContext") {
+            `when`("a notice body spans several lines") {
+                val noticeIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            mentionOf(
+                                tokens = listOf("notice", "Hello", "team", "Line2"),
+                                userIds = listOf(TEST_USER_ID),
+                                text = "notice <@$TEST_USER_ID> Hello   team\nLine2",
+                            ),
+                        intentQueue = noticeIntents,
+                    )
+                val result = parser.parseContext(idempotencyKey = idempotencyKey)
+
+                then("the notice keeps the line break and drops the mention markup") {
+                    result.runCommand()
+                    val notice = noticeIntents.snapshot().single().shouldBeInstanceOf<OutboundMessage.Notice>()
+                    notice.message shouldBe "Hello team\nLine2"
+                    notice.mentions shouldBe listOf(UserRef(id = TEST_USER_ID))
+                }
+            }
+
             `when`("command is 'notice' with users") {
                 val parser =
                     createParser(
@@ -92,6 +118,21 @@ class AppMentionContextParserTest :
                     reply.recipient shouldBe UserRef(id = TEST_USER_ID)
                     reply.content shouldBe
                         MessageContent.Text(headline = null, markdown = AppMentionContextParser.HELP_MESSAGE)
+                }
+
+                then("the placeholders reach Slack escaped, never as raw angle brackets") {
+                    result.runCommand()
+                    val markdown =
+                        helpIntents
+                            .snapshot()
+                            .last()
+                            .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                            .markdown
+                    markdown shouldContain "&lt;question&gt;"
+                    markdown shouldContain "&lt;user|ai_user|developer|admin&gt;"
+                    markdown shouldNotContain "<question>"
                 }
             }
 
@@ -130,6 +171,29 @@ class AppMentionContextParserTest :
                     intent.threadId shouldBe TEST_MESSAGE_TS
                     intent.requesterName shouldBe TEST_USER_NAME
                     intent.channelName shouldBe "general"
+                }
+            }
+
+            `when`("command is 'ask' followed by a no-break space in the restored text") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            mentionOf(
+                                tokens = listOf("ask", "what", "is", "X"),
+                                text = "ask\u00A0what is X",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the keyword and the separator are stripped from the prompt") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "what is X"
                 }
             }
 
@@ -416,6 +480,13 @@ class AppMentionContextParserTest :
                 }
             }
 
+            `when`("the grant usage text is rendered") {
+                then("its role placeholder is escaped") {
+                    AppMentionContextParser.GRANT_USAGE shouldContain "&lt;user|ai_user|developer|admin&gt;"
+                    AppMentionContextParser.GRANT_USAGE shouldNotContain "<user"
+                }
+            }
+
             `when`("`grant` carries extra trailing tokens") {
                 then("the usage text is returned instead of mutating state") {
                     firstEffectOf(tokens = listOf("grant", "developer", "extra"), userIds = listOf(TEST_USER_ID))
@@ -547,6 +618,14 @@ class AppMentionContextParserTest :
                 }
             }
 
+            `when`("the `cve` usage text is rendered") {
+                then("its placeholders are escaped") {
+                    AppMentionContextParser.CVE_USAGE shouldContain "&lt;topic-key&gt;"
+                    AppMentionContextParser.CVE_USAGE shouldContain "&lt;event-id&gt;"
+                    AppMentionContextParser.CVE_USAGE shouldNotContain "<topic"
+                }
+            }
+
             `when`("a DEVELOPER runs `cve topics`") {
                 val denialIntents = createIntentQueue()
                 val result =
@@ -566,6 +645,15 @@ class AppMentionContextParserTest :
                         .content
                         .shouldBeInstanceOf<MessageContent.Text>()
                         .markdown shouldBe "You don't have permission to use `cve`. Ask an admin to grant you access."
+                }
+            }
+
+            `when`("the subcommands are typed with mixed case") {
+                then("they resolve to the same intents as the lowercase form") {
+                    firstEffectOf(tokens = listOf("cve", "Topics")) shouldBe CommandIntent.CveListTopics
+                    firstEffectOf(tokens = listOf("cve", "Topic", "Activate", "spring")) shouldBe
+                        CommandIntent.CveSetTopicActive(topicKey = "spring", active = true)
+                    firstEffectOf(tokens = listOf("cve", "RETRY", "All")) shouldBe CommandIntent.CveRetryDeadLetters
                 }
             }
 

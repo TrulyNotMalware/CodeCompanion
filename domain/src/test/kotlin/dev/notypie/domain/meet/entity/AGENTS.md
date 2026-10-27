@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # domain/meet/entity (test)
 
@@ -11,6 +11,7 @@ limit the entity enforces in its `init` block, and the `addParticipant` cap.
 | File | Description |
 |------|-------------|
 | `MeetingTest.kt` | `BehaviorSpec` over `Meeting` and `Member`. Valid construction: `host` is the publisher with `isHost = true`, `memberSnapshot()` / `memberIdSnapshot()` reflect `members`, `isCanceled` defaults to `false`, `meetingUid` is generated, distinct per instance, and honoured when supplied; `endAt` defaults to `startAt + 1h` (built directly, not through the fixture, to hit the entity default). Rejections, all `ValidationExceptionWithName`: blank `publisher`, blank `title`, `title` > `MAX_TITLE_LENGTH`, `reason` > `MAX_REASON_LENGTH`, members > `MAX_PARTICIPANTS`, `startAt` in the past, `endAt` before `startAt`. `addParticipant` within the cap and one past `MAX_PARTICIPANTS`. `Member`: blank `userId` rejected, `isGuest` / `isHost` flags. Uses `createMeeting` |
+| `RejectReasonTest.kt` | `BehaviorSpec` pinning the display text of `PERSONAL_REASON` ("Personal reason"); the constant name is a stored value |
 
 ## For AI Agents
 

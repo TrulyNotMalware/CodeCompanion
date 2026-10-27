@@ -14,7 +14,7 @@ import java.util.*
 
 internal class NoticeContext(
     val users: Queue<String>,
-    val commands: Queue<String>,
+    val message: String,
     commandBasicInfo: CommandBasicInfo,
     intents: IntentQueue,
 ) : CommandContext<NoSubCommands>(
@@ -22,8 +22,6 @@ internal class NoticeContext(
         intents = intents,
         subCommand = SubCommand.empty(),
     ) {
-    private val responseText: String = commands.joinToString(separator = " ")
-
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
     override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
@@ -33,7 +31,7 @@ internal class NoticeContext(
             OutboundMessage.Notice(
                 target = ConversationTarget(id = commandBasicInfo.channel),
                 mentions = users.toList().map { UserRef(id = it) },
-                message = responseText,
+                message = message,
             ),
         )
         return CommandOutput.success(

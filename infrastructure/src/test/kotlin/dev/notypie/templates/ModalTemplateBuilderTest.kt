@@ -486,8 +486,43 @@ class ModalTemplateBuilderTest :
                     result.interactionStates.size shouldBe 2
                 }
 
-                then("template should contain header, divider, userThumbnail, text, and approval blocks") {
+                then("template should contain header, divider, userThumbnail, and approval blocks") {
+                    result.template.size shouldBe 4
+                }
+
+                then("no section renders the literal ** for the blank subtitle") {
+                    result.template
+                        .filterIsInstance<SectionBlock>()
+                        .flatMap { block -> listOfNotNull(block.text?.text) + block.fields.map { it.text } }
+                        .forEach { text -> text shouldNotContain "**" }
+                }
+            }
+
+            `when`("the subtitle is not blank") {
+                every {
+                    restRequester.safeGet(
+                        uri = "users.profile.get?user={user}",
+                        authorizationHeader = TEST_BOT_TOKEN,
+                        responseType = SlackUserProfileDto::class.java,
+                        uriVariables = mapOf("user" to TEST_USER_ID),
+                    )
+                } returns Result.success(ResponseEntity.ok(SlackUserProfileDto(ok = true, profile = createProfile())))
+
+                val result =
+                    templateBuilder.approvalTemplate(
+                        headLineText = "Approval Request",
+                        approvalContents = testApprovalContents.copy(subTitle = "Sprint Planning"),
+                        idempotencyKey = testIdempotencyKey,
+                        commandDetailType = CommandDetailType.SIMPLE_TEXT,
+                    )
+
+                then("the title section is rendered between the publisher and the buttons") {
                     result.template.size shouldBe 5
+                    result.template[3]
+                        .shouldBeInstanceOf<SectionBlock>()
+                        .fields
+                        .single()
+                        .text shouldBe "*Sprint Planning*"
                 }
             }
 
@@ -558,7 +593,7 @@ class ModalTemplateBuilderTest :
                     )
 
                 then("the message still renders, naming the publisher by mention and without a thumbnail") {
-                    result.template.size shouldBe 5
+                    result.template.size shouldBe 4
                     val publisherBlock = result.template[2].shouldBeInstanceOf<ContextBlock>()
                     publisherBlock.elements.size shouldBe 2
                     publisherBlock.elements
@@ -896,6 +931,7 @@ class ModalTemplateBuilderTest :
                         meetingUid = meetingUid,
                         creator = TEST_USER_ID,
                         title = "My standup",
+                        startAt = LocalDateTime.of(2026, 11, 3, 10, 0),
                         isCanceled = false,
                     )
 
@@ -914,7 +950,9 @@ class ModalTemplateBuilderTest :
                     result.template[3].shouldBeInstanceOf<ActionsBlock>()
                 }
 
-                then("the reschedule + add-participant + cancel buttons carry the routing values the parser expects") {
+                then(
+                    "the buttons carry the routing values the parser expects, reschedule ending in the ISO start",
+                ) {
                     val actionsBlock = result.template[3] as ActionsBlock
                     actionsBlock.blockId shouldBe "${MeetingActionIds.CANCEL_BLOCK_ID}_$meetingUid"
                     val buttons = actionsBlock.elements.map { it as ButtonElement }
@@ -923,7 +961,8 @@ class ModalTemplateBuilderTest :
                     val rescheduleButton = buttons[0]
                     rescheduleButton.actionId shouldBe "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid"
                     rescheduleButton.style shouldBe "primary"
-                    rescheduleButton.value shouldBe "$listKey,MEETING_RESCHEDULE_REQUEST,$meetingUid"
+                    rescheduleButton.value shouldBe
+                        "$listKey,MEETING_RESCHEDULE_REQUEST,$meetingUid,2026-11-03T10:00:00"
 
                     val addParticipantButton = buttons[1]
                     addParticipantButton.actionId shouldBe "${MeetingActionIds.ADD_PARTICIPANT_ACTION_ID}_$meetingUid"
@@ -1009,6 +1048,7 @@ class ModalTemplateBuilderTest :
                         meetingUid = hostMeetingUid,
                         creator = TEST_USER_ID,
                         title = "Mine",
+                        startAt = LocalDateTime.of(2026, 11, 3, 10, 0, 30),
                         isCanceled = false,
                     )
                 val participantMeeting =
@@ -1037,7 +1077,7 @@ class ModalTemplateBuilderTest :
                             .map { it as ButtonElement }
                     buttons.map { it.value } shouldBe
                         listOf(
-                            "$listKey,MEETING_RESCHEDULE_REQUEST,$hostMeetingUid",
+                            "$listKey,MEETING_RESCHEDULE_REQUEST,$hostMeetingUid,2026-11-03T10:00:30",
                             "$listKey,MEETING_ADD_PARTICIPANT_REQUEST,$hostMeetingUid",
                             "$listKey,CANCEL_MEETING,$hostMeetingUid",
                         )
