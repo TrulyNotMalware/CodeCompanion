@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # infrastructure/repository/authorization
 
@@ -28,7 +28,12 @@ Persistence for command-role grants: one `user_command_role` row per workspace m
 - **`findAllGrants` loads every row** (`findAll().associate`); fine at workspace scale, but it backs the
   `list roles` command and the resolver, so do not put it on a per-message hot path.
 - **`UserRole` is stored by name** (`@Enumerated(STRING)`, `length = 32`). Renaming a constant in
-  `domain/command/authorization/UserRole` orphans existing grants.
+  `domain/command/authorization/UserRole` orphans existing grants. **Adding** a constant also needs a `V*`
+  migration that alters `user_command_role.role`: `V12__add_user_command_role_table.sql` declares it as
+  `ENUM ('USER', 'AI_USER', 'DEVELOPER', 'ADMIN')`, so H2 test schemas (regenerated each run) accept the new
+  constant; do not rely on `ddl-auto: update` (local/dev) to widen the ENUM of an existing table — it is not
+  guaranteed; and production (`ddl-auto: none`, unchanged schema, strict `sql_mode` — the MariaDB default) fails
+  the first `grant` of it with "Data truncated for column 'role'".
 - Rows are managed by the in-bot `grant` / `revoke` commands (`RoleManagementService`) and read by
   `CommandRoleResolver`; the same `UserRole` is also written to `mcp_tool_call_history.resolved_role`
   with `length = 16` — keep constant names within 16 characters.
@@ -38,9 +43,10 @@ Persistence for command-role grants: one `user_command_role` row per workspace m
 ```bash
 ./gradlew :infrastructure:test --tests 'dev.notypie.repository.*'
 ```
-No spec targets this lane in `:infrastructure`; `RoleManagementServiceTest` in `:application` mocks the
-port. A `@DataJpaTest` pair for `saveRole` (insert vs update vs no-op) and `deleteRole` is the missing
-coverage.
+`UserCommandRoleRepositoryImplTest` (`@DataJpaTest`) covers one path: `saveRole` insert, then `saveRole`
+with another role updates the same row (one row, new role through `findRole`). It does not pin the
+same-role no-op, `deleteRole`, `findAllGrants`, or the `ENUM` column of the production migration (H2 is
+Hibernate-generated). `RoleManagementServiceTest` in `:application` mocks the port.
 
 ### Common Patterns
 - Port / `open class *Impl` with `@Transactional` on writes / `Jpa*Repository` triple.

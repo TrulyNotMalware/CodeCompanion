@@ -8,8 +8,11 @@ All Spring wiring lives here: the typed configuration tree (`AppConfig`), the cu
 select an implementation per deployment mode, and the `@Configuration` classes that declare beans for
 the relay, Kafka, async execution, scheduling, the AI agent, the CVE lane, and the MCP server.
 
-Most services in this project are **explicitly declared beans**, not component-scanned — this file set
-is the map of what actually exists at runtime in a given profile.
+Use-case services, schedulers and listeners are component-scanned (`@Service` / `@Component`); the beans
+declared here are the ones that switch on a mode or feature flag and the infrastructure adapters (clients,
+executors; the repository adapter factories live in infrastructure's `configurations/JpaConfiguration`, see
+`infrastructure/src/main/kotlin/dev/notypie/configurations/AGENTS.md`) — this file set is the map of those,
+which decide what exists at runtime in a given profile.
 
 ## Key Files
 | File | Description |

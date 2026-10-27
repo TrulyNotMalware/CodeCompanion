@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-20_
+_type: architecture · updated: 2026-10-26_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -137,7 +137,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   커밋된 뒤로 미룬다(2026-10-01, DB 커넥션을 쥔 채 Slack을 부르지 않기 위해). 실패는 재시도 대신 `DeclineModalOpenFailedEvent` /
   `StandupModalOpenFailedEvent`로 알려 안내 ephemeral을 보낸다. 빈 핸들이면 스테이저는 경고 후 `null`을 돌려준다.
 - `SlackOutboundRenderer`는 `OpenModal`/`DirectMessage`에서 **일부러** `error()`를 던진다. 조용한 폴백을 넣지 말 것.
-- `CommandExecutor`는 resolve/publish 실패를 로그 후 재던져 호출자 `@Transactional`을 롤백시키며 큐를 재적재하지
+- `CommandExecutor`는 resolve/publish 실패를 로그 후 재던져 호출자의 트랜잭션(슬래시 서비스의 `@Transactional`, 멘션·인터랙션 핸들러가 연 경계)을 롤백시키며 큐를 재적재하지
   않는다(재시도는 relay·Kafka·Slack 재전송이 `idempotencyKey`로). 발행 빈은 `ConsumerConfig` 조건에 따라
   `KafkaEventPublisher` 또는 `AppEventPublisher`다.
 
@@ -151,8 +151,10 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - **해석 순서**는 `CommandRoleResolver.resolve`: `slack.app.authorization.bootstrap-admins`(설정, 채팅에서 불변) →
   `user_command_role` 행(`UserCommandRoleRepository.findRole`) → `USER`. `SlackMentionEventHandlerImpl`이 매 턴
   새로 해석하므로 revoke가 즉시 반영된다. 부트스트랩 admin은 DB 행 없이 첫 admin을 만들기 위한 닭-달걀 해소다.
-- **게이트되지 않는 표면**: 인터랙션(`SlackInteractionHandlerImpl.buildCommand`가 `UserRole.USER` 고정)과 슬래시
-  서비스(해석기를 호출하지 않음). 둘 다 `BASIC` 표면이라 모달이 모두에게 계속 동작해야 한다는 결정이다. 슬래시에
+- **게이트되지 않는 표면**: 인터랙션(`SlackInteractionHandlerImpl.buildCommand`는 2026-10-06 #26부터 `CommandRoleResolver`로
+  실제 역할을 해석해 `InteractionCommand`에 넘기지만 — 그 전에는 `UserRole.USER` 고정 — `InteractionCommand`는 그 역할을 멘션
+  페이로드의 `AppMentionContextParser`에만 주고 인터랙션 컨텍스트를 만드는 `InteractionContextParser`에는 주지 않아 검사하지
+  않는다)과 슬래시 서비스(해석기를 호출하지 않음). 둘 다 `BASIC` 표면이라 모달이 모두에게 계속 동작해야 한다는 결정이다. 슬래시에
   권한을 붙이려면 서비스가 직접 `CommandRoleResolver`를 불러야 한다 — 2026-10-12부터 `/ask`가 그 예외다:
   `AskSlashService`가 역할을 해석해 `AskCommand(actorRole)`에 넘기고 `AskSlashContext`가 `AI`를 검사한다(결정 #13 보완).
 - `grant`/`revoke`/`roles`는 `RoleManagementService`(`@Transactional @EventListener`)가 처리한다. `@Transactional`을
@@ -170,8 +172,9 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 4. `CommandContext`(인터랙션을 받으면 `ReactionContext`) 추가. 모달을 열면 `SlashInvocation.trigger.raw`를 넘겨
    `OutboundMessage.OpenModal`을 내고, `ModalForm` 변종 + `SlackOutboundStager.stageModal` 분기 +
    `SlackApiEventConstructor.open*ModalRequest`를 짝으로 추가한다.
-5. 서비스(`@Transactional`)에서 `IdempotencyCreator.create(data = commandData)` → `Command` 생성 →
-   `commandExecutor.execute`. 도메인은 저장소를 못 보므로 선행 데이터는 서비스가 조회해 생성자로 넘긴다
+5. 서비스 메서드(`@Transactional` — 답장 행을 쓰는 `BEFORE_COMMIT` 아웃박스 리스너가 이 트랜잭션에 묶이므로 빠뜨리면 답장이
+   조용히 버려진다, [coding-style.md](coding-style.md)의 트랜잭션 행)에서 `IdempotencyCreator.create(data = commandData)` →
+   `Command` 생성 → `commandExecutor.execute`. 도메인은 저장소를 못 보므로 선행 데이터는 서비스가 조회해 생성자로 넘긴다
    (`CveSubscriptionSlashServiceImpl`의 `topics`, `StandupSlashServiceImpl`의 `answerCandidates`). 역할이 필요한 명령이면 같은
    자리에서 `CommandRoleResolver.resolve`로 해석해 생성자로 넘긴다(`AskSlashService`).
 6. 상태를 바꾸면 `CommandIntent` 변종 + `SlackIntentResolver` 분기 + `CommandEvent`/`EventPayload` + 리스너. 새
@@ -233,6 +236,8 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
   `service/{command,mention,interaction}/*`, `service/meeting/MeetingServiceImpl.kt`,
   `service/standup/StandupSlashServiceImpl.kt`, `service/cve/{query,subscription}/*SlashServiceImpl.kt`,
   `service/relay/{SlackMessageRelayServiceImpl,OutboxPayloadRenderer}.kt`, `service/agent/*`
+- `application/src/test/kotlin/dev/notypie/application/service/interaction/SlackInteractionHandlerImplTest.kt`("the actor's role is
+  resolved from the repository instead of being assumed USER"), `domain/.../command/entity/InteractionCommand.kt`(`resolveRoute`)
 - `README.md` "Bot Commands & Roles"; `Refactor.md`(git 미추적) §1, Phase 3, Phase 4, Phase 10 — 설계 의도의 출처
 
 ## 관련 페이지

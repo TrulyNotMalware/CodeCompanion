@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-10-19_
+_type: pattern · updated: 2026-10-26_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -20,7 +20,8 @@ _type: pattern · updated: 2026-10-19_
   `NotFoundExceptionBuilder`)에서만 보인다.
 - **왜 문자열이 아니라 구조인가**: `RequestMeetingContext.meetingValidationMessage`가 `details`를
   `"fieldName: reason"` 줄로 이어 사용자 ephemeral로 렌더링하고, 핸들러는 `rawCommandType` 같은 원값을 로그에 남긴다.
-  `reason` 문구는 계약이 아니다(테스트는 `fieldName`/`value`만 단언한다).
+  그래서 `reason`은 사용자가 읽는 문장이고 스펙이 문구를 단언한다(`ValidationBuilderTest`, `DatabaseExceptionTest` — 2026-10-26
+  확인). 문구를 바꾸면 그 스펙도 함께 고친다.
 
 ## 검증 DSL: `validate {}`
 
@@ -35,8 +36,9 @@ _type: pattern · updated: 2026-10-19_
   `shouldBeLessThan(max)`는 `value >= max`에서 실패한다. `Meeting.MAX_TITLE_LENGTH = 20`은 20자 제목을 허용한다.
 - `validateAndReturn {}`는 `internal`이고 프로덕션 호출자가 없다. `ValidationBuilderTest`가 오류 목록을 세기 위해
   쓰는 테스트 전용 진입점이니 도메인 코드에서는 `validate {}`만 쓴다.
-- 문구 함정: `notBlank`의 reason은 `Field` 객체 전체를 문자열 보간하고, `shouldBeNegative`는 "must be positive"라고
-  말한다. 스펙에서 `reason`을 단언하지 않는 이유다.
+- 문구 함정: `shouldBeNegative`는 실패할 때 "must be positive"라고 말한다(프로덕션 호출자 없음, 스펙은 통과하는 경우만 본다).
+  `notBlank`의 reason은 2026-10-06(#26)부터 상수 "must not be blank"이고 `ValidationBuilderTest`("the reason is a user-facing
+  sentence, not the Field's toString()")가 고정한다 — 그 전에는 `Field` 객체 전체를 문자열 보간했다.
 
 ## 계층별 예외 소유권
 
@@ -178,7 +180,8 @@ _type: pattern · updated: 2026-10-19_
 
 ## 근거
 
-- `domain/src/main/kotlin/dev/notypie/domain/common/` (`error/Errors.kt`, `Validation.kt`, `AGENTS.md`)
+- `domain/src/main/kotlin/dev/notypie/domain/common/` (`error/Errors.kt`, `Validation.kt`, `AGENTS.md`),
+  `domain/src/test/kotlin/dev/notypie/domain/common/ValidationBuilderTest.kt`
 - `domain/src/main/kotlin/dev/notypie/domain/command/exceptions/` (`CommandErrorCode.kt`, `CommandException.kt`)
 - `domain/src/main/kotlin/dev/notypie/domain/command/entity/Command.kt` (`handleEvent`),
   `.../entity/context/CommandContext.kt` (`createErrorResponse`, `errorEphemeral`),

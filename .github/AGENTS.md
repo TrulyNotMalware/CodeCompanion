@@ -1,12 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-26 -->
 
 # .github
 
 ## Purpose
-CI, CD and supply-chain hygiene. Four workflows — lint and test on feature-branch pushes, security
-scanning around `main`, and a full build-image-deploy-verify pipeline when a PR merges into `main` —
-plus the Dependabot configuration that keeps Gradle plugins, Actions and the Docker base image current.
+CI, CD and supply-chain hygiene. Six workflows — lint and test on feature-branch pushes, security
+scanning around `main`, a full build-image-deploy-verify pipeline when a PR merges into `main`, and the
+`@claude` mention handler and PR review — plus the Dependabot configuration that keeps Gradle plugins, Actions and the Docker base image current.
 
 ## Key Files
 | File | Description |
@@ -24,7 +24,7 @@ plus the Dependabot configuration that keeps Gradle plugins, Actions and the Doc
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `workflows/` | The four workflow files, one row each (see `workflows/AGENTS.md`) |
+| `workflows/` | The six workflow files, one row each (see `workflows/AGENTS.md`) |
 
 ## For AI Agents
 
@@ -223,7 +223,9 @@ Workflows are only exercised by pushing. Before changing one:
 - `dorny/paths-filter@v4` for change detection, output-driven job gating.
 - GitHub Deployments API (`actions/github-script@v9`) for `in_progress` / `success` / `failure` status.
 - Environment configuration hoisted into the workflow-level `env:` block rather than repeated inline.
-- Least-privilege `permissions:`: every workflow declares a `contents: read` baseline. `pull-requests: read` for
+- Least-privilege `permissions:`: `lint.yaml`, `simple_test_action.yaml`, `security_check.yaml` and
+  `deploy_action.yaml` declare a workflow-level `contents: read` baseline; `claude.yml` and
+  `claude-code-review.yml` have no workflow-level block and declare permissions on their single job. `pull-requests: read` for
   paths-filter is job-level in `deploy_action.yaml` (`check-changes`) and `security_check.yaml` (`changes`), and
   workflow-level in the single-job `simple_test_action.yaml`. The deploy workflow's `deployments: write` covers
   the Deployments API calls; there is no Commit Status API call, so it has no `statuses: write`.

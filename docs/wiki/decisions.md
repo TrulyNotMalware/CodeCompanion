@@ -63,12 +63,17 @@ _type: decision · updated: 2026-10-26_
 
 ## 권한과 AI
 
-13. **역할 계층 `user ⊂ ai_user ⊂ developer ⊂ admin`, 멘션 경로만 게이트.** 슬래시·인터랙션은 BASIC 전용이라
+13. **역할 계층 `user ⊂ ai_user ⊂ developer ⊂ admin`, 멘션 경로만 게이트(보완: 2026-10-12부터 `/ask`도).** 슬래시·인터랙션은 BASIC 전용이라
     게이트하지 않는다. 설정의 `bootstrap-admins`는 불변(채팅으로 grant/revoke 불가)이며 DB row보다 우선.
     이유: 부트스트랩 순환 문제 해소. 상태: 유지(2026-07-07, Phase 10). 근거: `Refactor.md` Phase 10,
     `README.md` Bot Commands & Roles. **보완(2026-10-12):** 슬래시도 명령별로 게이트할 수 있다 — `/ask`는
     `AskSlashService`가 `CommandRoleResolver`로 역할을 해석해 도메인 `AskCommand`에 넘기고, `AskSlashContext`가 `AI` 권한을
     검사한다(거부 문구는 멘션 경로와 동일). 그 밖의 슬래시·인터랙션은 그대로 BASIC이다. 근거: `command-pipeline.md` §5, 결정 #38.
+    **명확화(2026-10-26):** 인터랙션 경로도 2026-10-06(#26, `f9971700`)부터 `SlackInteractionHandlerImpl.buildCommand`가
+    `CommandRoleResolver`로 실제 역할을 해석해 `InteractionCommand`에 넘긴다 — `UserRole.USER` 고정이 아니다. 다만
+    `InteractionCommand`는 그 역할을 멘션 페이로드의 `AppMentionContextParser`에만 주고 `InteractionContextParser`에는 주지 않으므로
+    인터랙션을 게이트하지 않는다는 결정은 그대로다. 근거: `SlackInteractionHandlerImplTest`("the actor's role is resolved from the
+    repository instead of being assumed USER"), `InteractionCommand.kt`(`resolveRoute`), 리뷰 E-07(2026-10-23).
 14. **MCP 서버는 사이드카가 아니라 앱 안에.** 이유: `CommandRoleResolver`·스테이저·기존 서비스를 재사용하고
     사이드카는 도메인 무지로 유지. 바인드는 루프백 전용 — 판정은 소켓의 `remoteAddr`로 하므로 `server.forward-headers-strategy: none`을 고정하고, 루프백 전용 모드에서는 forwarding 헤더가 붙은 요청을 거부한다(2026-10-01, Kubernetes에서 Boot가 `X-Forwarded-For`를 신뢰해 위조한 `127.0.0.1`이 통과할 수 있었음). 상태: 유지(1차 2026-07-13). 근거: `Refactor.md`
     "후속 플랜 — Agent lane MCP".
@@ -708,6 +713,28 @@ _type: decision · updated: 2026-10-26_
     `infrastructure/.../repository/standup/{StandupRepository,StandupRepositoryImpl}.kt`, `MeetingReminderSchedulingServiceTest`, `MeetingReminderRepositoryImplTest`,
     `StandupSchedulingServiceTest`, `StandupRepositoryImplTest`.
 
+56. **빈 등록과 스케줄 잡의 규칙을 실제 관행에 맞춘다 — 유스케이스 서비스·스케줄러·리스너는 컴포넌트 스캔, 모드·기능 플래그로 갈리는 빈과 인프라 어댑터는 `configurations/`의 `@Bean`이고, `@Scheduled`는 테스트가 부를 공개 진입점이 있으면 로직과 같은 클래스에 둔다 (2026-10-26).**
+    [coding-style.md](coding-style.md)는 "어댑터·서비스는 스캔보다 `@Bean`"과 "`@Scheduled`는 얇은 `*Scheduler`에, 로직은 `*SchedulingService`에"를 규칙으로 적었지만
+    코드는 반대였다(리뷰 P-03·P-04, 2026-10-23). 2026-10-26 실측(`fddb1fc3`): `application`의 스캔 대상은 39개 파일(`@Service` 25·`@Component` 15,
+    `SlackMessageRelayServiceImpl.kt`에 둘)이고 `@Bean`은 59개(`configurations/` 56, `security/` 3)다. `@Bean`은 모드·기능 플래그로 갈리는 빈(폴링/Debezium 처리기,
+    Kafka/앱 이벤트 발행기, CVE·캘린더·MCP 레인, 그리고 스펙이 바꿔 끼우도록 `@ConditionalOnMissingBean`을 단 에이전트 레인 `AgentConfiguration` —
+    유스케이스 서비스 `AgentConverseService`도 여기)과 인프라 어댑터(`infrastructure` `JpaConfiguration`의 저장소 어댑터 16개, Slack 파이프라인 어댑터와 `CommandExecutor`,
+    HTTP 클라이언트, 실행기·스케줄러 풀)에 쓰였다. `@Scheduled` 14개(13개 클래스) 중 분리 형태는 네 잡(`StandupScheduler`, `MeetingReminderScheduler`,
+    `DailyAgendaScheduler`, `CalendarSyncScheduler` → `CalendarSyncService`)이고, 나머지 10개는 로직과 같은 클래스에서 공개 1회 실행 함수(`recoverOnce`/`purgeOnce`/
+    `resumeOnce`, 다섯 클래스)나 공개 tick(`pollPending`, `CveCollector.tick`, `CveSummaryWorker.tick`, `CveNotificationDispatcher.immediateTick`/`digestTick`)을
+    테스트 진입점으로 둔다. 이유: 규칙이 관행과 반대면 규칙을 따른 새 코드가 주변과 어긋나므로, 관행을 규칙으로 올렸다.
+    - **분리는 단계별 실패 격리가 필요할 때 고려하는 형태이지 불변 기준은 아니다.** 트랜잭션 경계 수로는 가를 수 없다 — 분리된
+      `DailyAgendaSchedulingService.sendDailyAgenda`는 틱마다 `runInTx` 하나이고, 분리되지 않은 `CveNotificationDispatcher`는 쌍·사용자마다 `runInTx`를
+      연다. 분리된 넷의 공통점은 얇은 스케줄러가 서비스 단계마다 `containFailure`로 실패를 가둔다는 것이다(스탠드업 4단계, 리마인더 2단계, 안건·캘린더
+      1단계). 다만 미분리 잡도 같은 격리를 한다(`AgentRetentionScheduler.purgeOnce`는 테이블마다, CVE 수집은 수집과 정리를 따로 가둔다) — 실패 격리는
+      클래스 배치와 무관하게 `containFailure`로 요구한다.
+    - **예외.** `CalendarSyncScheduler`와 `GoogleOAuthStateRetentionScheduler`, `GoogleOAuthCallbackController`는 스캔 대상이면서
+      `@Conditional(OnGoogleCalendarEnabled::class)`을 달고, `SocketModeReceiver`는 `@Component` + `@Profile("local")`이다.
+    - **기각.** ① 코드를 옛 규칙에 맞춰 스캔 대상을 `@Bean`으로 옮기는 안 — 얻는 것 없이 배선 변경만 크다; ② 스케줄 잡 10개를 `*Scheduler` + 서비스로 쪼개는 안 —
+      공개 1회 실행 함수와 공개 tick이 이미 같은 테스트 진입점을 준다.
+    상태: 유지. 근거: [coding-style.md](coding-style.md)의 빈 등록·스케줄 잡 행, `application/AGENTS.md`, `application/src/main/kotlin/dev/notypie/application/{configurations,service}/**`,
+    `application/.../security/SlackRequestVerificationConfiguration.kt`, `infrastructure/src/main/kotlin/dev/notypie/configurations/JpaConfiguration.kt`.
+
 ## 빌드·런타임
 
 19. **`io.spring.dependency-management` 플러그인을 쓰지 않는다.** 이유: BOM 버전(kotlinx-coroutines 등)을
@@ -723,8 +750,23 @@ _type: decision · updated: 2026-10-26_
 23. **Socket Mode는 로컬 전용, 프로덕션 인바운드는 HTTP.** 이유: 프로덕션은 Request URL 기반이 이미 서 있고
     Socket Mode는 터널 없이 로컬 테스트하기 위한 장치. 두 진입점은 같은 서비스 빈을 호출한다. 상태: 유지.
     근거: `application/AGENTS.md`, `CveBotPlan.md` §0.5-5.
-24. **`@Transactional`은 Repository `Impl`(`open class`)에.** 이유: CGLIB 프록시가 걸리는 자리를 한 곳으로.
-    상태: 유지. 근거: `Refactor.md` §5-1, Phase 10 노트.
+24. **`@Transactional`의 자리 — 경계는 명령 진입점(슬래시 서비스 메서드, 멘션·인터랙션 핸들러)이 열고, 그 밖의 DB 접근은 Repository `Impl`(`open class`)에 (2026-10-26 정정).** 이유: 답장 행은 진입점 트랜잭션의 BEFORE_COMMIT 리스너가 쓰고, 리포지토리의 CGLIB 프록시가 걸리는 자리는 한 곳으로.
+    상태: 유지(2026-10-26 범위 정정). 근거: `Refactor.md` §5-1, Phase 10 노트.
+    **정정(2026-10-26):** `Impl`은 유일한 자리가 아니다 — 이 규칙대로 서비스에서 `@Transactional`을 빼면 슬래시 답장이 조용히
+    사라진다. 경계는 명령 진입점이 연다: 슬래시 서비스 메서드의 `@Transactional`(`MeetingServiceImpl.handleMeeting`,
+    `StandupSlashServiceImpl.handleStandup`, `CveSubscriptionSlashServiceImpl` 3개, `CveQuerySlashServiceImpl.handleLatest`,
+    `AskSlashService.handleAsk`, `CalendarSlashService.handleCalendar`), 멘션 핸들러의 `TransactionTemplate`, 인터랙션 핸들러의
+    `PlatformTransactionManager.getTransaction`. DB를 쓰고 답장을 스테이징하는 리스너도 서비스 메서드에 건다(`RoleManagementService`,
+    `CveSubscriptionService`, `CveLatestQueryService`, `CveOpsService`, `StandupRoutineOpsService`, 모달 열기 실패 리스너
+    `MeetingServiceImpl.onDeclineModalOpenFailed`·`StandupAnswerService.onStandupModalOpenFailed`) — 2026-10-26 기준 `application`의
+    `@Transactional` 15개 전부가 이 두 부류다. 이유: 답장 행을 쓰는 `SlackMessageRelayServiceImpl.saveOutboxMessage`가
+    `@TransactionalEventListener(phase = BEFORE_COMMIT)`이고 `fallbackExecution`이 기본(false)이라 트랜잭션 없이 발행된
+    `OutboundMessageEnqueued`는 행을 남기지 않는다([events-and-outbox.md](events-and-outbox.md)의 "DM never sent"). 모달 열기 실패
+    이벤트는 `ViewOpenDeferral.afterBoundary`가 `views.open`을 경계 커밋 뒤로 미루어 트랜잭션 밖에서 발행되므로, 그 두 리스너의
+    `@Transactional`은 합류가 아니라 트랜잭션을 새로 연다.
+    CGLIB 이유는 리포지토리 `Impl`에 그대로 남는다 — `JpaConfiguration`의 `@Bean`으로 등록돼 스테레오타입이 없으므로
+    `@Transactional`을 단 13개는 `open class`이고, 없는 3개(`AgentSessionRepositoryImpl` 등)는 아니다. 리뷰 P-01(2026-10-23).
+    → [coding-style.md](coding-style.md)의 트랜잭션 행
 25. **툴체인은 최신 GA를 따른다 — Java 25, Kotlin 2.4, Spring Boot 4.1, Gradle 9.8.1.** 이유: (근거 미기록 — 채워
     넣을 것). 상태: 유지. 주의: 루트 `build.gradle.kts`의 `java { toolchain }` / `kotlin { compilerOptions }` 블록은
     `subprojects` 밖이라 세 모듈에 적용되지 않는다(2026-09-22 실측: 모듈 `freeCompilerArgs=[]`, 로컬 데몬 JDK 21로
@@ -1086,6 +1128,9 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `application/.../service/standup/StandupSchedulingService.kt`, `infrastructure/.../repository/meeting/{MeetingReminderRepository,MeetingReminderRepositoryImpl,JpaMeetingReminderRepository}.kt`,
   `infrastructure/.../repository/standup/{StandupRepository,StandupRepositoryImpl}.kt`, 스펙 `MeetingReminderSchedulingServiceTest`·`MeetingReminderRepositoryImplTest`·
   `StandupSchedulingServiceTest`·`StandupRepositoryImplTest`; 리뷰 E-01·CX-01·CX-02(2026-10-26, 세션 기록)
+- 빈 등록·스케줄 잡 규칙 정정(#56): `docs/wiki/coding-style.md`(빈 등록·스케줄 잡 행), `application/AGENTS.md`, `application/src/main/kotlin/dev/notypie/application/configurations/AGENTS.md`,
+  `application/src/main/kotlin/dev/notypie/application/{configurations,service,security}/**`의 `@Bean`·`@Service`/`@Component`·`@Scheduled`(2026-10-26 grep),
+  `infrastructure/src/main/kotlin/dev/notypie/configurations/JpaConfiguration.kt`, 리뷰 P-03·P-04(`.omc/handoffs/2026-10-23-full-review/findings-P.md`, git-ignored)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

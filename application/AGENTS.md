@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-26 -->
 
 # application
 
@@ -48,8 +48,15 @@ This is the only module that produces a runnable `bootJar`. It depends on both `
   `view_submission` `response_action` (e.g. inline modal validation errors).
 - Slow external calls (LLM turns, Slack Web API) must never run on the inbound request thread or hold
   a transaction. The AI turn runs in an async application listener for exactly this reason.
-- Beans are mostly declared explicitly in `configurations/` rather than via component scanning of
-  services — follow the existing style when adding a service.
+- Use-case services, schedulers and listeners are component-scanned (`@Service` / `@Component`, 39 files at
+  2026-10-26); beans that switch on a mode or feature flag (relay processors, event publisher, the CVE, calendar
+  and MCP lanes) and infrastructure adapters (clients, executors, the Slack pipeline adapters and `CommandExecutor`)
+  are `@Bean`s in `configurations/` (56 `@Bean` methods at 2026-10-26; the 16 repository adapter factories are
+  `@Bean`s in infrastructure's `configurations/JpaConfiguration`). The AI agent lane is declared the same way
+  (`AgentConfiguration`, `@ConditionalOnMissingBean` so specs can substitute — including the use-case service
+  `AgentConverseService`). Scanned yet conditional: the two calendar schedulers and `GoogleOAuthCallbackController`
+  (`@Conditional(OnGoogleCalendarEnabled::class)`), `SocketModeReceiver` (`@Profile("local")`). Follow that split
+  when adding a class.
 
 ### Testing Requirements
 ```bash
@@ -78,8 +85,13 @@ This module also consumes `testFixtures(project(":domain"))` and `testFixtures(p
 - Interface + `Impl` pairs for use cases (`MeetingService` / `MeetingServiceImpl`,
   `InteractionHandler` / `SlackInteractionHandlerImpl`, `MessageRelayService` / `SlackMessageRelayServiceImpl`).
   The interface is what other services and the socket receiver depend on.
-- `@Scheduled` jobs are split into a thin `*Scheduler` (cron/fixed-rate trigger) and a `*SchedulingService`
-  (the actual logic) so the logic is unit-testable without a scheduler.
+- An `@Scheduled` method may live with its logic when the class exposes a public entry point for tests
+  (`recoverOnce` / `purgeOnce` / `resumeOnce`: the outbox recovery and retention, agent retention, OAuth-state
+  retention and `AgentAskThreadStarter` jobs) or a public tick that specs call directly (`PollingMessageProcessor`,
+  `CveCollector`, `CveSummaryWorker`, `CveNotificationDispatcher`). The thin `*Scheduler` + service split
+  (standup, meeting reminder, daily agenda, calendar sync) is the shape of four jobs: the scheduler's
+  tick wraps each service phase in `containFailure`. Consider it when one tick runs several phases that must fail
+  independently; it is not an invariant — unsplit jobs contain failures per step as well.
 - The scheduler pool is sized to 4 in `application.yaml` — Spring's single-thread default would let one
   slow job (e.g. the CVE collector's outbound HTTP) starve every other job. The size applies only because
   `SchedulingConfig` declares a `ThreadPoolTaskScheduler`: with virtual threads on, Boot's default is

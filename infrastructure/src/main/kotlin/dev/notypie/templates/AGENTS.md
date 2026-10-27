@@ -60,7 +60,10 @@ paired with a check on the matching context spec in `:domain` and mapper spec in
 - `@DslMarker`-annotated builder classes (`@SlackViewDsl`) so nested scopes cannot leak receivers.
 - Builder functions accumulate into a `mutableMapOf`/`buildList` and expose a single `build()`.
 - Constants over string literals for every Slack id.
-- No I/O and no Slack SDK client here — these are pure payload builders.
+- Payload builders with one I/O exception: `ModalTemplateBuilder.approvalTemplate` calls
+  `SlackUserProfileResolver.resolve` (`users.profile.get` over `RestRequester`, cached) at render time for the
+  publisher's name and thumbnail. No other template method does network I/O (the time and date picker defaults
+  in `ModalElementBuilder` read the system clock), and no Slack SDK client is used.
 
 ## Dependencies
 

@@ -1,6 +1,6 @@
 # 아키텍처 개요
 
-_type: architecture · updated: 2026-10-07_
+_type: architecture · updated: 2026-10-26_
 
 > Slack 요청을 `domain` / `infrastructure` / `application` 세 모듈로 나눠 처리하는 단일 Spring Boot 앱이며,
 > 의존성은 `application → infrastructure → domain`(그리고 `application → domain`) 한 방향으로만 흐른다.
@@ -47,7 +47,7 @@ Slack ──WebSocket(local)──▶ SocketModeReceiver ───────�
 |--------|--------|------|
 | 역할 기반 권한 | `domain/command/authorization`, 멘션 파서 | `user ⊂ ai_user ⊂ developer ⊂ admin`, 설정의 bootstrap admin이 최우선 |
 | 멱등성 | `application/common/IdempotencyCreator` | 인바운드 데이터 + 1초 창으로 키 파생, Slack 재전송을 한 키로 접는다 |
-| 스케줄링 | `application/service/{standup,meeting,cve}` | 공유 락 없이 DB 행 CAS로 다중 인스턴스 안전 |
+| 스케줄링 | `application/service/{standup,meeting,cve,relay,agent,calendar}`(2026-10-26 기준 `@Scheduled` 14개, 13개 클래스) | 공유 락 없이 DB 행 CAS(보존 정리는 배치 DELETE)로 다중 인스턴스 안전 |
 | AI 레인 | `application/service/agent`, `infrastructure/impl/agent`, `application/mcp` | 사이드카(HTTP+SSE) + 앱 내 MCP 서버, 턴 단위 스코프 토큰 |
 | CVE 감시 | `application/service/cve`, `infrastructure/impl/cve` | 수집 → 1회 요약 → 아웃박스 DM/다이제스트 |
 | 운영 가시성 | `application/health/OutboxHealthIndicator`, `@bot status` | 아웃박스 지연·정체 행 |
@@ -69,6 +69,7 @@ Slack ──WebSocket(local)──▶ SocketModeReceiver ───────�
 - `build.gradle.kts`, `domain/build.gradle.kts`, `infrastructure/build.gradle.kts`, `application/build.gradle.kts`
 - `AGENTS.md`, `domain/AGENTS.md`, `infrastructure/AGENTS.md`, `application/AGENTS.md`
 - `application/src/main/kotlin/dev/notypie/application/security/SlackRequestVerificationFilter.kt`
+- `application/src/main/kotlin/dev/notypie/application/service/**`의 `@Scheduled`(2026-10-26 `grep -rn "@Scheduled"`)
 
 ## 관련 페이지
 

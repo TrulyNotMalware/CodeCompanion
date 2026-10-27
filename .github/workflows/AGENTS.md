@@ -1,10 +1,10 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # .github/workflows
 
 ## Purpose
-The four GitHub Actions workflows. Triggers, path filters, permissions, and the constraints behind each step are
+The six GitHub Actions workflows. Triggers, path filters, permissions, and the constraints behind each step are
 documented in `../AGENTS.md`; this file is the per-file index.
 
 ## Key Files
@@ -23,7 +23,8 @@ documented in `../AGENTS.md`; this file is the per-file index.
 - Read `../AGENTS.md` first — it holds the non-obvious rules (why `!` patterns are useless inside the deploy workflow's
   paths-filter block, why CodeQL cannot use `build-mode: none`, why the `changes` job needs `pull-requests: read`, why fork PRs skip
   dependency submission, why `dependabot/**` must stay in the branch lists).
-- Keep permissions least-privilege and declared per job; the workflow-level default is `contents: read`.
+- Keep permissions least-privilege; four workflows set a workflow-level `contents: read` default, while `claude.yml` and
+  `claude-code-review.yml` declare permissions only on their single job.
 - Pin action majors (`@v6`, `@v4`, …); Dependabot's `github-actions` ecosystem bumps them in one grouped PR.
 
 ### Testing Requirements

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # infrastructure/repository/authorization/schema
 
@@ -17,7 +17,12 @@ The single JPA entity behind the role system.
 - **`role` is the only mutable column**; `UserCommandRoleRepositoryImpl.saveRole` flips it in place
   rather than deleting and re-inserting, so `created_at` records the first grant.
 - **This entity references a domain enum directly** (`dev.notypie.domain.command.authorization.UserRole`);
-  the DB stores the constant name, so the enum is effectively part of the schema contract.
+  the DB stores the constant name, so the enum is effectively part of the schema contract. The production
+  column is a MariaDB `ENUM ('USER', 'AI_USER', 'DEVELOPER', 'ADMIN')` (`V12__add_user_command_role_table.sql`):
+  a new `UserRole` constant passes on H2 test schemas (regenerated each run); do not rely on `ddl-auto: update`
+  (local/dev) to widen the ENUM of an existing table; production (`ddl-auto: none`, unchanged schema, strict
+  `sql_mode`) fails the first `grant` with "Data truncated for column 'role'" until a `V*` migration alters
+  `user_command_role.role`.
 - `user_id` is the raw Slack user id (`U…`), 64 chars, no FK — the app has no user table.
 
 ### Testing Requirements

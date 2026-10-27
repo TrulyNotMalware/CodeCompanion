@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # application/security/mcp
 
@@ -45,13 +45,16 @@ token before the MCP protocol sees the request, and the transport provider's con
 
 ### Testing Requirements
 ```bash
-./gradlew :application:test --tests '*ScopedTurnTokenCodecTest*'
+./gradlew :application:test --tests '*ScopedTurnTokenCodecTest*' --tests '*McpTurnTokenFilterTest*'
 ```
 `ScopedTurnTokenCodecTest` (Kotest `BehaviorSpec`) pins a fixed `Clock` and covers round-trip, expiry
-inside/outside the skew window, tampered signature, wrong version, and blank secret. The filter has no
-spec; when adding one, drive `doFilterInternal` with `MockHttpServletRequest` (set `remoteAddr` to
-`127.0.0.1` vs a public IP and the `Authorization` header) and assert status, body, and whether the
-`FilterChain` was invoked. Build tokens with `createScopedTurnToken()` from
+inside/outside the skew window, tampered signature, wrong version, and blank secret. `McpTurnTokenFilterTest`
+covers the filter's address gate: a loopback caller with a valid token reaches the chain; a non-loopback
+caller, or a loopback one carrying `X-Forwarded-For` / `X-Real-IP`-style headers, gets 401 `loopback-only`
+without the chain (also behind a real Jetty connector and with the Kubernetes forward-header settings); with
+remote callers allowed the token alone decides. Every request in it carries a valid token, so a missing,
+non-Bearer, tampered or expired token on a loopback request is not pinned (review finding C-05); use
+`MockHttpServletRequest` and `MockFilterChain` as that spec does. Build tokens with `createScopedTurnToken()` from
 `src/testFixtures/kotlin/dev/notypie/application/security/mcp/ScopedTurnTokenCreator.kt`.
 
 ### Common Patterns

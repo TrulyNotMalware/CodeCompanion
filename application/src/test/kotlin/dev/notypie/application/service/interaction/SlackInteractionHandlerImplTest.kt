@@ -10,6 +10,7 @@ import dev.notypie.application.service.meeting.createBoundedH2DataSource
 import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.dto.response.CommandOutput
+import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.Command
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
@@ -17,6 +18,7 @@ import dev.notypie.domain.command.entity.ReplaceTextResponseCommand
 import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import dev.notypie.domain.meet.createAddParticipantEvent
 import dev.notypie.domain.meet.createMeetingDto
+import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
 import dev.notypie.impl.command.SlackOutboundStager
@@ -416,6 +418,88 @@ class SlackInteractionHandlerImplTest :
                     handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
 
                     verify(exactly = 1) { commandRoleResolver.resolve(userId = payload.user.id) }
+                }
+            }
+        }
+
+        given("handleInteraction publishing the interaction result") {
+            fun stubPrimaryInteraction() {
+                clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
+                every { payloadParser.parseStringPayload(payload = any()) } returns primaryPayload()
+            }
+
+            `when`("an InteractionCommand returns an ok result") {
+                then("the same result instance is published for the meeting listener") {
+                    stubPrimaryInteraction()
+                    val result = createRequestMeetingContextResult()
+                    every { commandExecutor.execute(command = any<Command<*>>()) } returns result
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) { applicationEventPublisher.publishEvent(refEq(result)) }
+                }
+            }
+
+            `when`("an InteractionCommand returns an ok result whose status is FAILED") {
+                then("it is still published because the guard is ok, not status") {
+                    stubPrimaryInteraction()
+                    val result = createRequestMeetingContextResult().copy(status = Status.FAILED)
+                    every { commandExecutor.execute(command = any<Command<*>>()) } returns result
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) { applicationEventPublisher.publishEvent(refEq(result)) }
+                }
+            }
+
+            `when`("an InteractionCommand returns a meeting result with ok = false") {
+                then("nothing is published") {
+                    stubPrimaryInteraction()
+                    every { commandExecutor.execute(command = any<Command<*>>()) } returns
+                        createRequestMeetingContextResult().copy(ok = false)
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) {
+                        commandExecutor.execute(command = match<Command<*>> { it is InteractionCommand })
+                    }
+                    verify(exactly = 0) { applicationEventPublisher.publishEvent(any<Any>()) }
+                }
+            }
+
+            `when`("an InteractionCommand returns a result that is not ok") {
+                then("nothing is published") {
+                    stubPrimaryInteraction()
+                    every { commandExecutor.execute(command = any<Command<*>>()) } returns CommandOutput.empty()
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) {
+                        commandExecutor.execute(command = match<Command<*>> { it is InteractionCommand })
+                    }
+                    verify(exactly = 0) { applicationEventPublisher.publishEvent(any<Any>()) }
+                }
+            }
+
+            `when`("the legacy ReplaceTextResponseCommand path returns an ok result") {
+                then("nothing is published") {
+                    clearMocks(payloadParser, commandExecutor, applicationEventPublisher)
+                    every { payloadParser.parseStringPayload(payload = any()) } returns
+                        createInteractionPayloadInput(
+                            commandDetailType = CommandDetailType.APPROVAL_REQUEST,
+                            currentAction = selectedRejectButtonStates(),
+                            states = listOf(selectedRejectButtonStates()),
+                            idempotencyKey = UUID.randomUUID(),
+                        )
+                    every { commandExecutor.execute(command = any<Command<*>>()) } returns
+                        mockk<CommandOutput> { every { ok } returns true }
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) {
+                        commandExecutor.execute(command = match<Command<*>> { it is ReplaceTextResponseCommand })
+                    }
+                    verify(exactly = 0) { applicationEventPublisher.publishEvent(any<Any>()) }
                 }
             }
         }

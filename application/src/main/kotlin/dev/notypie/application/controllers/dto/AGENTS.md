@@ -1,12 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-28 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # application/controllers/dto
 
 ## Purpose
 Controller-layer response classes. Both files are dead today: no controller, service, or test
-references them, and `SlackEventController.handleAppMentionEvents` returns the domain `CommandOutput`
-directly while every slash endpoint returns an empty 200.
+references them, and `SlackEventController.handleAppMentionEvents` logs only a non-ok `CommandOutput` (debug for
+`DO_NOTHING`, warn with the error reason) and returns an empty 200, like every slash endpoint.
 
 ## Key Files
 | File | Description |

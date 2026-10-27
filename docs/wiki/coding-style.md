@@ -1,6 +1,6 @@
 # 코딩 스타일 가이드
 
-_type: guide · updated: 2026-10-15_
+_type: guide · updated: 2026-10-26_
 
 > Kotlin답게, non-null 우선으로, 주석 대신 코드가 설명하게, 파일은 적게 — 그리고 리팩토링에는 반드시
 > 테스트가 따라온다.
@@ -26,14 +26,14 @@ _type: guide · updated: 2026-10-15_
 | named parameter | Kotlin → Kotlin 호출은 항상 named parameter를 쓴다 (`IdempotencyCreator.create(data = commandData)`). Java API 호출은 예외 |
 | `this` 생략 | 불필요한 `this.`는 쓰지 않는다. 의도적인 스타일이며 ktlint 규칙이 아니다 |
 | 인터페이스 + `Impl` | 유스케이스와 어댑터는 `MeetingService` / `MeetingServiceImpl`처럼 짝을 이루고, 다른 코드는 인터페이스에만 의존한다 |
-| 스케줄러 분리 | `@Scheduled`는 얇은 `*Scheduler`에, 로직은 `*SchedulingService`에 — 로직을 스케줄러 없이 단위 테스트하기 위해 |
+| 스케줄 잡 | 목적은 테스트가 스케줄러 없이 잡 로직을 부르는 것이다. `@Scheduled` 메서드는 로직과 같은 클래스에 둘 수 있고(2026-10-26 기준 14개 중 10개), 그때는 공개 진입점 — 1회 실행 함수(`recoverOnce`/`purgeOnce`/`resumeOnce`)나 공개 tick(`pollPending`, `tick`, `immediateTick`/`digestTick`) — 을 둔다. 얇은 `*Scheduler`가 서비스를 부르는 분리는 스탠드업·회의 리마인더·일일 안건·캘린더 동기화 네 잡의 형태이고(서비스는 `*SchedulingService`, 캘린더만 `CalendarSyncService`), 스케줄러가 서비스 단계마다 `containFailure`로 실패를 가둔다. 단계별 실패 격리는 분리를 고려할 이유이지 분리 여부를 가르는 불변 기준은 아니다 — 미분리 잡도 `containFailure`로 단계를 가둔다(`AgentRetentionScheduler.purgeOnce`의 테이블별 purge). 어느 형태든 실패 격리는 `containFailure`로 한다(2026-10-26 정정) |
 | 리포지토리 3종 | `XxxRepository`(인터페이스 + DTO) / `JpaXxxRepository` / `XxxRepositoryImpl`(`open class`, 변이 메서드 `@Transactional`, 엔티티를 매핑하는 읽기 메서드 `@Transactional(readOnly = true)` — open-in-view를 껐으므로 매핑은 트랜잭션 안에서), 스키마는 `schema/XxxSchema`. 스키마의 변경 가능한 컬럼은 `var ... protected set`이고 바꾸는 길은 행위 메서드(`redefine`, `changeRole`, `cancel` 등)나 CAS 문뿐이다(2026-10-01) |
-| 빈 등록 | 어댑터·서비스는 `@Component` 스캔보다 `configurations/`의 명시적 `@Bean`(named argument)으로 등록한다. `@ConditionalOnBean`과 스캔의 순서 의존을 피하기 위해 |
+| 빈 등록 | 유스케이스 서비스·스케줄러·리스너는 컴포넌트 스캔(`@Service`/`@Component`)으로 등록한다. 모드·기능 플래그로 갈리는 빈(릴레이 처리기·이벤트 발행기, CVE·캘린더·MCP 레인, `@ConditionalOnMissingBean`을 단 에이전트 레인 — 유스케이스 서비스 `AgentConverseService`도 여기)과 인프라 어댑터(저장소 어댑터 팩토리, Slack 파이프라인 어댑터와 `CommandExecutor`, 클라이언트, 실행기)는 `configurations/`(두 모듈)의 명시적 `@Bean`(named argument)으로 등록한다 — `@ConditionalOnBean`과 스캔의 순서 의존을 피하기 위해(예외: 캘린더 스케줄러 둘과 `GoogleOAuthCallbackController`는 스캔 대상에 `@Conditional`을, `SocketModeReceiver`는 `@Profile("local")`을 단다). 2026-10-26 기준 `application`은 스캔 대상 39개 파일, `@Bean` 59개(`configurations/` 56, `security/` 3)다(2026-10-26 정정) |
 | 설정 바인딩 | `@ConfigurationProperties` 클래스는 `application/.../configurations/`에, 메인 클래스의 `@ConfigurationPropertiesScan`이 잡는다 |
 | 시간 | 시간에 의존하는 서비스는 `Clock`을 기본값 없이 생성자로 받고, `@Bean` 팩토리는 컨텍스트의 `Clock` 빈을 넘긴다(2026-10-01). 생성자 기본값은 빈이 있으면 무시되고, 팩토리가 인자를 빼먹으면 조용히 다른 시계를 쓴다. 테스트가 시각을 고정할 수 있어야 한다 |
 | 로깅 | 파일 수준 `private val log = KotlinLogging.logger {}`, 호출은 람다 형태 `log.info { ... }`. `logger`라는 이름은 쓰지 않는다 — `OncePerRequestFilter`·`ResponseEntityExceptionHandler`처럼 `protected logger`(commons-logging)를 가진 Spring 기반 클래스 안에서는 상속 멤버가 파일 수준 `logger`를 가려 `Log.warn(Object)`에 람다 객체가 넘어가고, 로그에는 사유 대신 `…$$Lambda@hash`가 찍힌다(2026-10-01 Slack 서명 필터에서 실제 발생) |
 | Jackson | 모듈 공용 `dev.notypie.common.jsonMapper` 하나를 import한다. 별도 인스턴스는 다른 설정이 꼭 필요한 곳(MCP 전송, 스코프 토큰 코덱)에만 |
-| 트랜잭션 | `@Transactional`은 Repository `Impl`에. 앰비언트 트랜잭션이 없는 스케줄러·비동기 경로는 `TransactionTemplate.runInTx`로 경계를 명시 |
+| 트랜잭션 | 경계는 명령 진입점이 연다 — 슬래시 서비스 메서드의 `@Transactional`, 멘션 핸들러의 `TransactionTemplate`, 인터랙션 핸들러의 `PlatformTransactionManager.getTransaction`. 답장 행을 쓰는 `SlackMessageRelayServiceImpl.saveOutboxMessage`는 `@TransactionalEventListener(phase = BEFORE_COMMIT)`(`fallbackExecution` 기본 false)라 그 트랜잭션에 묶이고, 트랜잭션 없이 발행된 답장은 행 없이 조용히 버려진다. DB를 쓰고 답장을 스테이징하는 이벤트 리스너도 서비스 메서드에 `@Transactional`을 건다 — REQUIRED라 진입점 트랜잭션에 합류하고, 경계가 커밋된 뒤 발행되는 모달 열기 실패 이벤트처럼 트랜잭션이 없으면 스스로 연다(2026-10-26 기준 리스너 7곳이 명시했고, 붙이지 않은 리스너는 진입점 트랜잭션에 합류하거나 `StandupSummaryService`처럼 `runInTx`로 스스로 경계를 연다). 그 밖의 DB 접근은 Repository `Impl`(`open class`)의 `@Transactional`이 경계이고, 앰비언트 트랜잭션이 없는 스케줄러·비동기 경로는 `TransactionTemplate.runInTx`로 경계를 명시한다(2026-10-26 정정, 결정 #24) |
 | 예외 | `CodeCompanionRuntimeException` + `ErrorCode` enum + `exceptionDetails {}` — [error-handling-and-validation.md](error-handling-and-validation.md) |
 | 실패 경계 | 경계에서 `runCatching`·`catch (Throwable)`로 `Error`를 삼키지 않는다. `containFailure` / `runCatchingExceptions`(`dev.notypie.common`) 또는 타입을 지정한 `catch`를 쓴다. `Throwable`은 정리 후 같은 인스턴스를 다시 던질 때만(결정 #48) |
 | 검증 | 애그리거트 불변식은 `init`의 `validate(className = this.javaClass.simpleName) { ... }` |
@@ -84,8 +84,12 @@ _type: guide · updated: 2026-10-15_
 
 - `STYLE_GUIDE.local.md`(로컬 전용 메모 — 이 페이지가 그 내용을 저장소 안으로 옮긴 것), `Refactor.md` §5
 - `.editorconfig`, `.gitmessage`, `build.gradle.kts`(ktlint 플러그인·리포터), `README.md` Getting Started
-- `application/AGENTS.md`(인터페이스+Impl, 스케줄러 분리, `Clock`, 설정 바인딩), `application/src/main/kotlin/dev/notypie/application/common/AGENTS.md`
-- `infrastructure/src/main/kotlin/dev/notypie/configurations/AGENTS.md`(명시적 `@Bean`)
+- `application/AGENTS.md`(인터페이스+Impl, 빈 등록, 스케줄 잡, `Clock`, 설정 바인딩), `application/src/main/kotlin/dev/notypie/application/common/AGENTS.md`
+- `infrastructure/src/main/kotlin/dev/notypie/configurations/AGENTS.md`(명시적 `@Bean`), `.../configurations/JpaConfiguration.kt`(저장소 어댑터 팩토리)
+- 2026-10-26 실측(트랜잭션·빈 등록·스케줄 잡 행): `application/src/main/kotlin/dev/notypie/application/`의 `@Transactional`·`@Scheduled`·
+  `@Service`/`@Component`(grep), `configurations/*.kt`·`security/SlackRequestVerificationConfiguration.kt`의 `@Bean`,
+  `service/relay/SlackMessageRelayServiceImpl.kt`(`saveOutboxMessage`), `service/{mention,interaction}/*HandlerImpl.kt`,
+  `infrastructure/src/main/kotlin/dev/notypie/impl/command/SlackViewOpenDispatcher.kt`(`ViewOpenDeferral`)
 - `.github/dependabot.yml`
 
 ## 관련 페이지

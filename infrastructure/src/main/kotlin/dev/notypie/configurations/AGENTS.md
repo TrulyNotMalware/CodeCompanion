@@ -1,13 +1,13 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-08 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-26 -->
 
 # infrastructure/configurations
 
 ## Purpose
 The two Spring `@Configuration` classes owned by the infrastructure module: `JpaConfiguration` (HikariCP
 datasource, `@Primary` lazy-connection proxy, JPA repository scanning, and the sixteen `@Bean @Primary`
-repository-adapter factories) and `RetryConfiguration` (a `RetryTemplate`, the `RetryService` bean, and
-the `RetryOptions` defaults enum). Slack dispatch, Kafka, the AI-agent lane, CVE, MCP, and scheduling are
+repository-adapter factories) and `RetryConfiguration` (the `RetryService` bean and the
+`RetryOptions` defaults enum). Slack dispatch, Kafka, the AI-agent lane, CVE, MCP, and scheduling are
 wired in `application/src/main/kotlin/dev/notypie/application/configurations/`; this package covers
 persistence and retry only.
 
@@ -15,7 +15,7 @@ persistence and retry only.
 | File | Description |
 |------|-------------|
 | `SnapshotIsolationExceptionTranslator.kt` | `SnapshotIsolationConflictException(message, cause)` (an `OptimisticLockingFailureException`, so a `ConcurrencyFailureException`) and `SnapshotIsolationExceptionTranslator : SQLExceptionTranslator` (`ER_CHECKREAD = 1020`): an `SQLException` with error code 1020 anywhere in its cause chain becomes the conflict exception; any other error returns `null` for a `"Hibernate operation: "` task (Hibernate's own instanceof mapping still decides, e.g. a unique violation stays `DataIntegrityViolationException`) and is passed to a `SQLExceptionSubclassTranslator` otherwise — the default of the Hibernate transaction path and of `JdbcTemplate`, which receive the same bean. Without it Spring 7.0.9 maps Hibernate's `SnapshotIsolationException` to `JpaSystemException`, which no conflict handler catches. |
-| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource` bound to `spring.datasource.hikari.*` through `@ConfigurationProperties` on the bean method; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository` (also takes the `PlatformTransactionManager` for its insert transaction), `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository` (also takes the `PlatformTransactionManager` for its locked-read sync and `REQUIRES_NEW` insert), `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references Also declares `snapshotIsolationExceptionTranslator` — it must stay the **only** `SQLExceptionTranslator` bean: Boot 4.1.1 wires one into `HibernateJpaDialect.setJdbcExceptionTranslator` (repository proxies and `JpaTransactionManager` commits) and `JdbcTemplate` only when it is unique (`ifUnique`), so a second bean silently turns 1020 back into `JpaSystemException`.; `googleCalendarConnectionRepository`, `googleOAuthStateRepository` and `meetingCalendarEventRepository` (`repository/calendar`; the last also takes `JpaMeetingRepository` for its sync view and the `PlatformTransactionManager` for the worker transitions, which refuse an outer transaction and run in their own) are registered here too, unconditionally |
+| `JpaConfiguration.kt` | `@EnableJpaRepositories(basePackages = [JPA_ENTITY_PACKAGES])` with `JPA_ENTITY_PACKAGES = "dev.notypie.repository"`. `hikariDataSource(DataSourceProperties)` builds a `HikariDataSource` bound to `spring.datasource.hikari.*` through `@ConfigurationProperties` on the bean method; `lazyConnectionDataSourceProxy` wraps it as the `@Primary` `DataSource`. Then one `@Bean @Primary` factory per adapter: `meetingRepository`, `meetingReminderRepository` (also takes the `PlatformTransactionManager` for its insert transaction), `agendaDispatchRepository`, `agentSessionRepository`, `agentTurnHistoryRepository`, `userCommandRoleRepository`, `mcpToolCallHistoryRepository`, `cveTopicRepository` (also takes the `PlatformTransactionManager` for its locked-read sync and `REQUIRES_NEW` insert), `cveEventRepository`, `cveSubscriptionRepository`, `cveCollectLedgerRepository`, `cveDeliveryRepository`, `standupRepository`. Also declares `PRIMARY_DATASOURCE_CONFIG = "primaryPersistenceUnit"`, which nothing references. Also declares `snapshotIsolationExceptionTranslator` — it must stay the **only** `SQLExceptionTranslator` bean: Boot 4.1.1 wires one into `HibernateJpaDialect.setJdbcExceptionTranslator` (repository proxies and `JpaTransactionManager` commits) and `JdbcTemplate` only when it is unique (`ifUnique`), so a second bean silently turns 1020 back into `JpaSystemException`. `googleCalendarConnectionRepository`, `googleOAuthStateRepository` and `meetingCalendarEventRepository` (`repository/calendar`; the last also takes `JpaMeetingRepository` for its sync view and the `PlatformTransactionManager` for the worker transitions, which refuse an outer transaction and run in their own) are registered here too, unconditionally. |
 | `RetryConfiguration.kt` | `@EnableResilientMethods @Configuration`. `retryService()` returns a parameterless `RetryService` (it builds its own per-policy templates; there is no `RetryTemplate` bean any more). The same file defines `enum class RetryOptions(internal val default: Long)`: `MAX_ATTEMPTS = 3`, `INITIAL_DELAY = 100`, `MULTIPLIER = 2`, `MAX_DELAY = 10000`, `JITTER = 10` (milliseconds) |
 
 ## For AI Agents
@@ -48,7 +48,7 @@ persistence and retry only.
   `:application` callers cannot read the defaults — they pass named overrides to `execute` instead.
 - **`@EnableResilientMethods` is on but unused.** No `@Retryable` / `@ConcurrencyLimit` method exists in
   the repository; all retry goes through `RetryService` (`impl/command/ApplicationMessageDispatcher`,
-  application `MeetingServiceImpl`, `SlackMessageRelayServiceImpl`).
+  application `AgentAskThreadStarter`, `SlackMessageRelayServiceImpl`).
 - Keep infrastructure configurations in this package; application-layer configs belong in the
   `application` module.
 
@@ -57,21 +57,22 @@ persistence and retry only.
 ./gradlew :infrastructure:test
 ```
 `HikariDataSourceBindingTest` (`@SpringBootTest` via `TestApplication.kt`) asserts that
-`spring.datasource.hikari.*` reaches the pool. `@DataJpaTest` slices under `repository/` filter out user
+`spring.datasource.hikari.*` reaches the pool; `SnapshotIsolationExceptionTranslatorTest` is also a
+`@SpringBootTest` and pins the translator bean wiring. `@DataJpaTest` slices under `repository/` filter out user
 `@Configuration` classes, so they run on Boot's auto-configured H2 datasource and repository scanning, not
-on `JpaConfiguration`; the `*RepositoryImplTest` specs construct adapters by hand with MockK'd `Jpa*`
-repositories. The only test that boots this package is `impl/command/KafkaEventPublisherTest`
-(`@SpringBootTest` via `TestApplication.kt`, H2 + `EmbeddedKafka`) — if a new `@Bean` here fails to wire,
-that is the spec that breaks. `RetryService` itself is covered by `impl/retry/RetryServiceTest`, which
-uses a bare `RetryTemplate()` rather than this configuration.
+on `JpaConfiguration`; the `*RepositoryImplTest` specs construct adapters by hand — 6 of the 13 over MockK'd
+`Jpa*` repositories, 7 over the real `Jpa*` inside `@DataJpaTest` (2026-10-26). Three specs boot the full context through `TestApplication.kt`: `HikariDataSourceBindingTest`,
+`SnapshotIsolationExceptionTranslatorTest` and `impl/command/KafkaEventPublisherTest` (H2 +
+`EmbeddedKafka`) — if a new `@Bean` here fails to wire, those are the specs that break.
+`RetryService` itself is covered by `impl/retry/RetryServiceTest`, which constructs `RetryService()`
+directly rather than going through this configuration.
 
 ### Common Patterns
 - `@Bean` factories use named arguments for every constructor parameter and let Kotlin infer the concrete
   `*Impl` return type.
 - `@Primary` on every adapter bean and on the datasource proxy, so injection by interface type is
   unambiguous.
-- `@ConditionalOnMissingBean` only on `retryTemplate()`; it is evaluated when this class is processed, so a
-  custom `RetryTemplate` wins only if its definition is registered first.
+- No `@ConditionalOnMissingBean` is used in this package; `retryService()` is an unconditional bean.
 
 ## Dependencies
 
@@ -93,9 +94,9 @@ uses a bare `RetryTemplate()` rather than this configuration.
 
 ### External
 HikariCP (`com.zaxxer.hikari.HikariDataSource`), Spring Boot `DataSourceProperties`
-(`org.springframework.boot.jdbc.autoconfigure`) and `@ConditionalOnMissingBean`, Spring JDBC
+(`org.springframework.boot.jdbc.autoconfigure`), Spring JDBC
 `LazyConnectionDataSourceProxy`, Spring Data JPA `@EnableJpaRepositories`, Spring Framework 7 core retry
-(`org.springframework.core.retry.RetryTemplate` / `RetryPolicy`) and resilience
+(`org.springframework.core.retry.RetryTemplate` / `RetryPolicy`, built inside `RetryService`) and resilience
 (`org.springframework.resilience.annotation.EnableResilientMethods`) — `spring-retry` is no longer on the
 classpath.
 

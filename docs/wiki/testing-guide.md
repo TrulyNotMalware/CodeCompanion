@@ -1,6 +1,6 @@
 # 테스트 가이드
 
-_type: guide · updated: 2026-10-20_
+_type: guide · updated: 2026-10-26_
 
 > Spring 없는 Kotest `BehaviorSpec` + MockK를 기본으로, `testFixtures` 팩토리와 가드 테스트로 리팩토링을 지키는
 > 이 프로젝트만의 테스트 관례.
@@ -30,19 +30,20 @@ _type: guide · updated: 2026-10-20_
 
 ## 스펙 스타일과 선택 기준
 
-- 전 모듈 스펙 클래스 120개(파일 119개) 중 118개가 `BehaviorSpec`이다. `given` / `` `when` `` / `then`을 영어
+- 전 모듈 스펙 클래스 205개(파일 204개, 2026-10-26 기준) 중 200개가 `BehaviorSpec`이다. `given` / `` `when` `` / `then`을 영어
   문장으로 쓰고, `` `when` ``은 Kotlin 키워드라 항상 백틱으로 감싼다.
-- `StringSpec`은 셋뿐이다: 파일 시스템을 스캔하는 `DomainLayeringGuardTest`와 `EnvelopeCastGuardTest`, 코덱
-  라운드트립인 `OutboundMessageCodecTest`. "한 줄 이름 = 한 규칙"이 자연스러울 때만 쓴다.
+- `StringSpec`은 다섯이다: 파일 시스템을 스캔하는 `DomainLayeringGuardTest`와 `EnvelopeCastGuardTest`, 네이티브 쿼리에
+  따옴표로 쓴 상수가 그 리포지토리의 상태 enum에 있는지 보는 `NativeQueryStatusLiteralTest`, 생성된 H2 스키마의 NOT NULL을 보는
+  `SchemaNullabilityTest`(`@DataJpaTest`), 코덱 라운드트립인 `OutboundMessageCodecTest`. "한 줄 이름 = 한 규칙"이 자연스러울 때만 쓴다.
 - 공유 베이스는 상속이 아니라 **같은 파일의 두 번째 스펙**이다. `AbstractCommandContextTest.kt`는
   `AbstractCommandContextTest`와 `AbstractReactionCommandContextTest`를 한 파일에 두고 `object : CommandContext<NoSubCommands>`
   익명 서브클래스로 추상 계약을 검증한다. 새 컨텍스트 스펙은 이 파일을 흉내 내되 fixture는 재사용한다.
 - Spring 슬라이스는 `@ApplyExtension(extensions = [SpringExtension::class])` + 생성자 `@Autowired` 조합으로 쓴다
-  (`kotest-extensions-spring`, 7개 파일). 필드 주입은 쓰지 않는다.
+  (`kotest-extensions-spring`, 24개 파일, 2026-10-26 기준). 필드 주입은 쓰지 않는다.
 
 ## MockK 관례
 
-- `mockk<T>(relaxed = true)`는 반환값을 보지 않는 협력자에만 쓴다(154회). 반환값이 흐름을 바꾸는 포트(`claimPending`,
+- `mockk<T>(relaxed = true)`는 반환값을 보지 않는 협력자에만 쓴다(세 모듈 `src/test`에 `relaxed = true` 약 330회, 2026-10-26 기준). 반환값이 흐름을 바꾸는 포트(`claimPending`,
   `claimDispatch`)는 반드시 `every { } returns`로 명시한다.
 - **CAS 토큰은 `slot<String>()`으로 잡아 동일성을 단언한다.** `StandupSchedulingServiceTest`는 `claimDispatch`와
   `markDispatchSent`의 `claimToken`을 각각 캡처해 같은 토큰인지 보고, `CveSummaryWorkerTest`는 `claimForSummary`의
@@ -67,19 +68,23 @@ _type: guide · updated: 2026-10-20_
 - `infrastructure/src/test/kotlin/dev/notypie/TestApplication.kt`는 빈 `@SpringBootApplication`이고,
   `src/test/resources/application.yaml`은 Kafka 직렬화기와 로깅만 정한다. 데이터소스 설정이 없으므로 Boot가 H2를
   자동 구성한다. `kafka: OFF` 로깅은 EmbeddedKafka 종료 레이스 로그를 죽이기 위한 것이다.
-- `@DataJpaTest` 6개(`Jpa*RepositoryTest`와 `AddParticipantRepositoryTest`)는 사용자 `@Configuration`을 걸러내므로
-  `JpaConfiguration`은 로드되지 않는다. Boot 기본 리포지토리 스캔 위에서 돈다.
+- `@DataJpaTest` 20개(2026-10-26 기준 — `Jpa*RepositoryTest` 8개, 실제 `Jpa*` 위에 어댑터를 손으로 만드는 `*RepositoryImplTest`
+  7개, `AgentAskTurnRepositoryTest`·`MeetingRepositoryWriteTest`·`MessageOutboxRepositoryTest`·`StandupDispatchSweepTest`·
+  `SchemaNullabilityTest`)는 사용자 `@Configuration`을 걸러내므로 `JpaConfiguration`은 로드되지 않는다. Boot 기본 리포지토리 스캔 위에서 돈다.
 - **Kotest 컨테이너 스코프는 테스트 트랜잭션 바깥에서 실행된다.** `given` 블록의 `saveAndFlush`는 롤백되지 않고
   스펙 간에 하나의 H2를 공유한다. 그래서 `JpaCveTopicRepositoryTest`는 `topicKey`를 블록마다 고유하게 만들고
   `countActive()`를 `baseline + 2`처럼 델타로 단언한다. 전역 정확 일치(`shouldBe 3`)는 다른 스펙 순서에 따라 깨진다.
   같은 이유로 픽스처의 외래키 기본값(`createCveEventSchema`의 `topicId`, 구독·전달 픽스처의 `topicId`·`eventId`)은 IDENTITY가 절대
   주지 않는 `0`이다 — `1`이면 깨끗한 H2에서 첫 토픽이 id 1을 받아 다른 블록의 행이 그 토픽에 붙고, `JpaCveEventRepositoryTest`가
   단독 실행에서만 실패했다(2026-10-20).
-- 리포지토리 스펙은 **레인마다 쌍**이다: `Jpa*RepositoryTest`(H2, 쿼리·CAS 의미)와 `*RepositoryImplTest`(MockK한
-  `Jpa*` + 손으로 만든 어댑터, 매핑). 동시성 주장(`claimPending`, `insertIgnore`, `resetStuck`)은 **지는 쪽 경로**도
+- 리포지토리 스펙은 **레인마다 쌍**이다: `Jpa*RepositoryTest`(H2, 쿼리·CAS 의미)와 `*RepositoryImplTest`(손으로 만든
+  어댑터의 매핑 — 2026-10-26 기준 13개 중 6개는 MockK한 `Jpa*`, 7개는 `@DataJpaTest`의 실제 `Jpa*` 위에서 돈다). 동시성 주장(`claimPending`, `insertIgnore`, `resetStuck`)은 **지는 쪽 경로**도
   스펙이 있어야 한다.
-- `@SpringBootTest` + `@EmbeddedKafka`(KRaft)는 `impl/command/KafkaEventPublisherTest` 하나뿐이다. `configurations/`
-  패키지의 `@Bean`이 잘못 엮이면 깨지는 유일한 스펙이 이것이다.
+- `:infrastructure`의 `@SpringBootTest`는 셋이다(2026-10-26 기준): `@EmbeddedKafka`(KRaft)를 띄우는
+  `impl/command/KafkaEventPublisherTest`, `JpaConfiguration`이 `spring.datasource.hikari.*`를 풀에 넘기는지 보는
+  `configurations/HikariDataSourceBindingTest`, MariaDB 1020 번역기가 Boot가 엮는 유일한 `SQLExceptionTranslator`인지 보는
+  `configurations/SnapshotIsolationExceptionTranslatorTest`. 이 모듈에서 `configurations/` 패키지의 `@Bean` 배선을 실제로 읽는
+  스펙은 이 셋이다(`@DataJpaTest`는 그 패키지를 거른다).
 - `:application`의 `@SpringBootTest`는 `ApplicationContextSmokeTest` 하나다(2026-10-01). H2 위에 애플리케이션 전체를 띄워 단위 스펙이
   볼 수 없는 배선 — Hikari 풀 크기, `ThreadPoolTaskScheduler`, `relayTaskExecutor` 주입, 단일 `Clock`, AI 턴이
   커밋 뒤 `agent-turn-` 스레드에서만 도는지, 클럭 빈 공유, outbox 게이지의 Prometheus 노출, BEFORE_COMMIT outbox 쓰기, `/ask` 레저 행이
@@ -157,6 +162,8 @@ _type: guide · updated: 2026-10-20_
 - `infrastructure/src/test/kotlin/dev/notypie/TestApplication.kt`, `infrastructure/src/test/resources/application.yaml`,
   `.../repository/cve/JpaCveTopicRepositoryTest.kt`, `.../repository/cve/CveTopicRepositoryImplTest.kt`,
   `.../impl/command/KafkaEventPublisherTest.kt`, `.../impl/command/ViewSubmissionChannelRoutingRegressionTest.kt`,
+  `.../configurations/{HikariDataSourceBindingTest,SnapshotIsolationExceptionTranslatorTest}.kt`,
+  `.../repository/{NativeQueryStatusLiteralTest,SchemaNullabilityTest}.kt`,
   `.../exception/DatabaseExceptionTest.kt`
 - `application/src/test/kotlin/dev/notypie/application/` (`service/standup/StandupSchedulingServiceTest.kt`,
   `service/cve/ai/CveSummaryWorkerTest.kt`, `service/relay/PollingMessageProcessorTest.kt`,
@@ -164,6 +171,9 @@ _type: guide · updated: 2026-10-20_
 - `application/src/testFixtures/kotlin/dev/notypie/application/outbox/OutboxTestFixtures.kt`,
   `application/src/testFixtures/kotlin/dev/notypie/docs/DSL.kt`, `.../docs/Utils.kt`
 - `STYLE_GUIDE.local.md` §3, §6 (git 미추적, 로컬 전용)
+- 2026-10-26 개수 측정: 세 모듈 `src/test`의 `.kt`를 읽어 `:\s*(\w+Spec)\s*\(` 선언을 센 Python 스크립트(205 = `BehaviorSpec` 200 +
+  `StringSpec` 5, 파일 204), `grep -rl 'ApplyExtension(extensions = \[SpringExtension::class\])'`(24),
+  `grep -rho 'relaxed = true'`(332), `grep -rl '^@DataJpaTest'`(20), `grep -rl '^@SpringBootTest'`(infrastructure 3, application 1)
 
 ## 관련 페이지
 
