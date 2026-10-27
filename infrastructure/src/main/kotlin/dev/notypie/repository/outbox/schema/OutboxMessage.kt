@@ -11,7 +11,7 @@ import org.springframework.data.domain.Persistable
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
-private val logger = KotlinLogging.logger { }
+private val log = KotlinLogging.logger {}
 
 @Entity
 @Table(
@@ -106,7 +106,7 @@ fun MutableMap<String, Any>.toOutboxMessage(): OutboxMessage =
 
         jsonMapper.convertValue(this, OutboxMessage::class.java)
     } catch (e: Exception) {
-        logger.error(e) { "Failed to convert to OutboxMessage" }
+        log.error(throwable = e) { "Failed to convert to OutboxMessage" }
         throw RuntimeException("Failed to convert to OutboxMessage", e)
     }
 
@@ -119,4 +119,30 @@ internal fun Long.debeziumDateTime(): LocalDateTime {
         (Math.floorMod(micros, 1_000_000L) * 1_000).toInt(),
         ZoneOffset.UTC,
     )
+}
+
+enum class MessageStatus {
+    INIT,
+    FAILURE,
+    SUCCESS,
+    PENDING,
+
+    IN_PROGRESS,
+}
+
+// Extend SUPPORTED with every new version; drop an old version only once it's guaranteed drained.
+object OutboxSchemaVersion {
+    const val V2: Int = 2
+
+    const val V3: Int = 3
+
+    const val V4: Int = 4
+
+    const val V5: Int = 5
+
+    const val V6: Int = 6
+
+    const val V7: Int = 7
+
+    val SUPPORTED: Set<Int> = setOf(V2, V3, V4, V5, V6, V7)
 }

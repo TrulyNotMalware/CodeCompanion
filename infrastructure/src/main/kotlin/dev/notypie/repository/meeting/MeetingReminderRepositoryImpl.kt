@@ -49,7 +49,9 @@ open class MeetingReminderRepositoryImpl(
                 meetingId = meetingId,
                 offsetMinutes = offsetMinutes,
             ) ?: return insertReminder(meetingId = meetingId, offsetMinutes = offsetMinutes, scheduledAt = scheduledAt)
-        if (existing.status != MeetingReminderStatus.PENDING || existing.scheduledAt.isSameSecond(scheduledAt)) {
+        if (existing.status != MeetingReminderStatus.PENDING ||
+            existing.scheduledAt.isSameSecond(other = scheduledAt)
+        ) {
             return false
         }
         return jpaMeetingReminderRepository.realignPending(

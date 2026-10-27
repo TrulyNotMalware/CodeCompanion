@@ -17,13 +17,14 @@ internal class AddParticipantSubmissionContext(
     ) {
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT
 
-    override fun accept(model: AddParticipantParsed) =
+    override fun accept(model: AddParticipantParsed): Unit =
         addIntent(
-            CommandIntent.AddParticipant(
-                meetingUid = model.meetingUid,
-                requesterId = model.requesterId,
-                participantUserIds = model.participantUserIds,
-                listHandle = model.listHandle,
-            ),
+            intent =
+                CommandIntent.AddParticipant(
+                    meetingUid = model.meetingUid,
+                    requesterId = model.requesterId,
+                    participantUserIds = model.participantUserIds,
+                    listHandle = model.listHandle,
+                ),
         )
 }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-27 -->
 
 # domain/meet
 
@@ -16,8 +16,7 @@ Pure Kotlin: no persistence annotations, no Slack types. JPA schemas mirroring t
 | `entity/MeetingReminder.kt` | One reminder batch per `(meetingId, offsetMinutes)`; carries the pre-computed absolute UTC `scheduledAt` and a `PENDING → SENDING → SENT/FAILED` state machine |
 | `entity/RejectReason.kt` | Reason enum for a participant declining attendance |
 | `entity/enums/MeetingReminderStatus.kt` | `PENDING` / `SENDING` / `SENT` / `FAILED` |
-| `dto/MeetingDto.kt` | Read-model DTOs crossing the repository boundary |
-| `dto/MeetingReminderDto.kt` | Reminder read-model DTO for the scheduler |
+| `dto/MeetingDto.kt` | Read-model DTOs crossing the repository boundary, including `MeetingReminderDto` |
 
 ## Subdirectories
 | Directory | Purpose |

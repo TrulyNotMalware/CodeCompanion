@@ -52,7 +52,7 @@ class AgentTurn(
 ) : Runnable {
     override fun run() = start()
 
-    fun discard() = onDiscard()
+    fun discard(): Unit = onDiscard()
 }
 
 enum class BusyNotice {

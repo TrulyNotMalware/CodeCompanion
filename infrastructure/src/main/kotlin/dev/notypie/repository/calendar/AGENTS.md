@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-10-07 | Updated: 2026-10-21 -->
+<!-- Generated: 2026-10-07 | Updated: 2026-10-27 -->
 
 # infrastructure/repository/calendar
 

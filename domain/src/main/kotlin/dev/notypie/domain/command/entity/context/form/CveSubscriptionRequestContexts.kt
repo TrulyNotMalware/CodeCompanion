@@ -31,10 +31,11 @@ internal class RequestCveSubscribeContext(
 
     override fun runCommand(): CommandOutput {
         addOutbound(
-            OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = triggerHandle),
-                form = ModalForm.CveSubscribe(topics = topics),
-            ),
+            message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = triggerHandle),
+                    form = ModalForm.CveSubscribe(topics = topics),
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
@@ -61,10 +62,11 @@ internal class RequestCveUnsubscribeContext(
 
     override fun runCommand(): CommandOutput {
         addOutbound(
-            OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = triggerHandle),
-                form = ModalForm.CveUnsubscribe(topics = topics),
-            ),
+            message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = triggerHandle),
+                    form = ModalForm.CveUnsubscribe(topics = topics),
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
@@ -88,7 +90,7 @@ internal class RequestCveSubscriptionsContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.CVE_SUBSCRIPTIONS_LIST
 
     override fun runCommand(): CommandOutput {
-        addIntent(CommandIntent.CveListSubscriptions(userId = commandBasicInfo.publisherId))
+        addIntent(intent = CommandIntent.CveListSubscriptions(userId = commandBasicInfo.publisherId))
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

@@ -136,7 +136,7 @@ open class CveEventRepositoryImpl(
                         codePoint < 0x10000 -> 3
                         else -> 4
                     }
-                if (bytes + size > maxBytes) return substring(0, end)
+                if (bytes + size > maxBytes) return substring(startIndex = 0, endIndex = end)
                 bytes += size
                 end += Character.charCount(codePoint)
             }

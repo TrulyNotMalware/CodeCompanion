@@ -21,12 +21,10 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Configuration
 import org.springframework.kafka.core.KafkaTemplate
-import org.springframework.scheduling.annotation.EnableScheduling
 import java.time.Clock
 
 @Configuration
 @Conditional(OnPollingConsumer::class)
-@EnableScheduling
 class PoolingPublisherConfig {
     @Bean
     @ConditionalOnMissingBean(MessageProcessor::class)
@@ -35,12 +33,13 @@ class PoolingPublisherConfig {
         messageRelayService: SlackMessageRelayServiceImpl,
         appConfig: AppConfig,
         clock: Clock,
-    ) = PollingMessageProcessor(
-        outboxRepository = outboxRepository,
-        messageRelayService = messageRelayService,
-        appConfig = appConfig,
-        clock = clock,
-    )
+    ): PollingMessageProcessor =
+        PollingMessageProcessor(
+            outboxRepository = outboxRepository,
+            messageRelayService = messageRelayService,
+            appConfig = appConfig,
+            clock = clock,
+        )
 }
 
 @Configuration
@@ -51,11 +50,12 @@ class CdcPublisherConfig {
         outboxRepository: MessageOutboxRepository,
         messageRelayService: MessageRelayService,
         clock: Clock,
-    ) = DebeziumLogTailingProcessor(
-        outboxRepository = outboxRepository,
-        relayService = messageRelayService,
-        clock = clock,
-    )
+    ): DebeziumLogTailingProcessor =
+        DebeziumLogTailingProcessor(
+            outboxRepository = outboxRepository,
+            relayService = messageRelayService,
+            clock = clock,
+        )
 }
 
 @Configuration

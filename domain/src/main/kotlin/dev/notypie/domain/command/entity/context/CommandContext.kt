@@ -48,7 +48,7 @@ internal abstract class CommandContext<T : SubCommandDefinition>(
             content = MessageContent.Text(headline = null, markdown = errMessage),
         )
 
-    protected fun addIntent(intent: CommandIntent) = intents.offer(intent)
+    protected fun addIntent(intent: CommandIntent): Unit = intents.offer(intent)
 
-    protected fun addOutbound(message: OutboundMessage) = intents.offer(message)
+    protected fun addOutbound(message: OutboundMessage): Unit = intents.offer(message)
 }

@@ -17,13 +17,14 @@ internal class RescheduleMeetingSubmissionContext(
     ) {
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.MEETING_RESCHEDULE_SUBMIT
 
-    override fun accept(model: RescheduleMeetingParsed) =
+    override fun accept(model: RescheduleMeetingParsed): Unit =
         addIntent(
-            CommandIntent.RescheduleMeeting(
-                meetingUid = model.meetingUid,
-                requesterId = model.requesterId,
-                newStartAt = model.newStartAt,
-                listHandle = model.listHandle,
-            ),
+            intent =
+                CommandIntent.RescheduleMeeting(
+                    meetingUid = model.meetingUid,
+                    requesterId = model.requesterId,
+                    newStartAt = model.newStartAt,
+                    listHandle = model.listHandle,
+                ),
         )
 }

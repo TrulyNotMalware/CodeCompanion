@@ -24,15 +24,16 @@ internal class NoticeContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
-    override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
         addOutbound(
-            OutboundMessage.Notice(
-                target = ConversationTarget(id = commandBasicInfo.channel),
-                mentions = users.toList().map { UserRef(id = it) },
-                message = message,
-            ),
+            message =
+                OutboundMessage.Notice(
+                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    mentions = users.toList().map { UserRef(id = it) },
+                    message = message,
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,

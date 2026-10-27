@@ -36,7 +36,7 @@ class NotFoundExceptionBuilder {
 
     fun field(name: String): FieldBuilder {
         fieldName = name
-        return FieldBuilder(this)
+        return FieldBuilder(parent = this)
     }
 
     fun reason(message: String) {

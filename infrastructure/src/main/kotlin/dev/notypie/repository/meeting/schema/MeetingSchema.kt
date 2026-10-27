@@ -112,7 +112,7 @@ fun Meeting.toSchema(idempotencyKey: UUID, channel: String): MeetingSchema {
     return meetingSchema
 }
 
-fun MeetingSchema.toDomainEntity() =
+fun MeetingSchema.toDomainEntity(): Meeting =
     Meeting(
         startAt = startAt,
         endAt = endAt ?: startAt.plusHours(1),
@@ -124,7 +124,7 @@ fun MeetingSchema.toDomainEntity() =
         meetingUid = meetingUid,
     )
 
-fun MeetingSchema.toMeetingDto() =
+fun MeetingSchema.toMeetingDto(): MeetingDto =
     MeetingDto(
         meetingId = id,
         meetingUid = meetingUid,

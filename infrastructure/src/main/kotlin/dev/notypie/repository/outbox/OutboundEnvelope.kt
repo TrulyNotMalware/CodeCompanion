@@ -25,3 +25,7 @@ fun OutboxMessage.chainedParts(): Int =
     } catch (ex: OutboundMessageCodecException) {
         0
     }
+
+enum class Transport {
+    SLACK,
+}

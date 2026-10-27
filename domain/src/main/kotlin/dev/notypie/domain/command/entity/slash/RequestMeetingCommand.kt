@@ -42,7 +42,7 @@ class RequestMeetingCommand(
         val identifier =
             commandData.subCommands.firstOrNull()
                 ?: return MeetingSubCommandDefinition.NONE
-        return findSubCommandByIdentifier<MeetingSubCommandDefinition>(identifier)
+        return findSubCommandByIdentifier<MeetingSubCommandDefinition>(identifier = identifier)
             ?: throw SubCommandParseException(
                 commandName = this::class.java.simpleName,
                 subCommandName = identifier,

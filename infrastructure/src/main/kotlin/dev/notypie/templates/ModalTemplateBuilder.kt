@@ -397,7 +397,7 @@ class ModalTemplateBuilder(
                             participantUserId,
                             noticeChannel,
                             noticeMessageTs,
-                        ).joinToString(","),
+                        ).joinToString(separator = ","),
                 )
                 title(text = "Why can't you attend?")
                 submit(text = "Submit")
@@ -451,7 +451,7 @@ class ModalTemplateBuilder(
                             requesterId,
                             channel,
                             listResponseUrl.encodedRoutingTokenOrNull(),
-                        ).joinToString(","),
+                        ).joinToString(separator = ","),
                 )
                 title(text = "Reschedule meeting")
                 submit(text = "Reschedule")
@@ -493,7 +493,7 @@ class ModalTemplateBuilder(
                             requesterId,
                             channel,
                             listResponseUrl.encodedRoutingTokenOrNull(),
-                        ).joinToString(","),
+                        ).joinToString(separator = ","),
                 )
                 title(text = "Add participants")
                 submit(text = "Add")
@@ -531,7 +531,7 @@ class ModalTemplateBuilder(
                             userId,
                             noticeChannel,
                             noticeMessageTs,
-                        ).joinToString(","),
+                        ).joinToString(separator = ","),
                 )
                 title(text = "Standup")
                 submit(text = "Submit")
@@ -571,7 +571,7 @@ class ModalTemplateBuilder(
                             CommandDetailType.STANDUP_SETUP_SUBMIT.name,
                             creatorId,
                             commandChannel,
-                        ).joinToString(","),
+                        ).joinToString(separator = ","),
                 )
                 title(text = "Standup setup")
                 submit(text = "Create")
@@ -689,7 +689,7 @@ class ModalTemplateBuilder(
                         listOf(
                             idempotencyKey.toString(),
                             submitType.name,
-                        ).joinToString(","),
+                        ).joinToString(separator = ","),
                 )
                 title(text = titleText)
                 submit(text = submitText)
@@ -733,7 +733,7 @@ class ModalTemplateBuilder(
                         isMarkDown = true,
                     ),
             )
-            members.take(STANDUP_SUMMARY_MAX_MEMBER_SECTIONS).forEach { member ->
+            members.take(n = STANDUP_SUMMARY_MAX_MEMBER_SECTIONS).forEach { member ->
                 add(
                     block =
                         modalBlockBuilder.simpleText(
@@ -784,7 +784,7 @@ class ModalTemplateBuilder(
             add(
                 block =
                     modalBlockBuilder.plainTextInputBlock(
-                        contents = TextInputContents("detail reason", ""),
+                        contents = TextInputContents(title = "detail reason", placeholderText = ""),
                     ),
             )
             add(layout = modalBlockBuilder.approvalBlock(approvalContents = approvalContents))

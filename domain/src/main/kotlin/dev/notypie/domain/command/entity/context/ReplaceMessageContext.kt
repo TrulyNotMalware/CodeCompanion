@@ -33,10 +33,11 @@ internal class ReplaceMessageContext(
 
     private fun replaceText(): CommandOutput {
         addOutbound(
-            OutboundMessage.ReplaceMessage(
-                handle = ResponseReplaceHandle(raw = replyHandle),
-                content = MessageContent.Text(headline = null, markdown = markdownMessage),
-            ),
+            message =
+                OutboundMessage.ReplaceMessage(
+                    handle = ResponseReplaceHandle(raw = replyHandle),
+                    content = MessageContent.Text(headline = null, markdown = markdownMessage),
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,

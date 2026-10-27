@@ -97,3 +97,10 @@ data class MeetingCalendarEvent(
     val nextAttemptAt: Instant,
     val lastError: String?,
 )
+
+enum class CalendarSyncStatus {
+    PENDING,
+    SYNCING,
+    SYNCED,
+    FAILED,
+}

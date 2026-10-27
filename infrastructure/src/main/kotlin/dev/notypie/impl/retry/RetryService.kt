@@ -8,7 +8,6 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
 class RetryService {
-    // RetryTemplate.retryPolicy is mutable shared state; one template per policy keeps threads from swapping it.
     private val templates = ConcurrentHashMap<PolicyKey, RetryTemplate>()
 
     private data class PolicyKey(
@@ -39,7 +38,7 @@ class RetryService {
                 jitter = jitter,
                 exceptions = exceptions.toSet(),
             )
-        val template = templates.computeIfAbsent(key) { RetryTemplate().apply { retryPolicy = buildPolicy(it) } }
+        val template = templates.computeIfAbsent(key) { RetryTemplate().apply { retryPolicy = buildPolicy(key = it) } }
         return try {
             template.execute { action() }
         } catch (e: RetryException) {

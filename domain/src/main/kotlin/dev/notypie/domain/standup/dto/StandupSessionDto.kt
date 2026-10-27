@@ -33,3 +33,9 @@ data class StandupAnswerDto(
     val responses: List<String>,
     val submittedAt: Instant,
 )
+
+data class StandupAnswerCandidate(
+    val sessionUid: UUID,
+    val routineUid: UUID,
+    val routineName: String,
+)

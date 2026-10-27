@@ -59,15 +59,6 @@ class Routine(
         const val MAX_MEMBERS: Int = 30
         const val MIN_CUTOFF_MINUTES: Long = 1L
         const val MAX_CUTOFF_MINUTES: Long = 1_440L
-        val DEFAULT_WEEKDAYS: Set<DayOfWeek> =
-            setOf(
-                DayOfWeek.MONDAY,
-                DayOfWeek.TUESDAY,
-                DayOfWeek.WEDNESDAY,
-                DayOfWeek.THURSDAY,
-                DayOfWeek.FRIDAY,
-            )
-        val DEFAULT_CUTOFF_OFFSET: Duration = Duration.ofHours(1L)
         private val WHITESPACE: Regex = Regex(pattern = "[\\s\\p{Z}\\u0085]+")
 
         fun normalizeName(raw: String): String =
@@ -86,4 +77,17 @@ class Routine(
     fun memberSnapshot(): List<RoutineMember> = members.toList()
 
     fun memberIdSnapshot(): Set<String> = members.map { it.userId }.toSet()
+}
+
+class RoutineMember(
+    val userId: String,
+    val userTimezone: ZoneId,
+) {
+    init {
+        validate(className = this.javaClass.simpleName) {
+            notBlank {
+                "userId" of userId
+            }
+        }
+    }
 }

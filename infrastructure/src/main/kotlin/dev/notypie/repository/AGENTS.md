@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-20 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-27 -->
 
 # infrastructure/repository
 
@@ -80,14 +80,12 @@ Note that H2 will not catch MariaDB-specific native-SQL syntax — verify those 
 - DTO projections (`dev.notypie.domain.*.dto`) cross the boundary outward; JPA schema classes never leak
   into `domain`, and into `application` only for the two tables it drives through their Spring Data interfaces
   directly: `outbox/schema/OutboxMessage` and `agent/schema/AgentAskTurnSchema`.
-- `JPAJsonConverter` (in `infrastructure/common/`) for JSON columns; `PartitionKeyUtil` for Kafka
-  partition keys.
 
 ## Dependencies
 
 ### Internal
 - `domain/meet/`, `domain/standup/`, `domain/command/` — entities, DTOs, `OutboundMessage`, `CommandBasicInfo`
-- `infrastructure/common/` — `JPAJsonConverter`, `jsonMapper`, `PartitionKeyUtil`
+- `infrastructure/common/` — `jsonMapper`
 - `infrastructure/configurations/JpaConfiguration.kt` — JPA/auditing wiring
 
 ### External

@@ -138,7 +138,7 @@ class ModalElementBuilder {
             it.deny(plainTextObject(text = denyText))
         }
 
-    fun multiUserSelectionElement(contents: MultiUserSelectContents) =
+    fun multiUserSelectionElement(contents: MultiUserSelectContents): InteractiveObject =
         toInteractiveObject(
             state = States(type = ActionElementTypes.MULTI_USERS_SELECT),
             element =
@@ -148,7 +148,7 @@ class ModalElementBuilder {
                     .build(),
         )
 
-    fun plainTextInputElement(contents: TextInputContents, multiline: Boolean = false) =
+    fun plainTextInputElement(contents: TextInputContents, multiline: Boolean = false): PlainTextInputElement =
         PlainTextInputElement
             .builder()
             .placeholder(plainTextObject(text = contents.placeholderText))
@@ -158,18 +158,19 @@ class ModalElementBuilder {
     fun timePickerElement(
         placeholderText: String = "Select time",
         initialTime: String? = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm")),
-    ) = toInteractiveObject(
-        state = States(type = ActionElementTypes.TIME_PICKER),
-        element =
-            TimePickerElement
-                .builder()
-                .apply {
-                    if (initialTime != null) initialTime(initialTime)
-                    placeholder(plainTextObject(text = placeholderText))
-                }.build(),
-    )
+    ): InteractiveObject =
+        toInteractiveObject(
+            state = States(type = ActionElementTypes.TIME_PICKER),
+            element =
+                TimePickerElement
+                    .builder()
+                    .apply {
+                        if (initialTime != null) initialTime(initialTime)
+                        placeholder(plainTextObject(text = placeholderText))
+                    }.build(),
+        )
 
-    fun datePickerElement(placeholderText: String = "Select a date") =
+    fun datePickerElement(placeholderText: String = "Select a date"): InteractiveObject =
         toInteractiveObject(
             state = States(type = ActionElementTypes.DATE_PICKER),
             element =
@@ -180,13 +181,13 @@ class ModalElementBuilder {
                     .build(),
         )
 
-    fun optionElement(text: String, description: String = "", isMarkDown: Boolean = true) =
+    fun optionElement(text: String, description: String = "", isMarkDown: Boolean = true): OptionObject =
         option {
             it.text(textObject(text = text, isMarkDown = isMarkDown))
             it.description(plainTextObject(text = description))
         }
 
-    fun checkboxElements(vararg options: CheckBoxOptions, isMarkDown: Boolean = true) =
+    fun checkboxElements(vararg options: CheckBoxOptions, isMarkDown: Boolean = true): InteractiveObject =
         toInteractiveObject(
             state = States(type = ActionElementTypes.CHECKBOX),
             element =
@@ -203,7 +204,7 @@ class ModalElementBuilder {
                     ).build(),
         )
 
-    fun radioButtonElements(vararg options: CheckBoxOptions, description: String) =
+    fun radioButtonElements(vararg options: CheckBoxOptions, description: String): InteractiveObject =
         toInteractiveObject(
             state = States(type = ActionElementTypes.RADIO_BUTTONS),
             element =
@@ -220,7 +221,6 @@ class ModalElementBuilder {
                     ).build(),
         )
 
-    // FIXME change for record history.
     private fun toInteractiveObject(state: States, element: BlockElement): InteractiveObject =
         InteractiveObject(state = state, element = element)
 }

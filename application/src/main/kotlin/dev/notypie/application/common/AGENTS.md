@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-27 -->
 
 # application/common
 
@@ -15,8 +15,8 @@ application context.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `IdempotencyCreator.kt` | `object IdempotencyCreator` with two `create(data, currentTimeMillis = System.currentTimeMillis()): UUID` overloads (`String` / `IdempotencyData`). Seed is `currentTimeMillis / 1000`; the key is `UUID.nameUUIDFromBytes("$data|$seed")`. `IdempotencyDataSerializer` + `DefaultIdempotencyDataSerializer` (`jsonMapper` bytes → SHA-256 hex) turn an `IdempotencyData` into the `String` input |
-| `SlackRequestParser.kt` | `parseRequestBodyData(data: Map<String, String>): SlashCommandRequestBody` (Jackson `convertValue`); `parseRequestBodyData(headers, data): Pair<SlashCommandRequestBody, InboundCommand>` adds `toInboundCommand()` — `headers` is accepted but unused; `Map<String, Any>.convert<T>()` is a reified `convertValue` helper with no current call sites |
+| `IdempotencyCreator.kt` | `object IdempotencyCreator` with two `create(data, currentTimeMillis = System.currentTimeMillis()): UUID` overloads (`String` / `IdempotencyData`). Seed is `currentTimeMillis / 1000`; the key is `UUID.nameUUIDFromBytes("$data|$seed")`. `DefaultIdempotencyDataSerializer` (`jsonMapper` bytes → SHA-256 hex) turns an `IdempotencyData` into the `String` input |
+| `SlackRequestParser.kt` | `parseRequestBodyData(data: Map<String, String>): Pair<SlashCommandRequestBody, InboundCommand>` (Jackson `convertValue`, then `toInboundCommand()`) |
 | `LogSanitizing.kt` | `internal fun String.neutralizeControlCharacters()`: replaces every `\p{Cc}` character (C0 and C1 controls: `\n`, `\r`, ESC, NEL U+0085, CSI U+009B, …), every `\p{Cf}` format character (bidi overrides and isolates such as U+202E, zero-width characters, so a ZWJ inside an emoji sequence also becomes `?`) and the Unicode line and paragraph separators (U+2028, U+2029) with `?`, so text a user, Slack or a browser controls cannot forge, colour or visually reorder a log line; the set is `service/agent/AgentConverseService`'s name sanitizer's. Callers: `service/command/CommandExecutor` (the failure WARN's reason), `controllers/SlackEventController` (the failed-mention WARN), `exception/ControllerAdvice` (the unsupported command type) and `security/SlackRequestVerificationFilter` (the rejected `Origin` header). Until 2026-10-15 it was `exception/ControllerAdvice.kt`'s `stripControlCharacters()` over `\p{Cntrl}`, which in Java covers only ASCII controls |
 | `TransactionTemplateExt.kt` | `inline fun <T> TransactionTemplate.runInTx(crossinline action: () -> T): Result<T>` — a `try` / `catch (Exception)` inside `execute` with `setRollbackOnly()` on failure, and an outer `catch (Exception)` around `execute` (an `Error` thrown by the action is recorded in the callback and rethrown even when the rollback itself fails with any exception — JPA translates it to a `DataAccessException` or a `TransactionSystemException` — with that failure attached as suppressed, 2026-10-19) so a commit-time failure (flush, a `BEFORE_COMMIT` listener such as the outbox write) is also returned as `Result.failure` instead of escaping past the caller's `.onFailure` (2026-10-01). An `InterruptedException` from the action restores the interrupt flag and comes back as the failure (rethrowing it inside the callback would reach the caller wrapped in `UndeclaredThrowableException`); an `Error` is rolled back by `TransactionTemplate` and propagates (2026-10-15). `internal fun detachedTemplate(transactionManager): TransactionTemplate` — `PROPAGATION_NOT_SUPPORTED`, the counterpart of `service/meeting`'s `isolatedWriteTemplate` (`REQUIRES_NEW`): the caller's transaction is suspended for the block, so a `@Transactional` repository call inside it runs in its own transaction and its failure cannot mark the caller's rollback-only. Used by `StandupRoutineOpsService` (stop's admin lookup), `AgentUsageReportService` and `OpsStatusService` (report rendering). The block takes a second pooled connection while the caller still holds one |
 
@@ -33,7 +33,7 @@ application context.
 - Keys hash the Jackson serialization of the command, not `java.io.Serializable` bytes, so nested
   payload types (`InboundInteraction`, `@JvmInline TriggerHandle`) need no `Serializable` marker. Keep
   `jsonMapper`'s `ORDER_MAP_ENTRIES_BY_KEYS` on — key stability depends on deterministic output.
-- `parseRequestBodyData(headers, data)` is the canonical slash entry point for both transports:
+- `parseRequestBodyData(data)` is the canonical slash entry point for both transports:
   `controllers/SlashCommandController` (HTTP form params) and `socket/SocketModeReceiver.handleSlash`
   (Socket Mode envelope). It returns the wire DTO and the `InboundCommand` together so nothing is
   deserialized twice.

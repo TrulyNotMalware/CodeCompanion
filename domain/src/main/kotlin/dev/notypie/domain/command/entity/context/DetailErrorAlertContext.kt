@@ -26,19 +26,20 @@ internal class DetailErrorAlertContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
-    override fun parseCommandDetailType() = CommandDetailType.SIMPLE_TEXT
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
         addOutbound(
-            OutboundMessage.ChannelMessage(
-                target = ConversationTarget(id = commandBasicInfo.channel),
-                content =
-                    MessageContent.ErrorNotice(
-                        className = targetClassName,
-                        message = errorMessage,
-                        details = details,
-                    ),
-            ),
+            message =
+                OutboundMessage.ChannelMessage(
+                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    content =
+                        MessageContent.ErrorNotice(
+                            className = targetClassName,
+                            message = errorMessage,
+                            details = details,
+                        ),
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,

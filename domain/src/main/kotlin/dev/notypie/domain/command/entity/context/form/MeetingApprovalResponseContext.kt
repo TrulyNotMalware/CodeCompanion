@@ -53,7 +53,9 @@ internal class MeetingApprovalResponseContext(
                     noticeMessageTs = interaction.message?.raw.orEmpty(),
                 )
 
-            else -> interactionSuccessResponse(replyHandle = interaction.reply.raw)
+            InboundActionRole.ACTIVATE,
+            InboundActionRole.PASSIVE,
+            -> interactionSuccessResponse(replyHandle = interaction.reply.raw)
         }
     }
 
@@ -63,12 +65,13 @@ internal class MeetingApprovalResponseContext(
         replyHandle: String,
     ): CommandOutput {
         addIntent(
-            CommandIntent.MeetingAttendanceUpdate(
-                meetingIdempotencyKey = meetingIdempotencyKey,
-                participantUserId = participantUserId,
-                isAttending = true,
-                absentReason = RejectReason.ATTENDING,
-            ),
+            intent =
+                CommandIntent.MeetingAttendanceUpdate(
+                    meetingIdempotencyKey = meetingIdempotencyKey,
+                    participantUserId = participantUserId,
+                    isAttending = true,
+                    absentReason = RejectReason.ATTENDING,
+                ),
         )
         return interactionSuccessResponse(
             replyHandle = replyHandle,
@@ -85,28 +88,30 @@ internal class MeetingApprovalResponseContext(
         noticeMessageTs: String,
     ): CommandOutput {
         addOutbound(
-            OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = triggerHandle),
-                form =
-                    ModalForm.DeclineReason(
-                        meetingIdempotencyKey = meetingIdempotencyKey,
-                        participantUserId = participantUserId,
-                        meetingTitle = meetingTitle,
-                        originNotice =
-                            MessageRef(
-                                conversation = ConversationTarget(id = noticeChannel),
-                                messageId = noticeMessageTs,
-                            ),
-                    ),
-            ),
+            message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = triggerHandle),
+                    form =
+                        ModalForm.DeclineReason(
+                            meetingIdempotencyKey = meetingIdempotencyKey,
+                            participantUserId = participantUserId,
+                            meetingTitle = meetingTitle,
+                            originNotice =
+                                MessageRef(
+                                    conversation = ConversationTarget(id = noticeChannel),
+                                    messageId = noticeMessageTs,
+                                ),
+                        ),
+                ),
         )
         addIntent(
-            CommandIntent.MeetingAttendanceUpdate(
-                meetingIdempotencyKey = meetingIdempotencyKey,
-                participantUserId = participantUserId,
-                isAttending = false,
-                absentReason = RejectReason.OTHER,
-            ),
+            intent =
+                CommandIntent.MeetingAttendanceUpdate(
+                    meetingIdempotencyKey = meetingIdempotencyKey,
+                    participantUserId = participantUserId,
+                    isAttending = false,
+                    absentReason = RejectReason.OTHER,
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,

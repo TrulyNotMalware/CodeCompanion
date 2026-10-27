@@ -18,6 +18,11 @@ import dev.notypie.domain.command.intent.IntentQueue
 import dev.notypie.domain.common.escapeMarkup
 import java.util.*
 
+private const val NON_SEPARATOR: String = "[^\\s\\p{Z}\\u0085\\u001C-\\u001F]"
+private const val LEADING_SEPARATOR: String = "[\\s\\p{Z}\\u0085\\u001C-\\u001F]"
+
+private fun String.trimSeparators(): String = trim { it.isWhitespace() || it == '\u0085' }
+
 private val HORIZONTAL_SPACES: Regex = Regex(pattern = "[ \\t]+")
 
 internal class AppMentionContextParser(
@@ -90,9 +95,12 @@ internal class AppMentionContextParser(
     override fun parseContext(idempotencyKey: UUID): CommandContext<NoSubCommands> {
         if (!mention.hasCommandStructure) return handleNotSupportedCommand()
         if (mention.commandTokens.isEmpty()) throw IllegalArgumentException("Command Queue is empty")
-        val command: String = mention.commandTokens.first().replace(" ", "")
-        val commandSet = CommandSet.parseCommand(command)
-        if (!actorRole.grants(commandSet.requiredPermission)) return permissionDeniedContext(commandSet = commandSet)
+        val command: String = mention.commandTokens.first().replace(oldValue = " ", newValue = "")
+        val commandSet = CommandSet.parseCommand(stringCommand = command)
+        val granted = actorRole.grants(permission = commandSet.requiredPermission)
+        if (!granted) {
+            return permissionDeniedContext(commandSet = commandSet)
+        }
         return when (commandSet) {
             CommandSet.NOTICE -> {
                 NoticeContext(
@@ -210,18 +218,15 @@ internal class AppMentionContextParser(
         )
 
     private fun agentPrompt(dropCommandWord: Boolean): String {
-        val text = mention.text.trim()
+        val text = mention.text.trimSeparators()
         if (text.isEmpty()) {
-            val tokens = if (dropCommandWord) mention.commandTokens.drop(1) else mention.commandTokens
+            val tokens = if (dropCommandWord) mention.commandTokens.drop(n = 1) else mention.commandTokens
             return tokens.joinToString(separator = " ")
         }
         if (!dropCommandWord) return text
-        val commandWord =
-            Regex(
-                pattern =
-                    "(?<![^\\s\\p{Z}\\u0085])${Regex.escape(mention.commandTokens.first())}(?![^\\s\\p{Z}\\u0085])\\h*",
-            )
-        return commandWord.replaceFirst(input = text, replacement = "").trim()
+        val keyword = Regex.escape(literal = mention.commandTokens.first())
+        val commandWord = Regex(pattern = "(?<!$NON_SEPARATOR)$keyword(?!$NON_SEPARATOR)$LEADING_SEPARATOR*")
+        return commandWord.replaceFirst(input = text, replacement = "").trimSeparators()
     }
 
     private fun noticeBody(): String {

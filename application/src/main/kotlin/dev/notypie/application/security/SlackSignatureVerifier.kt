@@ -88,39 +88,39 @@ data class SlackSignatureVerificationResult(
     val reason: SlackSignatureVerificationFailureReason?,
 ) {
     companion object {
-        fun valid() = SlackSignatureVerificationResult(valid = true, reason = null)
+        fun valid(): SlackSignatureVerificationResult = SlackSignatureVerificationResult(valid = true, reason = null)
 
-        fun missingTimestamp() =
+        fun missingTimestamp(): SlackSignatureVerificationResult =
             SlackSignatureVerificationResult(
                 valid = false,
                 reason = SlackSignatureVerificationFailureReason.MISSING_TIMESTAMP,
             )
 
-        fun missingSignature() =
+        fun missingSignature(): SlackSignatureVerificationResult =
             SlackSignatureVerificationResult(
                 valid = false,
                 reason = SlackSignatureVerificationFailureReason.MISSING_SIGNATURE,
             )
 
-        fun invalidTimestamp() =
+        fun invalidTimestamp(): SlackSignatureVerificationResult =
             SlackSignatureVerificationResult(
                 valid = false,
                 reason = SlackSignatureVerificationFailureReason.INVALID_TIMESTAMP,
             )
 
-        fun expiredTimestamp() =
+        fun expiredTimestamp(): SlackSignatureVerificationResult =
             SlackSignatureVerificationResult(
                 valid = false,
                 reason = SlackSignatureVerificationFailureReason.EXPIRED_TIMESTAMP,
             )
 
-        fun malformedSignature() =
+        fun malformedSignature(): SlackSignatureVerificationResult =
             SlackSignatureVerificationResult(
                 valid = false,
                 reason = SlackSignatureVerificationFailureReason.MALFORMED_SIGNATURE,
             )
 
-        fun invalidSignature() =
+        fun invalidSignature(): SlackSignatureVerificationResult =
             SlackSignatureVerificationResult(
                 valid = false,
                 reason = SlackSignatureVerificationFailureReason.INVALID_SIGNATURE,

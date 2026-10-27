@@ -11,6 +11,7 @@ import dev.notypie.impl.command.event.OutboundMessageEnqueued
 import dev.notypie.impl.command.event.OutboundMessageEnqueuedPayload
 import dev.notypie.repository.standup.StandupRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
+import java.time.Clock
 import java.time.LocalDateTime
 
 private val log = KotlinLogging.logger {}
@@ -18,12 +19,20 @@ private val log = KotlinLogging.logger {}
 class SlackOutboundStager(
     private val slackEventBuilder: SlackApiEventConstructor,
     private val standupRepository: StandupRepository,
+    private val clock: Clock,
 ) : OutboundMessageStager {
     override fun stage(message: OutboundMessage, basicInfo: CommandBasicInfo): CommandEvent<EventPayload>? =
         when (message) {
             is OutboundMessage.OpenModal -> stageModal(message = message, basicInfo = basicInfo)
 
-            else ->
+            is OutboundMessage.ChannelMessage,
+            is OutboundMessage.Ephemeral,
+            is OutboundMessage.DirectMessage,
+            is OutboundMessage.UpdateMessage,
+            is OutboundMessage.ReplaceMessage,
+            is OutboundMessage.Approval,
+            is OutboundMessage.Notice,
+            ->
                 OutboundMessageEnqueued(
                     idempotencyKey = basicInfo.idempotencyKey,
                     payload = OutboundMessageEnqueuedPayload(message = message, basicInfo = basicInfo),
@@ -65,7 +74,7 @@ class SlackOutboundStager(
                                     "(a list rendered by an earlier release or an unparsable value); " +
                                     "pre-filling the current time for meetingUid=${form.meetingUid}"
                             }
-                            LocalDateTime.now()
+                            LocalDateTime.now(clock)
                         }
                     slackEventBuilder.openRescheduleMeetingModalRequest(
                         commandBasicInfo = basicInfo,

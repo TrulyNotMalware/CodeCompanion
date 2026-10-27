@@ -10,6 +10,7 @@ import dev.notypie.domain.command.exceptions.SubCommandParseException
 import dev.notypie.domain.command.exceptions.UnSupportedCommandException
 import dev.notypie.domain.command.inbound.InboundCommand
 import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.MentionInvocation
 import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.DefaultIntentQueue
@@ -107,13 +108,13 @@ abstract class Command<T : SubCommandDefinition>(
         val context = parseContext(subCommand = subCommand)
         return when (val payload = commandData.payload) {
             is InboundInteraction -> context.executeInteraction(interaction = payload)
-            else -> context.runCommand()
+            is SlashInvocation, is MentionInvocation -> context.runCommand()
         }
     }
 
     private fun CommandContext<out T>.executeInteraction(interaction: InboundInteraction): CommandOutput =
         if (this is ReactionContext<out T>) {
-            handleInteraction(interaction)
+            handleInteraction(interaction = interaction)
         } else {
             throw UnSupportedCommandException(
                 commandType = commandData.kind.toString(),
@@ -127,7 +128,7 @@ abstract class Command<T : SubCommandDefinition>(
         }
 
     private fun createSubCommand(): SubCommand<T> {
-        val options = commandData.subCommands.drop(1)
+        val options = commandData.subCommands.drop(n = 1)
         val subCommand =
             SubCommand(
                 subCommandDefinition = findSubCommandDefinition(),

@@ -39,9 +39,10 @@ internal class ApprovalCallbackContext(
 
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.APPROVAL_CALLBACK
 
-    override fun runCommand() = handleCommand()
+    override fun runCommand(): CommandOutput = handleCommand()
 
-    override fun runCommand(commandDetailType: CommandDetailType) = handleCommand(commandDetailType = commandDetailType)
+    override fun runCommand(commandDetailType: CommandDetailType): CommandOutput =
+        handleCommand(commandDetailType = commandDetailType)
 
     private fun handleCommand(commandDetailType: CommandDetailType = this.commandDetailType): CommandOutput {
         val results = sendNoticeToParticipants(commandDetailType = commandDetailType)
@@ -69,11 +70,12 @@ internal class ApprovalCallbackContext(
     ): List<CommandOutput> =
         participants.map { participant ->
             addOutbound(
-                OutboundMessage.Approval(
-                    target = ConversationTarget(id = commandBasicInfo.channel),
-                    recipient = UserRef(id = participant),
-                    approval = approvalContents,
-                ),
+                message =
+                    OutboundMessage.Approval(
+                        target = ConversationTarget(id = commandBasicInfo.channel),
+                        recipient = UserRef(id = participant),
+                        approval = approvalContents,
+                    ),
             )
             CommandOutput.success(
                 basicInfo = commandBasicInfo,

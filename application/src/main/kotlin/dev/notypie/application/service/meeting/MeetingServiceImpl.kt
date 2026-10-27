@@ -41,6 +41,8 @@ import org.springframework.transaction.event.TransactionalEventListener
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.MultiValueMap
 
+private val log = KotlinLogging.logger {}
+
 @Service
 class MeetingServiceImpl(
     private val meetingRepository: MeetingRepository,
@@ -50,7 +52,6 @@ class MeetingServiceImpl(
     transactionManager: PlatformTransactionManager,
     private val calendarMirror: MeetingCalendarMirror,
 ) : MeetingService {
-    private val log = KotlinLogging.logger {}
     private val writeTemplate = isolatedWriteTemplate(transactionManager = transactionManager)
     private val replyTemplate = TransactionTemplate(transactionManager)
 
@@ -144,7 +145,9 @@ class MeetingServiceImpl(
     }
 
     @EventListener
-    fun cancelMeeting(event: CancelMeetingEvent) = MeetingWriteDeferral.runOrDefer { cancel(event = event) }
+    fun cancelMeeting(event: CancelMeetingEvent) {
+        MeetingWriteDeferral.runOrDefer { cancel(event = event) }
+    }
 
     private fun cancel(event: CancelMeetingEvent) {
         val payload = event.payload
@@ -213,8 +216,9 @@ class MeetingServiceImpl(
         )
 
     @EventListener
-    fun addParticipants(event: AddParticipantEvent) =
+    fun addParticipants(event: AddParticipantEvent) {
         MeetingWriteDeferral.runOrDefer { addParticipantsNow(event = event) }
+    }
 
     private fun addParticipantsNow(event: AddParticipantEvent) {
         val payload = event.payload

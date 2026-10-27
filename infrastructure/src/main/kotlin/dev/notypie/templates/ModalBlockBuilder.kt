@@ -91,10 +91,10 @@ class ModalBlockBuilder(
     ): InteractionLayoutBlock {
         fun routingValue(detailType: CommandDetailType) = "$listIdempotencyKey,${detailType.name},$meetingUid"
         val rescheduleRoutingValue =
-            "${routingValue(CommandDetailType.MEETING_RESCHEDULE_REQUEST)}," +
+            "${routingValue(detailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST)}," +
                 meetingStartAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-        val addParticipantRoutingValue = routingValue(CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
-        val cancelRoutingValue = routingValue(CommandDetailType.CANCEL_MEETING)
+        val addParticipantRoutingValue = routingValue(detailType = CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST)
+        val cancelRoutingValue = routingValue(detailType = CommandDetailType.CANCEL_MEETING)
         val rescheduleButton: InteractiveObject =
             modalElementBuilder.rescheduleMeetingButtonElement(
                 buttonName = RESCHEDULE_BUTTON_NAME,
@@ -193,7 +193,11 @@ class ModalBlockBuilder(
             )
         }
 
-    fun userNameWithThumbnailBlock(userName: String, userThumbnailUrl: String?, mkdIntroduceComment: String = "") =
+    fun userNameWithThumbnailBlock(
+        userName: String,
+        userThumbnailUrl: String?,
+        mkdIntroduceComment: String = "",
+    ): ContextBlock =
         context {
             it.elements(
                 listOfNotNull(

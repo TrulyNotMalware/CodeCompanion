@@ -200,7 +200,6 @@ class CalendarConfiguration(
     }
 }
 
-// Revokes are best-effort: a shutdown drops queued ones at once so the Pod's termination budget stays unchanged.
 class GoogleTokenRevocationExecutor : ThreadPoolTaskExecutor() {
     override fun shutdown() {
         val queued = threadPoolExecutor.queue.size

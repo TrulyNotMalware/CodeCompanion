@@ -197,6 +197,98 @@ class AppMentionContextParserTest :
                 }
             }
 
+            `when`("command is 'ask' followed by a line separator in the restored text") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            mentionOf(
+                                tokens = listOf("ask", "what", "is", "X"),
+                                text = "ask\u2028what is X",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the keyword and the separator are stripped from the prompt") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "what is X"
+                }
+            }
+
+            `when`("command is 'ask' followed by a next-line character in the restored text") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            mentionOf(
+                                tokens = listOf("ask", "what", "is", "X"),
+                                text = "ask\u0085what is X",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the keyword and the separator are stripped from the prompt") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "what is X"
+                }
+            }
+
+            `when`("command is 'ask' followed by a line feed and a next-line character in the restored text") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            mentionOf(
+                                tokens = listOf("ask", "what", "is", "X"),
+                                text = "ask\n\u0085what is X",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("every separator after the keyword is consumed, so the prompt is exactly the question") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "what is X"
+                }
+            }
+
+            `when`("command is 'ask' followed by an information separator in the restored text") {
+                val askIntents = createIntentQueue()
+                val parser =
+                    createParser(
+                        mention =
+                            mentionOf(
+                                tokens = listOf("ask", "what", "is", "X"),
+                                text = "ask\u001Fwhat is X",
+                            ),
+                        intentQueue = askIntents,
+                    )
+
+                parser.parseContext(idempotencyKey = idempotencyKey).runCommand()
+
+                then("the keyword and the separator are stripped from the prompt") {
+                    askIntents
+                        .snapshot()
+                        .first()
+                        .shouldBeInstanceOf<CommandIntent.AgentConverse>()
+                        .prompt shouldBe "what is X"
+                }
+            }
+
             `when`("command is 'ask' and the transport restored the whole message text") {
                 val askIntents = createIntentQueue()
                 val parser =

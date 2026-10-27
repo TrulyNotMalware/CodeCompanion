@@ -94,11 +94,11 @@ class StandupRoutineSetupService(
     }
 
     private fun confirmationMessage(routine: Routine): String {
-        val members = routine.memberIdSnapshot().joinToString(" ") { "<@$it>" }
+        val members = routine.memberIdSnapshot().joinToString(separator = " ") { "<@$it>" }
         val weekdays =
             routine.weekdays
                 .sortedBy { it.value }
-                .joinToString(", ") { day -> day.name.lowercase().replaceFirstChar { it.uppercase() } }
+                .joinToString(separator = ", ") { day -> day.name.lowercase().replaceFirstChar { it.uppercase() } }
         val triggerTime = routine.triggerLocalTime.format(DateTimeFormatter.ofPattern("HH:mm"))
         return "Standup routine *${routine.name.escapeMrkdwn()}* created — ${routine.questions.size} questions, " +
             "members $members, weekdays $weekdays, daily at $triggerTime."

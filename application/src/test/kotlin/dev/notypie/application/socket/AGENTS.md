@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-10-02 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-10-02 | Updated: 2026-10-27 -->
 
 # test/kotlin/dev/notypie/application/socket
 

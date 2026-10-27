@@ -1,6 +1,6 @@
 # 명령 파이프라인
 
-_type: architecture · updated: 2026-10-26_
+_type: architecture · updated: 2026-10-27_
 
 > Slack 요청은 인프라 경계에서 중립 `InboundCommand`가 되고, 도메인 `Command`/`CommandContext`가 이를 `CommandIntent`와
 > `OutboundMessage`로 바꾸며, 응답은 스테이저 → 아웃박스 → 렌더러를 거쳐 배달 시점에 한 번만 렌더되어 나간다.
@@ -184,6 +184,9 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
    `SubmissionContext<M>` leaf + `SubmissionRouter` 분기. 컴파일이 강제하는 것은 `SubmissionRouting.kt`의
    exhaustive `when` 두 개(라우터·판별자 유도)뿐이다 — `isSubmissionRoute` 수동 목록은 `SubmissionRouterTest`의
    일치 검증이, mapper 분기는 writer→parser 회귀 테스트가 잡고, 새 변종의 엔드투엔드 커버는 사람이 추가해야 한다.
+   2026-10-27(묶음 5)부터 도메인의 `Command`·`SlashInvocations`·`InteractionCommand`·`SubmissionRouting`은 `else` 없이 열거하므로
+   새 상수는 컴파일 오류로 드러난다; infrastructure 의 `CommandDetailType` `else` 분기 둘(`SlackInteractionRequestParser`,
+   `ApplicationMessageDispatcher`)은 의도적으로 남긴 수동 지점이다.
 8. README "Bot Commands & Roles" 표와 `AppMentionContextParser.HELP_MESSAGE` 갱신(파서 테스트가 문구를 고정한다).
 
 **멘션 하위 명령** — `CommandSet`에 항목과 `requiredPermission` 추가 → `AppMentionContextParser.parseContext`의
@@ -222,7 +225,7 @@ CommandExecutor.drainIntents() ─┬─ CommandIntent ──▶ SlackIntentReso
 - `IdempotencyCreator.create(InboundCommand)` = 페이로드 JSON SHA-256 + **1초 창** 시드. 같은 초의 재전송만 같은 키다.
 - 죽었거나 반쯤 죽은 조각(본보기로 삼지 말 것): `OutboundMessage.DirectMessage`(생산자 없음, 렌더러는 `error()`),
   `EphemeralTextResponseContext`/`DetailErrorAlertContext`(테스트에서만 생성),
-  `controllers/dto/*`, `InteractionCommand.appName`, `InboundCommand.teamId`, `containsExternalEvent`(호출처 없음).
+  `InteractionCommand.appName`, `InboundCommand.teamId`, `containsExternalEvent`(호출처 없음). `controllers/dto/*`는 2026-10-27(묶음 5)에 지웠다.
 
 ## 근거
 

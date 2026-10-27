@@ -113,7 +113,13 @@ class MeetingReminderSchedulingService(
         if (ready.isEmpty()) return
 
         ready.forEach { item ->
-            processReminder(item = item, sentAt = now)
+            containFailure(
+                onFailure = { ex ->
+                    log.error(ex) { "Meeting reminder dispatch failed: reminderId=${item.reminder.id}" }
+                },
+            ) {
+                processReminder(item = item, sentAt = now)
+            }
         }
     }
 

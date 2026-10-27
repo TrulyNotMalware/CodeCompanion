@@ -18,6 +18,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -25,6 +26,11 @@ import java.time.format.DateTimeFormatter
 private val log = KotlinLogging.logger {}
 
 private val AGENDA_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+data class AgendaItem(
+    val startAt: LocalDateTime,
+    val title: String,
+)
 
 @Service
 class DailyAgendaSchedulingService(

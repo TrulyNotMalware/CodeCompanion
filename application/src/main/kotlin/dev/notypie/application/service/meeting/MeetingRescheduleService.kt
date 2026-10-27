@@ -27,6 +27,8 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
+private val log = KotlinLogging.logger {}
+
 @Service
 class MeetingRescheduleService(
     private val meetingRepository: MeetingRepository,
@@ -37,7 +39,6 @@ class MeetingRescheduleService(
     private val clock: Clock,
     private val calendarMirror: MeetingCalendarMirror,
 ) {
-    private val log = KotlinLogging.logger {}
     private val writeTemplate = isolatedWriteTemplate(transactionManager = transactionManager)
     private val replyTemplate = TransactionTemplate(transactionManager)
 

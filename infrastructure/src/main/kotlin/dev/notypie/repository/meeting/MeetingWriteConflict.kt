@@ -11,6 +11,6 @@ fun RuntimeException.isMeetingWriteConflict(): Boolean =
         (this is DataIntegrityViolationException && violatesParticipantUniqueKey())
 
 private fun Throwable.violatesParticipantUniqueKey(): Boolean =
-    generateSequence(this) { it.cause }
+    generateSequence(seed = this) { it.cause }
         .take(MAX_CAUSE_DEPTH)
-        .any { it.message?.contains(PARTICIPANT_UNIQUE_KEY, ignoreCase = true) == true }
+        .any { it.message?.contains(other = PARTICIPANT_UNIQUE_KEY, ignoreCase = true) == true }

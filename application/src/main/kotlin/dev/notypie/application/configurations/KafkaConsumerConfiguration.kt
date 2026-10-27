@@ -258,16 +258,17 @@ class KafkaConsumerConfiguration(
     fun concurrentKafkaListenerContainerFactory(
         consumerFactory: ConsumerFactory<String, Any>,
         cdcDeadLetterRecovery: CdcDeadLetterRecovery,
-    ) = ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
-        containerProperties.isObservationEnabled = true
-        containerProperties.isMicrometerEnabled = false
-        containerProperties.ackMode = ContainerProperties.AckMode.RECORD
-        containerProperties.isStopImmediate = true
-        containerProperties.shutdownTimeout = RECORD_SHUTDOWN_WAIT.toMillis()
-        setCommonErrorHandler(cdcErrorHandler(recoverer = cdcDeadLetterRecovery.recoverer))
-        setConsumerFactory(consumerFactory)
-        containerProperties.setObservationConvention(convention)
-    }
+    ): ConcurrentKafkaListenerContainerFactory<String, Any> =
+        ConcurrentKafkaListenerContainerFactory<String, Any>().apply {
+            containerProperties.isObservationEnabled = true
+            containerProperties.isMicrometerEnabled = false
+            containerProperties.ackMode = ContainerProperties.AckMode.RECORD
+            containerProperties.isStopImmediate = true
+            containerProperties.shutdownTimeout = RECORD_SHUTDOWN_WAIT.toMillis()
+            setCommonErrorHandler(cdcErrorHandler(recoverer = cdcDeadLetterRecovery.recoverer))
+            setConsumerFactory(consumerFactory)
+            containerProperties.setObservationConvention(convention)
+        }
 }
 
 class KafkaProducerConfiguration(

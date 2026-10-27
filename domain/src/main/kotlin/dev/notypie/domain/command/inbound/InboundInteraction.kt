@@ -38,18 +38,16 @@ data class InboundAction(
     val isSelected: Boolean,
 )
 
-enum class InboundFieldKind(
-    val alwaysComplete: Boolean,
-) {
-    TEXT(true),
-    DATE(false),
-    TIME(false),
-    CHOICE(false),
-    MULTI_CHOICE(false),
-    USERS(false),
-    CONVERSATION(false),
-    TOGGLE(true),
-    UNKNOWN(false),
+enum class InboundFieldKind {
+    TEXT,
+    DATE,
+    TIME,
+    CHOICE,
+    MULTI_CHOICE,
+    USERS,
+    CONVERSATION,
+    TOGGLE,
+    UNKNOWN,
 }
 
 data class InboundField(
@@ -166,8 +164,3 @@ data class InboundInteraction(
 fun InboundInteraction.isPrimary(): Boolean = action.role.triggersEvent
 
 fun InboundInteraction.isCanceled(): Boolean = action.role == InboundActionRole.REJECT
-
-fun InboundInteraction.isComplete(): Boolean =
-    action.role.triggersEvent &&
-        action.isSelected &&
-        form.fields.all { it.isSelected || it.kind.alwaysComplete }

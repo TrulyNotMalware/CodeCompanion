@@ -25,7 +25,7 @@ internal class RequestCveLatestContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.CVE_LATEST
 
     override fun runCommand(): CommandOutput {
-        addIntent(CommandIntent.CveLatest(userId = commandBasicInfo.publisherId, topicKey = topicKey))
+        addIntent(intent = CommandIntent.CveLatest(userId = commandBasicInfo.publisherId, topicKey = topicKey))
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

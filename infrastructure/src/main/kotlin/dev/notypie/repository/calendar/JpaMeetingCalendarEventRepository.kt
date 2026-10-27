@@ -13,8 +13,7 @@ import java.time.LocalDateTime
 
 @Repository
 interface JpaMeetingCalendarEventRepository : JpaRepository<MeetingCalendarEventSchema, Long> {
-    // updated_at is assigned first so it reads the old status: MariaDB evaluates the assignments left to right
-    // with the new values. created_at / updated_at are the JVM-zone wall time, as @CreationTimestamp writes them.
+    // created_at / updated_at are the JVM-zone wall time, as @CreationTimestamp writes them.
     @Modifying
     @Transactional
     @Query(

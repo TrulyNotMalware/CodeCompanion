@@ -37,11 +37,12 @@ internal class CancelMeetingContext(
                     commandDetailType = commandDetailType,
                 )
         addIntent(
-            CommandIntent.CancelMeeting(
-                meetingUid = meetingUid,
-                requesterId = interaction.actor.id,
-                listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
-            ),
+            intent =
+                CommandIntent.CancelMeeting(
+                    meetingUid = meetingUid,
+                    requesterId = interaction.actor.id,
+                    listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,

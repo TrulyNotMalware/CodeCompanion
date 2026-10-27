@@ -4,6 +4,8 @@ import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.schema.OutboxMessage
 import java.time.LocalDateTime
 
+interface MessageProcessor
+
 interface MessageRelayService {
     fun reserveDispatchSlots(wanted: Int): Int
 

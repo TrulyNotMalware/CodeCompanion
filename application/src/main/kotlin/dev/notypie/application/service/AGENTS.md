@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-27 -->
 
 # application/service
 
@@ -86,7 +86,7 @@ target the `*SchedulingService` for the logic; a wrapper is called only to pin i
 
 ### Common Patterns
 - Interface + `Impl` pairs; the interface is the dependency other lanes take.
-- `private val log = KotlinLogging.logger {}` or a file-level `private val logger`; failure logs carry
+- File-level `private val log = KotlinLogging.logger {}` (never a class member, never `logger`); failure logs carry
   `commandId`, `idempotencyKey`, and the effect counts — keep that shape, it is what makes the outbox
   debuggable.
 - Constructor-injected `Clock` for anything time-dependent.

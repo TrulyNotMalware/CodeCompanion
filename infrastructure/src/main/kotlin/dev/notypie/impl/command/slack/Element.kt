@@ -8,7 +8,6 @@ import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ValueDeserializer
 import tools.jackson.databind.annotation.JsonDeserialize
 
-// FIXME Element to sealed class, require subType
 data class Element(
     val type: String,
     val text: TextElement? = null,

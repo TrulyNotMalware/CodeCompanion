@@ -41,17 +41,18 @@ internal class RescheduleMeetingContext(
                 .getOrNull(index = 1)
                 ?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
         addOutbound(
-            OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = interaction.trigger.raw),
-                form =
-                    ModalForm.Reschedule(
-                        meetingUid = meetingUid,
-                        requesterId = interaction.actor.id,
-                        channel = ConversationTarget(id = interaction.channelId),
-                        listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
-                        currentStartAt = currentStartAt,
-                    ),
-            ),
+            message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = interaction.trigger.raw),
+                    form =
+                        ModalForm.Reschedule(
+                            meetingUid = meetingUid,
+                            requesterId = interaction.actor.id,
+                            channel = ConversationTarget(id = interaction.channelId),
+                            listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
+                            currentStartAt = currentStartAt,
+                        ),
+                ),
         )
         return successOutput()
     }

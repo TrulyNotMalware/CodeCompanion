@@ -23,7 +23,7 @@ internal class RoleManagementContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.SIMPLE_TEXT
 
     override fun runCommand(): CommandOutput {
-        addIntent(intent)
+        addIntent(intent = intent)
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

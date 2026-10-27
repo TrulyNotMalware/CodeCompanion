@@ -17,6 +17,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import java.time.Clock
 
 const val METRIC_OUTCOME_UNKNOWN = "codecompanion.slack.dispatch.outcome_unknown"
 const val METRIC_ACCESS_BLOCKED = "codecompanion.slack.dispatch.access_blocked"
@@ -36,17 +37,18 @@ class SlackRequestBuilderConfiguration(
         applicationEventPublisher: ApplicationEventPublisher,
         retryService: RetryService,
         meterRegistry: MeterRegistry,
-    ) = ApplicationMessageDispatcher(
-        botToken = appConfig.api.token,
-        applicationEventPublisher = applicationEventPublisher,
-        retryService = retryService,
-        onOutcomeUnknown = { slackMethod ->
-            meterRegistry.counter(METRIC_OUTCOME_UNKNOWN, "method", slackMethod).increment()
-        },
-        onAccessBlocked = { slackError ->
-            meterRegistry.counter(METRIC_ACCESS_BLOCKED, "error", slackError).increment()
-        },
-    )
+    ): ApplicationMessageDispatcher =
+        ApplicationMessageDispatcher(
+            botToken = appConfig.api.token,
+            applicationEventPublisher = applicationEventPublisher,
+            retryService = retryService,
+            onOutcomeUnknown = { slackMethod ->
+                meterRegistry.counter(METRIC_OUTCOME_UNKNOWN, "method", slackMethod).increment()
+            },
+            onAccessBlocked = { slackError ->
+                meterRegistry.counter(METRIC_ACCESS_BLOCKED, "error", slackError).increment()
+            },
+        )
 
     @Bean
     @ConditionalOnMissingBean(SlackViewOpenDispatcher::class)
@@ -74,10 +76,12 @@ class SlackRequestBuilderConfiguration(
     fun slackOutboundStager(
         slackApiEventConstructor: SlackApiEventConstructor,
         standupRepository: StandupRepository,
+        clock: Clock,
     ): SlackOutboundStager =
         SlackOutboundStager(
             slackEventBuilder = slackApiEventConstructor,
             standupRepository = standupRepository,
+            clock = clock,
         )
 
     @Bean

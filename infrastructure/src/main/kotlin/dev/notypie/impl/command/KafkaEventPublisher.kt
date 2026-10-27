@@ -11,7 +11,8 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
-// Unchecked on purpose: Spring commits a transaction on a checked exception, so a failed publish must not be one.
+private val log = KotlinLogging.logger {}
+
 class KafkaPublishException(
     event: CommandEvent<EventPayload>,
     cause: Throwable,
@@ -25,8 +26,6 @@ class KafkaEventPublisher(
     private val applicationEventPublisher: ApplicationEventPublisher,
     private val sendTimeoutMillis: Long = DEFAULT_SEND_TIMEOUT_MILLIS,
 ) : EventPublisher {
-    private val log = KotlinLogging.logger {}
-
     companion object {
         const val DEFAULT_SEND_TIMEOUT_MILLIS: Long = 5_000L
     }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # infrastructure/templates/dto
 
@@ -12,7 +12,7 @@ checkbox/radio option, and `TimeScheduleAlertContents` carries the schedule-noti
 | File | Description |
 |------|-------------|
 | `LayoutBlocks.kt` | `LayoutBlocks(interactionStates: List<States> = [], template: List<LayoutBlock>)` — what every `SlackTemplateBuilder` method returns; `InteractionLayoutBlock(interactiveObjects: List<States>, layout: LayoutBlock)`; `InteractiveObject(state: States, element: BlockElement)` |
-| `CheckBoxOptions.kt` | `CheckBoxOptions(text, description = "")`; consumed by `ModalElementBuilder.checkboxElements` / `radioButtonElements` and `ModalBlockBuilder.checkBoxesBlock` |
+| `CheckBoxOptions` (in `LayoutBlocks.kt`) | `CheckBoxOptions(text, description = "")`; consumed by `ModalElementBuilder.checkboxElements` / `radioButtonElements` and `ModalBlockBuilder.checkBoxesBlock` |
 | `TimeScheduleAlertContents.kt` | `TimeScheduleAlertContents(title = "Time Schedule Notice", description = <three-line default copy>, startTime: LocalDateTime, host: String, rejectReasons = RejectReason.entries.map { it.showMessage }.toSet())`; input to `SlackTemplateBuilder.timeScheduleNoticeTemplate`, which only `ModalTemplateBuilderTest` calls |
 
 ## For AI Agents

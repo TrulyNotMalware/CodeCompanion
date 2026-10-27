@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-22 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-27 -->
 
 # domain/common
 
@@ -76,7 +76,7 @@ Spec: `domain/src/test/kotlin/dev/notypie/domain/common/ValidationBuilderTest.kt
 one `given` per operator family, driven through `validateAndReturn {}` so it can count and inspect
 errors. Entity specs (`MeetingTest`, `RoutineTest`, `StandupSessionTest`) cover the throw path with
 `shouldThrow<ValidationExceptionWithName>`. Assert on `fieldName` and `value`; treat `reason` text as
-non-contractual — `shouldBeNegative` reports "must be positive". The `or` specs include an earlier failing
+non-contractual, except the `shouldBeNegative` reason ("must be negative"), which has its own spec. The `or` specs include an earlier failing
 field followed by an `or` inside `shouldNotBeNullAnd` / `ifNotNull`, a `Field` stored in a `val` and OR-ed
 after another field failed, an equal error from another field, an `and` block on the left operand, and a
 field that failed before an `and` / `ifNotNull` / `shouldNotBeNullAnd` block whose inner `or` passes, which

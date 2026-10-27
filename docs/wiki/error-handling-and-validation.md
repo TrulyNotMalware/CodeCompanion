@@ -1,6 +1,6 @@
 # 에러 처리와 검증
 
-_type: pattern · updated: 2026-10-26_
+_type: pattern · updated: 2026-10-27_
 
 > `ErrorCode` · `exceptionDetails {}` · `validate {}`로 구조화된 예외를 만들고, 계층별 예외 소유권과 에러가 사용자에게
 > 닿는 세 갈래(ephemeral / HTTP 상태 / Socket Mode 로그)를 정리한다. 알려진 공백은 마지막 절에 그대로 적었다.
@@ -36,7 +36,7 @@ _type: pattern · updated: 2026-10-26_
   `shouldBeLessThan(max)`는 `value >= max`에서 실패한다. `Meeting.MAX_TITLE_LENGTH = 20`은 20자 제목을 허용한다.
 - `validateAndReturn {}`는 `internal`이고 프로덕션 호출자가 없다. `ValidationBuilderTest`가 오류 목록을 세기 위해
   쓰는 테스트 전용 진입점이니 도메인 코드에서는 `validate {}`만 쓴다.
-- 문구 함정: `shouldBeNegative`는 실패할 때 "must be positive"라고 말한다(프로덕션 호출자 없음, 스펙은 통과하는 경우만 본다).
+- 문구: `shouldBeNegative`는 2026-10-27(묶음 5)부터 "must be negative"라고 말한다(그 전에는 "must be positive" — 프로덕션 호출자가 없어 드러나지 않았다; `ValidationBuilderTest`가 고정).
   `notBlank`의 reason은 2026-10-06(#26)부터 상수 "must not be blank"이고 `ValidationBuilderTest`("the reason is a user-facing
   sentence, not the Field's toString()")가 고정한다 — 그 전에는 `Field` 객체 전체를 문자열 보간했다.
 
@@ -51,7 +51,7 @@ _type: pattern · updated: 2026-10-26_
 - `throwIfSchemaNotFound`는 `T?`에 대한 `inline reified` 확장이라 호출 뒤 값이 non-null로 남는다(null 경계 조기 해소
   규칙과 맞물린다). 단 `tableName`은 **수신자의 정적 타입**이라 두 호출자 모두 매핑 뒤에 부르므로 `MeetingDto`/`RoutineDto`로
   찍힌다. 엔티티 이름을 원하면 스키마 객체에서 불러야 한다. `schemaNotFound {}` DSL은 현재 호출자가 없다.
-- `ErrorBroadcaster` 포트의 구현은 `StdoutErrorBroadcaster`(`logger.error`) 하나이고, `ConsumerConfig.kt`의
+- `ErrorBroadcaster` 포트의 구현은 `StdoutErrorBroadcaster`(`log.error`) 하나이고, `ConsumerConfig.kt`의
   `ErrorBroadcasterConfig`가 모드와 무관하게 빈으로 등록하지만 **아무도 주입하지 않는다.** `TODO()` 스텁이던
   `KafkaErrorBroadcaster`는 `f9971700`(#26)에서 삭제됐다. Kafka 구현을 다시 만들면 실제 에러 토픽이 필요하고, 에러 경로에서 불리므로 던지면 안 된다.
 
@@ -182,7 +182,7 @@ _type: pattern · updated: 2026-10-26_
 
 - `domain/src/main/kotlin/dev/notypie/domain/common/` (`error/Errors.kt`, `Validation.kt`, `AGENTS.md`),
   `domain/src/test/kotlin/dev/notypie/domain/common/ValidationBuilderTest.kt`
-- `domain/src/main/kotlin/dev/notypie/domain/command/exceptions/` (`CommandErrorCode.kt`, `CommandException.kt`)
+- `domain/src/main/kotlin/dev/notypie/domain/command/exceptions/` (`CommandException.kt` — `CommandErrorCode`는 2026-10-27부터 같은 파일)
 - `domain/src/main/kotlin/dev/notypie/domain/command/entity/Command.kt` (`handleEvent`),
   `.../entity/context/CommandContext.kt` (`createErrorResponse`, `errorEphemeral`),
   `.../entity/context/form/RequestMeetingContext.kt`, `.../entity/context/DetailErrorAlertContext.kt`

@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
-private val logger = KotlinLogging.logger {}
+private val log = KotlinLogging.logger {}
 
 @RestController
 @Conditional(OnGoogleCalendarEnabled::class)
@@ -107,7 +107,7 @@ class GoogleOAuthCallbackController(
     @ExceptionHandler(value = [Exception::class])
     fun handleUnexpected(exception: Exception): ResponseEntity<String> {
         if (exception is ErrorResponse) throw exception
-        logger.error(exception) { "Google Calendar OAuth callback failed unexpectedly" }
+        log.error(exception) { "Google Calendar OAuth callback failed unexpectedly" }
         if (exception is InterruptedException) Thread.currentThread().interrupt()
         val page =
             CallbackPage(

@@ -11,7 +11,7 @@ import org.springframework.web.client.RestClientException
 import java.net.http.HttpClient
 import java.time.Duration
 
-val logger = KotlinLogging.logger { }
+private val log = KotlinLogging.logger {}
 
 class RestClientRequester(
     val baseUrl: String,
@@ -169,17 +169,17 @@ class RestClientRequester(
         uriVariables: Map<String, Any>,
     ) = runCatchingExceptions {
         validateUri(uri)
-        logger.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
+        log.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
         method
             .uri(uri, uriVariables)
             .addAuthorizationIfPresent(authorizationHeader = authorizationHeader)
             .retrieve()
             .toEntity(responseType)
             .also {
-                logger.debug { "Http request successful : ${method.javaClass.simpleName} $uri" }
+                log.debug { "Http request successful : ${method.javaClass.simpleName} $uri" }
             }
     }.onFailure { e ->
-        logger.error(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
+        log.error(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
     }
 
     private fun <T : Any> performRequest(
@@ -191,7 +191,7 @@ class RestClientRequester(
         responseType: Class<T>,
     ) = runCatchingExceptions {
         validateUri(uri)
-        logger.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
+        log.debug { "Executing HTTP request: ${method.javaClass.simpleName} $uri" }
         method
             .uri(uri)
             .addBodyIfPresent(body = body, contentType = contentType)
@@ -199,10 +199,10 @@ class RestClientRequester(
             .retrieve()
             .toEntity(responseType)
             .also {
-                logger.debug { "Http request successful : ${method.javaClass.simpleName} $uri" }
+                log.debug { "Http request successful : ${method.javaClass.simpleName} $uri" }
             }
     }.onFailure { e ->
-        logger.error(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
+        log.error(throwable = e) { "Http request failed : ${method.javaClass.simpleName} $uri" }
     }
 
     private fun RestClient.RequestHeadersSpec<*>.addAuthorizationIfPresent(authorizationHeader: String?) =
@@ -225,7 +225,7 @@ class RestClientRequester(
         }
 }
 
-fun <T : Any> Result<ResponseEntity<T>>.bodyOrThrow(msg: String = "Failed to execute Http request") =
+fun <T : Any> Result<ResponseEntity<T>>.bodyOrThrow(msg: String = "Failed to execute Http request"): T =
     getOrElse { throw RestClientException(msg, it) }
         .body ?: throw RestClientException("Response body is null")
 

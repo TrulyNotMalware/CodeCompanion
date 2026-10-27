@@ -124,7 +124,7 @@ class SocketModeReceiver(
                     .readValue(payloadJson, Map::class.java)
                     .entries
                     .associate { (key, value) -> key.toString() to value.toString() }
-            val (payload, commandData) = parseRequestBodyData(headers = noHeaders, data = data)
+            val (payload, commandData) = parseRequestBodyData(data = data)
             ViewOpenDeferral.afterBoundary { dispatchSlash(payload = payload, commandData = commandData) }
         }
     }

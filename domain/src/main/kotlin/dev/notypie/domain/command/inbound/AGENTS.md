@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/command/inbound
 
@@ -13,7 +13,7 @@ a Slack payload.
 | File | Description |
 |------|-------------|
 | `InboundCommand.kt` | `InboundKind` (`SLASH`, `MENTION`, `INTERACTION`); `sealed InboundPayload` with `SlashInvocation(trigger)` and `MentionInvocation(mentionedUserIds, commandTokens, hasCommandStructure, message?, thread?, text = "")` — `commandTokens` are the words of the first text section (what command parsing needs); `text` is the whole message restored as plain text in reading order for free-text consumers such as the agent prompt, blank when the transport supplied none; `InboundCommand(appId, actorId, actorName, channel, channelName, teamId?, kind, subCommands, payload) : IdempotencyData` with `extractBasicInfo(idempotencyKey)` (no request token: the Slack verification token an inbound body carries is dropped at the infrastructure DTOs, 2026-10-20, `docs/wiki/decisions.md` #50) |
-| `InboundInteraction.kt` | Value classes `TriggerHandle`, `ReplyHandle` (its `toString()` is `ReplyHandle(redacted)`, B3 2026-10-15 — the raw value is a reply URL that Slack documents as a plain POST target, treated as a bearer value, so `InboundInteraction` never prints it; contexts read `.raw`), `MessageHandle`; `InboundActor(id)`; `InboundActionRole(triggersEvent)` = `APPROVE` / `REJECT` / `ACTIVATE` / `PASSIVE`; `InboundAction(role, isSelected)`; `InboundFieldKind(alwaysComplete)` = `TEXT` / `DATE` / `TIME` / `CHOICE` / `MULTI_CHOICE` / `USERS` / `CONVERSATION` / `TOGGLE` / `UNKNOWN`; `InboundField(key?, kind, isSelected, rawValue)`; `InboundForm(fields)` with `field` / `value` / `isSelected` / `first` / `all` / `firstValue`; `object InboundFieldKeys` (modal block-id constants); `sealed InboundSubmission` (`RescheduleMeeting`, `AddParticipant` — both with `listHandle: outbound/ResponseReplaceHandle?`, the `/meetup list` reply handle the modal ferried, built by the infrastructure mapper and `null` when absent or blank, so printing the submission shows `ResponseReplaceHandle(redacted)` —, `DeclineReason`, `StandupAnswer`, `StandupSetup`, `CveSubscribe`, `CveUnsubscribe`); `InboundInteraction(detailType, actor, channelId, trigger, reply, message?, idempotencyKey: String, routingExtras, form, action, submission?) : InboundPayload`; extensions `isPrimary()`, `isCanceled()`, `isComplete()` |
+| `InboundInteraction.kt` | Value classes `TriggerHandle`, `ReplyHandle` (its `toString()` is `ReplyHandle(redacted)`, B3 2026-10-15 — the raw value is a reply URL that Slack documents as a plain POST target, treated as a bearer value, so `InboundInteraction` never prints it; contexts read `.raw`), `MessageHandle`; `InboundActor(id)`; `InboundActionRole(triggersEvent)` = `APPROVE` / `REJECT` / `ACTIVATE` / `PASSIVE`; `InboundAction(role, isSelected)`; `InboundFieldKind` = `TEXT` / `DATE` / `TIME` / `CHOICE` / `MULTI_CHOICE` / `USERS` / `CONVERSATION` / `TOGGLE` / `UNKNOWN`; `InboundField(key?, kind, isSelected, rawValue)`; `InboundForm(fields)` with `field` / `value` / `isSelected` / `first` / `all` / `firstValue`; `object InboundFieldKeys` (modal block-id constants); `sealed InboundSubmission` (`RescheduleMeeting`, `AddParticipant` — both with `listHandle: outbound/ResponseReplaceHandle?`, the `/meetup list` reply handle the modal ferried, built by the infrastructure mapper and `null` when absent or blank, so printing the submission shows `ResponseReplaceHandle(redacted)` —, `DeclineReason`, `StandupAnswer`, `StandupSetup`, `CveSubscribe`, `CveUnsubscribe`); `InboundInteraction(detailType, actor, channelId, trigger, reply, message?, idempotencyKey: String, routingExtras, form, action, submission?) : InboundPayload`; extensions `isPrimary()`, `isCanceled()` |
 | `SubmissionParseObserver.kt` | `fun interface SubmissionParseObserver` + `SubmissionIgnoreReason` (`MISSING_SUBMISSION` / `PARSE_REJECTED`): the observation port for submissions that fall open. Domain stays dependency-free (`NONE` default); the application binds it to Micrometer (`MeteredSubmissionParseObserver`). Expected per-flow defaults are not ignores |
 
 ## For AI Agents
@@ -44,8 +44,6 @@ a Slack payload.
   `IgnoredSubmissionContext`, reported through `SubmissionParseObserver`. Add a new modal by adding an
   `InboundSubmission` variant here, its mapping in the infra mapper, a `*Parsed` model + leaf under
   `entity/context/form/`, and the `SubmissionRouter` branch (the exhaustive `when` forces it).
-- `isComplete()` = primary action, selected, and every field either selected or of an `alwaysComplete`
-  kind (`TEXT`, `TOGGLE`). `RequestMeetingContext` no longer calls it: the `/meetup` form has an optional, possibly unselected end `TIME` field.
 - Names are deliberately neutral: `DomainLayeringGuardTest` fails on the identifiers `responseUrl` /
   `triggerId` anywhere in domain code. Use `ReplyHandle` / `TriggerHandle` / `MessageHandle`; the
   Slack origin may only be mentioned in comments.
@@ -54,7 +52,7 @@ a Slack payload.
 ```bash
 ./gradlew :domain:test --tests 'dev.notypie.domain.command.inbound.*'
 ```
-`InboundFormTest` covers the `InboundForm` accessors and `isComplete()`; `InboundInteractionTest` covers
+`InboundFormTest` covers the `InboundForm` accessors; `InboundInteractionTest` covers
 action roles and the extension predicates. Build inputs with `InboundCommandCreator` and
 `InboundInteractionInputCreator` (`domain/src/testFixtures/kotlin/dev/notypie/domain/command/`).
 The Slack-side mapping is pinned by `:infrastructure:test --tests '*SlackInboundMapperTest'

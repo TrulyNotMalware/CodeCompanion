@@ -37,7 +37,6 @@ class SlackMentionEventHandlerImpl(
 
     private val transactionTemplate = TransactionTemplate(transactionManager)
 
-    // FIXME Remove AppMention Events.
     override fun handleEvent(headers: MultiValueMap<String, String>, payload: Map<String, Any>): CommandOutput {
         if (isIgnoredMention(payload = payload)) {
             log.debug { "Ignoring app_mention posted by this app or without a user (workflow)." }

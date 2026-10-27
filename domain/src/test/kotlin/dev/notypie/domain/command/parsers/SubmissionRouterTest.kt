@@ -15,6 +15,7 @@ import dev.notypie.domain.command.entity.context.form.DeclineReasonSubmissionCon
 import dev.notypie.domain.command.entity.context.form.RescheduleMeetingSubmissionContext
 import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
 import dev.notypie.domain.command.entity.context.form.StandupSetupSubmissionContext
+import dev.notypie.domain.command.entity.detailType
 import dev.notypie.domain.command.entity.isSubmissionRoute
 import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.inbound.SubmissionIgnoreReason
@@ -22,7 +23,6 @@ import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
-import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
@@ -52,60 +52,66 @@ class SubmissionRouterTest :
                             ),
                     )
 
+                val addParticipant = createAddParticipantSubmission()
+                val reschedule = createRescheduleMeetingSubmission()
+                val declineReason =
+                    InboundSubmission.DeclineReason(
+                        meetingIdempotencyKeyRaw = UUID.randomUUID().toString(),
+                        participantUserId = "U",
+                        noticeChannel = "",
+                        noticeMessageTs = "",
+                        reasonRaw = "VACATION",
+                        detailRaw = "",
+                    )
+                val standupAnswer =
+                    InboundSubmission.StandupAnswer(
+                        sessionUidRaw = UUID.randomUUID().toString(),
+                        userId = "U",
+                        noticeChannel = "",
+                        noticeMessageTs = "",
+                        answers = emptyList(),
+                    )
+                val standupSetup =
+                    InboundSubmission.StandupSetup(
+                        idempotencyKeyRaw = UUID.randomUUID().toString(),
+                        creatorId = "U",
+                        commandChannel = "C",
+                        name = "n",
+                        questionsRaw = "Q",
+                        membersRaw = "U_A",
+                        summaryChannel = "C_S",
+                        weekdaysRaw = "MONDAY",
+                        timeRaw = "10:00",
+                        cutoffRaw = "120",
+                        timezoneRaw = "UTC",
+                    )
+                val cveSubscribe = InboundSubmission.CveSubscribe(topicKeys = emptyList())
+                val cveUnsubscribe = InboundSubmission.CveUnsubscribe(topicKeys = emptyList())
+                val samples: List<InboundSubmission> =
+                    listOf(
+                        addParticipant,
+                        reschedule,
+                        declineReason,
+                        standupAnswer,
+                        standupSetup,
+                        cveSubscribe,
+                        cveUnsubscribe,
+                    )
+
                 then("each parseable variant reaches its own leaf, regardless of the envelope detail type") {
-                    route(createAddParticipantSubmission()).shouldBeInstanceOf<AddParticipantSubmissionContext>()
-                    route(createRescheduleMeetingSubmission()).shouldBeInstanceOf<RescheduleMeetingSubmissionContext>()
-                    route(
-                        InboundSubmission.DeclineReason(
-                            meetingIdempotencyKeyRaw = UUID.randomUUID().toString(),
-                            participantUserId = "U",
-                            noticeChannel = "",
-                            noticeMessageTs = "",
-                            reasonRaw = "VACATION",
-                            detailRaw = "",
-                        ),
-                    ).shouldBeInstanceOf<DeclineReasonSubmissionContext>()
-                    route(
-                        InboundSubmission.StandupAnswer(
-                            sessionUidRaw = UUID.randomUUID().toString(),
-                            userId = "U",
-                            noticeChannel = "",
-                            noticeMessageTs = "",
-                            answers = emptyList(),
-                        ),
-                    ).shouldBeInstanceOf<StandupAnswerSubmissionContext>()
-                    route(
-                        InboundSubmission.StandupSetup(
-                            idempotencyKeyRaw = UUID.randomUUID().toString(),
-                            creatorId = "U",
-                            commandChannel = "C",
-                            name = "n",
-                            questionsRaw = "Q",
-                            membersRaw = "U_A",
-                            summaryChannel = "C_S",
-                            weekdaysRaw = "MONDAY",
-                            timeRaw = "10:00",
-                            cutoffRaw = "120",
-                            timezoneRaw = "UTC",
-                        ),
-                    ).shouldBeInstanceOf<StandupSetupSubmissionContext>()
-                    route(InboundSubmission.CveSubscribe(topicKeys = emptyList()))
-                        .shouldBeInstanceOf<CveSubscribeSubmissionContext>()
-                    route(InboundSubmission.CveUnsubscribe(topicKeys = emptyList()))
-                        .shouldBeInstanceOf<CveUnsubscribeSubmissionContext>()
+                    route(addParticipant).shouldBeInstanceOf<AddParticipantSubmissionContext>()
+                    route(reschedule).shouldBeInstanceOf<RescheduleMeetingSubmissionContext>()
+                    route(declineReason).shouldBeInstanceOf<DeclineReasonSubmissionContext>()
+                    route(standupAnswer).shouldBeInstanceOf<StandupAnswerSubmissionContext>()
+                    route(standupSetup).shouldBeInstanceOf<StandupSetupSubmissionContext>()
+                    route(cveSubscribe).shouldBeInstanceOf<CveSubscribeSubmissionContext>()
+                    route(cveUnsubscribe).shouldBeInstanceOf<CveUnsubscribeSubmissionContext>()
                     observed.shouldBeEmpty()
                 }
 
-                then("the variant-derived detail types and the isSubmissionRoute list agree") {
-                    listOf(
-                        CommandDetailType.MEETING_RESCHEDULE_SUBMIT,
-                        CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
-                        CommandDetailType.MEETING_DECLINE_REASON,
-                        CommandDetailType.STANDUP_ANSWER_SUBMIT,
-                        CommandDetailType.STANDUP_SETUP_SUBMIT,
-                        CommandDetailType.CVE_SUBSCRIBE_SUBMIT,
-                        CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT,
-                    ) shouldContainExactlyInAnyOrder CommandDetailType.entries.filter { it.isSubmissionRoute }
+                then("the variant-derived detail types and the isSubmissionRoute set agree") {
+                    samples.map { it.detailType() }.toSet() shouldBe
+                        CommandDetailType.entries.filter { it.isSubmissionRoute }.toSet()
                 }
             }
 

@@ -18,7 +18,7 @@ open class CommandOutput(
     val messageTs: String = "",
 ) {
     companion object {
-        fun empty() =
+        fun empty(): CommandOutput =
             CommandOutput(
                 ok = false,
                 apiAppId = "",
@@ -35,19 +35,24 @@ open class CommandOutput(
             commandDetailType: CommandDetailType,
             reason: String,
             commandType: CommandType = CommandType.SIMPLE,
-        ) = CommandOutput(
-            ok = false,
-            apiAppId = basicInfo.appId,
-            status = Status.FAILED,
-            channel = basicInfo.channel,
-            commandType = commandType,
-            commandDetailType = commandDetailType,
-            idempotencyKey = basicInfo.idempotencyKey,
-            publisherId = basicInfo.publisherId,
-            errorReason = reason,
-        )
+        ): CommandOutput =
+            CommandOutput(
+                ok = false,
+                apiAppId = basicInfo.appId,
+                status = Status.FAILED,
+                channel = basicInfo.channel,
+                commandType = commandType,
+                commandDetailType = commandDetailType,
+                idempotencyKey = basicInfo.idempotencyKey,
+                publisherId = basicInfo.publisherId,
+                errorReason = reason,
+            )
 
-        fun success(basicInfo: CommandBasicInfo, commandType: CommandType, commandDetailType: CommandDetailType) =
+        fun success(
+            basicInfo: CommandBasicInfo,
+            commandType: CommandType,
+            commandDetailType: CommandDetailType,
+        ): CommandOutput =
             CommandOutput(
                 ok = true,
                 apiAppId = basicInfo.appId,

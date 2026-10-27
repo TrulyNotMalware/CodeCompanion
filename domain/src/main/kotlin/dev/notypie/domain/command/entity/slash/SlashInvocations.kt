@@ -3,13 +3,15 @@ package dev.notypie.domain.command.entity.slash
 import dev.notypie.domain.command.exceptions.CommandErrorCode
 import dev.notypie.domain.command.exceptions.UnSupportedCommandException
 import dev.notypie.domain.command.inbound.InboundCommand
+import dev.notypie.domain.command.inbound.InboundInteraction
+import dev.notypie.domain.command.inbound.MentionInvocation
 import dev.notypie.domain.command.inbound.SlashInvocation
 import dev.notypie.domain.common.error.exceptionDetails
 
 internal fun InboundCommand.slashInvocation(commandName: String): SlashInvocation =
     when (val slashPayload = payload) {
         is SlashInvocation -> slashPayload
-        else ->
+        is MentionInvocation, is InboundInteraction ->
             throw UnSupportedCommandException(
                 commandType = kind.toString(),
                 errorCode = CommandErrorCode.UNSUPPORTED_COMMAND_TYPE,

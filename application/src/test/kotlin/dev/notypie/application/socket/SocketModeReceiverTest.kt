@@ -25,7 +25,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.springframework.test.util.ReflectionTestUtils
-import org.springframework.util.LinkedMultiValueMap
 
 class SocketModeReceiverTest :
     BehaviorSpec({
@@ -194,7 +193,6 @@ class SocketModeReceiverTest :
             `when`("its command is the default calendar command name") {
                 val (payload, commandData) =
                     parseRequestBodyData(
-                        headers = LinkedMultiValueMap(),
                         data = createSlashCommandForm(command = "/calendar", text = "status"),
                     )
                 receiver.dispatchSlash(payload = payload, commandData = commandData)
@@ -219,7 +217,6 @@ class SocketModeReceiverTest :
             `when`("its command is the default ask command name") {
                 val (payload, commandData) =
                     parseRequestBodyData(
-                        headers = LinkedMultiValueMap(),
                         data = createSlashCommandForm(command = "/ask", text = "why is CI red?"),
                     )
                 receiver.dispatchSlash(payload = payload, commandData = commandData)
@@ -252,7 +249,6 @@ class SocketModeReceiverTest :
             `when`("the ask command is configured under a custom name and that name arrives") {
                 val (payload, commandData) =
                     parseRequestBodyData(
-                        headers = LinkedMultiValueMap(),
                         data = createSlashCommandForm(command = "/question", text = "why is CI red?"),
                     )
                 val customConfig = AppConfig(socket = AppConfig.Socket(askCommand = "/question"))
@@ -272,7 +268,6 @@ class SocketModeReceiverTest :
             `when`("its command matches no configured name") {
                 val (payload, commandData) =
                     parseRequestBodyData(
-                        headers = LinkedMultiValueMap(),
                         data = createSlashCommandForm(command = "/unmapped", text = "anything"),
                     )
                 receiver.dispatchSlash(payload = payload, commandData = commandData)

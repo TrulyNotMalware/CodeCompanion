@@ -467,10 +467,9 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     .single { it.actionId == "${MeetingActionIds.RESCHEDULE_ACTION_ID}_$meetingUid" }
                     .value
             val stager =
-                SlackOutboundStager(
+                createSlackOutboundStager(
                     slackEventBuilder =
                         SlackApiEventConstructor(botToken = TEST_BOT_TOKEN, templateBuilder = templateBuilder),
-                    standupRepository = mockk(),
                 )
 
             `when`("the click runs through the real parser, domain command and stager") {

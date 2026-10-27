@@ -81,7 +81,9 @@ internal data class MeetingFormInput(
                     ?.rawValue
                     ?.takeIf { it.isNotBlank() }
             val dateString = form.first(kind = InboundFieldKind.DATE)?.rawValue
-            return if (timeString != null && dateString != null && isFutureTime(dateString, timeString)) {
+            return if (timeString != null && dateString != null &&
+                isFutureTime(dateString = dateString, timeString = timeString)
+            ) {
                 parseLocalDateTime(dateString = dateString, timeString = timeString)
             } else {
                 null

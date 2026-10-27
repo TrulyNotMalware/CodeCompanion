@@ -13,12 +13,12 @@ testFixtures package of the same name.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `TestApplication.kt` | Bare `@SpringBootApplication class TestApplication` in `dev.notypie`. No beans, no profile, no exclusions — it exists only so test slices can find a configuration root. |
+| `TestApplication.kt` | `@SpringBootApplication class TestApplication` in `dev.notypie` with one `Clock` bean (`Clock.systemDefaultZone()`, which `JpaConfiguration.meetingRepository` requires). No profile, no exclusions — it exists so test slices can find a configuration root. |
 
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `common/` | `JPAJsonConverter`, `PartitionKeyUtil`, `ExceptionBoundary` unit specs (see `common/AGENTS.md`) |
+| `common/` | `ExceptionBoundary` unit specs (see `common/AGENTS.md`) |
 | `configurations/` | `HikariDataSourceBindingTest` — `spring.datasource.hikari.*` reaches the pool built by `JpaConfiguration` (see `configurations/AGENTS.md`) |
 | `exception/` | `DatabaseExceptionTest` — `throwIfSchemaNotFound` / `schemaNotFound` build a `DatabaseException` with table, error code and details (see `exception/AGENTS.md`) |
 | `impl/` | Adapter specs: `agent/`, `command/` (+ `slack/`), `cve/`, `retry/` (see `impl/AGENTS.md`) |
@@ -32,7 +32,7 @@ testFixtures package of the same name.
 - Keep `TestApplication` in `dev.notypie`, the shared root of both source trees. Moving it deeper would
   drop `dev.notypie.configurations` (and therefore `JpaConfiguration`) out of the scan and every
   `@DataJpaTest` spec would stop finding the JPA repositories.
-- Do not add `@Configuration` classes or `@Bean` overrides here. A spec that needs a stand-in collaborator
+- Do not add `@Configuration` classes or further `@Bean` overrides here. A spec that needs a stand-in collaborator
   constructs it directly or uses MockK; a spec that needs Spring-level overrides declares them on itself.
 - New specs go in the package of the class under test. Spring-booting specs are the exception, not the
   default — most of this tree is plain Kotest with hand-wired collaborators.

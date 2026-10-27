@@ -22,7 +22,7 @@ internal class StatusContext(
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STATUS_REPORT
 
     override fun runCommand(): CommandOutput {
-        addIntent(CommandIntent.StatusReport)
+        addIntent(intent = CommandIntent.StatusReport)
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
             commandType = commandType,

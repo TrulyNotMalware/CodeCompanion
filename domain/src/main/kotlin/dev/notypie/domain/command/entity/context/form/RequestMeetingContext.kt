@@ -47,15 +47,16 @@ internal class RequestMeetingContext(
             MeetingSubCommandDefinition.NONE -> {
                 val channel = ConversationTarget(id = commandBasicInfo.channel)
                 addOutbound(
-                    OutboundMessage.ChannelMessage(
-                        target = channel,
-                        content = MessageContent.MeetingRequest(approval = null),
-                        fallback =
-                            channelRefusedNotice(
-                                channel = channel,
-                                recipient = UserRef(id = commandBasicInfo.publisherId),
-                            ),
-                    ),
+                    message =
+                        OutboundMessage.ChannelMessage(
+                            target = channel,
+                            content = MessageContent.MeetingRequest(approval = null),
+                            fallback =
+                                channelRefusedNotice(
+                                    channel = channel,
+                                    recipient = UserRef(id = commandBasicInfo.publisherId),
+                                ),
+                        ),
                 )
             }
         }
@@ -89,11 +90,12 @@ internal class RequestMeetingContext(
             }
         val (startAt, endAt) = range.dateRange(now = LocalDateTime.now())
         addIntent(
-            CommandIntent.MeetingListRequest(
-                publisherId = commandBasicInfo.publisherId,
-                startDate = startAt,
-                endDate = endAt,
-            ),
+            intent =
+                CommandIntent.MeetingListRequest(
+                    publisherId = commandBasicInfo.publisherId,
+                    startDate = startAt,
+                    endDate = endAt,
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
@@ -106,17 +108,18 @@ internal class RequestMeetingContext(
         val channel = ConversationTarget(id = commandBasicInfo.channel)
         val content = MessageContent.Text(headline = null, markdown = message)
         addOutbound(
-            OutboundMessage.Ephemeral(
-                target = channel,
-                recipient = null,
-                content = content,
-                fallback =
-                    directFallbackOf(
-                        channel = channel,
-                        recipient = UserRef(id = commandBasicInfo.publisherId),
-                        content = content,
-                    ),
-            ),
+            message =
+                OutboundMessage.Ephemeral(
+                    target = channel,
+                    recipient = null,
+                    content = content,
+                    fallback =
+                        directFallbackOf(
+                            channel = channel,
+                            recipient = UserRef(id = commandBasicInfo.publisherId),
+                            content = content,
+                        ),
+                ),
         )
         return CommandOutput.fail(
             basicInfo = commandBasicInfo,

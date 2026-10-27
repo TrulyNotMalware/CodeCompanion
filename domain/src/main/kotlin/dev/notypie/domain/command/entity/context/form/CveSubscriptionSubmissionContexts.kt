@@ -17,12 +17,13 @@ internal class CveSubscribeSubmissionContext(
     ) {
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.CVE_SUBSCRIBE_SUBMIT
 
-    override fun accept(model: CveSubscribeParsed) =
+    override fun accept(model: CveSubscribeParsed): Unit =
         addIntent(
-            CommandIntent.CveSubscribe(
-                userId = model.userId,
-                topicKeys = model.topicKeys,
-            ),
+            intent =
+                CommandIntent.CveSubscribe(
+                    userId = model.userId,
+                    topicKeys = model.topicKeys,
+                ),
         )
 }
 
@@ -37,11 +38,12 @@ internal class CveUnsubscribeSubmissionContext(
     ) {
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT
 
-    override fun accept(model: CveUnsubscribeParsed) =
+    override fun accept(model: CveUnsubscribeParsed): Unit =
         addIntent(
-            CommandIntent.CveUnsubscribe(
-                userId = model.userId,
-                topicKeys = model.topicKeys,
-            ),
+            intent =
+                CommandIntent.CveUnsubscribe(
+                    userId = model.userId,
+                    topicKeys = model.topicKeys,
+                ),
         )
 }
