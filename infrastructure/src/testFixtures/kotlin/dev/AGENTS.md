@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # infrastructure/src/testFixtures/kotlin/dev
 
@@ -9,6 +9,6 @@ Package segment only; no files. All fixtures live under `notypie/`.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `notypie/` | `dev.notypie` — `dto/`, `impl/`, `schema/` fixture packages (see `notypie/AGENTS.md`) |
+| `notypie/` | `dev.notypie` — `impl/`, `schema/` fixture packages (see `notypie/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

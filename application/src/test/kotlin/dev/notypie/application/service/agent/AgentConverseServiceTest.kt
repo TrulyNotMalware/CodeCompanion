@@ -68,9 +68,14 @@ import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
+
+private const val LEASE_STAGE = "the lease begins"
+private const val CONTEXT_STAGE = "the context prompt is built"
+private const val TOKEN_STAGE = "the turn token is minted"
 
 class AgentConverseServiceTest :
     BehaviorSpec({
@@ -96,6 +101,7 @@ class AgentConverseServiceTest :
             scopedTurnTokenCodec: ScopedTurnTokenCodec? = null,
             turnExecutor: Executor = Executor { it.run() },
             transactionManager: PlatformTransactionManager = stubTransactionManager(),
+            clock: Clock = createFixedUtcClock(now = fixedNow),
         ) = AgentConverseService(
             agentGateway = agentGateway,
             agentSessionRepository = agentSessionRepository,
@@ -105,7 +111,7 @@ class AgentConverseServiceTest :
             meterRegistry = meterRegistry,
             transactionManager = transactionManager,
             turnExecutor = turnExecutor,
-            clock = createFixedUtcClock(now = fixedNow),
+            clock = clock,
             scopedTurnTokenCodec = scopedTurnTokenCodec,
         )
 
@@ -1356,6 +1362,124 @@ class AgentConverseServiceTest :
                     error.formattedMessage shouldEndWith "idempotencyKey=${event.idempotencyKey}"
                     error.throwableProxy.className shouldBe CannotCreateTransactionException::class.java.name
                     meterRegistry.turns(outcome = "failed") shouldBe 1.0
+                }
+            }
+        }
+
+        given("a turn that fails at one stage of its start, each stage failing on its own") {
+            val injected = IllegalStateException("injected start failure")
+            val goodInstant = createFixedUtcClock(now = fixedNow).instant()
+
+            fun clockFailingOnce(): Clock =
+                mockk {
+                    every { instant() } throws injected andThen goodInstant
+                    every { zone } returns ZoneOffset.UTC
+                }
+
+            fun codecFailing(): ScopedTurnTokenCodec =
+                mockk { every { mint(userId = any(), sessionKey = any(), turnId = any()) } throws injected }
+
+            fun clockFor(stage: String): Clock =
+                if (stage == CONTEXT_STAGE) clockFailingOnce() else createFixedUtcClock(now = fixedNow)
+
+            fun codecFor(stage: String): ScopedTurnTokenCodec? = if (stage == TOKEN_STAGE) codecFailing() else null
+
+            listOf(CONTEXT_STAGE, TOKEN_STAGE).forEach { stage ->
+                `when`("an unleased turn fails when $stage") {
+                    val event = createAgentConverseRequestEvent()
+                    val basicInfo = event.payload.responseBasicInfo
+                    val gateway = mockk<AgentGateway>()
+                    val sessionRepository = mockk<AgentSessionRepository>(relaxed = true)
+                    val stagedMessages = mutableListOf<OutboundMessage>()
+                    val outboundStager =
+                        mockk<OutboundMessageStager> {
+                            every { stage(message = capture(stagedMessages), basicInfo = any()) } returns
+                                stubStagedEvent
+                        }
+                    val eventPublisher = mockk<EventPublisher>(relaxed = true)
+                    val meterRegistry = SimpleMeterRegistry()
+                    val service =
+                        buildService(
+                            agentGateway = gateway,
+                            agentSessionRepository = sessionRepository,
+                            outboundStager = outboundStager,
+                            eventPublisher = eventPublisher,
+                            meterRegistry = meterRegistry,
+                            clock = clockFor(stage = stage),
+                            scopedTurnTokenCodec = codecFor(stage = stage),
+                        )
+
+                    val errors =
+                        captureLogs(loggerName = loggerName) { service.handleAgentConverse(event = event) }
+                            .eventsAt(level = Level.ERROR)
+
+                    then("the sidecar is never called and the requester gets one failure notice") {
+                        verify { gateway wasNot Called }
+                        verify(exactly = 1) { sessionRepository.findProviderSessionId(sessionKey = any()) }
+                        stagedMessages
+                            .single()
+                            .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                            .content
+                            .shouldBeInstanceOf<MessageContent.Text>()
+                            .markdown shouldBe AgentConverseService.FAILURE_MESSAGE
+                        verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                    }
+
+                    then("one keyed ERROR carries the cause and the run counts as failed once") {
+                        val error = errors.single()
+                        error.formattedMessage shouldBe
+                            "Agent turn failed before the sidecar call " +
+                            "sessionKey=${basicInfo.channel}:${event.payload.threadId}:${basicInfo.publisherId} " +
+                            "idempotencyKey=${event.idempotencyKey}"
+                        error.throwableProxy.className shouldBe IllegalStateException::class.java.name
+                        error.throwableProxy.message shouldBe injected.message
+                        meterRegistry.turns(outcome = "failed") shouldBe 1.0
+                    }
+                }
+            }
+
+            listOf(LEASE_STAGE, CONTEXT_STAGE, TOKEN_STAGE).forEach { stage ->
+                `when`("a leased turn fails when $stage") {
+                    val event = createAgentConverseRequestEvent()
+                    val gateway = mockk<AgentGateway>()
+                    val outboundStager = mockk<OutboundMessageStager>()
+                    val eventPublisher = mockk<EventPublisher>()
+                    val meterRegistry = SimpleMeterRegistry()
+                    val lease = leaseThat()
+                    if (stage == LEASE_STAGE) every { lease.begin() } throws injected
+                    val service =
+                        buildService(
+                            agentGateway = gateway,
+                            outboundStager = outboundStager,
+                            eventPublisher = eventPublisher,
+                            meterRegistry = meterRegistry,
+                            clock = clockFor(stage = stage),
+                            scopedTurnTokenCodec = codecFor(stage = stage),
+                        )
+
+                    val (accepted, logs) =
+                        captureLogs(loggerName = loggerName) { service.submit(event = event, lease = lease) }
+
+                    then("nothing is posted or settled, so the ask sweep takes the leased turn up again") {
+                        accepted shouldBe true
+                        verify(exactly = 1) { lease.begin() }
+                        verify(exactly = 0) { lease.settle() }
+                        verify(exactly = 0) { lease.giveBack() }
+                        verify(exactly = 0) { lease.abandon() }
+                        verify { listOf(gateway, outboundStager, eventPublisher) wasNot Called }
+                    }
+
+                    then("one keyed ERROR carries the cause and the run counts as failed once") {
+                        val error = logs.eventsAt(level = Level.ERROR).single()
+                        val basicInfo = event.payload.responseBasicInfo
+                        error.formattedMessage shouldBe
+                            "Agent turn failed before the sidecar call; the ask sweep takes it up again " +
+                            "sessionKey=${basicInfo.channel}:${event.payload.threadId}:${basicInfo.publisherId} " +
+                            "idempotencyKey=${event.idempotencyKey}"
+                        error.throwableProxy.className shouldBe IllegalStateException::class.java.name
+                        error.throwableProxy.message shouldBe injected.message
+                        meterRegistry.turns(outcome = "failed") shouldBe 1.0
+                    }
                 }
             }
         }

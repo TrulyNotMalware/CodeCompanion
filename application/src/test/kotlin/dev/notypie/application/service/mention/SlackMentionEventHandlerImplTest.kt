@@ -13,13 +13,23 @@ import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.SubCommandDefinition
 import dev.notypie.domain.command.authorization.UserRole
+import dev.notypie.domain.command.createMentionInboundCommand
+import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
+import dev.notypie.domain.command.entity.Command
+import dev.notypie.domain.command.intent.CommandEffect
+import dev.notypie.domain.command.intent.CommandIntent
+import dev.notypie.domain.command.outbound.MessageContent
+import dev.notypie.domain.command.outbound.OutboundMessage
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import org.springframework.http.HttpHeaders
 import org.springframework.util.LinkedMultiValueMap
@@ -218,6 +228,42 @@ class SlackMentionEventHandlerImplTest :
                         verify(exactly = 1) { roleResolver.resolve(userId = TEST_USER_ID) }
                         verify(exactly = 1) { executor.execute<SubCommandDefinition>(command = any()) }
                     }
+                }
+            }
+
+            fun effectsOfRolesMention(resolvedRole: UserRole): List<CommandEffect> {
+                val executor = mockk<CommandExecutor>()
+                val roleResolver = mockk<CommandRoleResolver>()
+                val executed = slot<Command<SubCommandDefinition>>()
+                every { roleResolver.resolve(userId = TEST_USER_ID) } returns resolvedRole
+                every { executor.execute(command = capture(executed)) } returns CommandOutput.empty()
+
+                handlerWith(executor = executor, roleResolver = roleResolver)
+                    .handleEvent(commandData = createMentionInboundCommand(commandTokens = listOf("roles")))
+
+                val command = executed.captured
+                command.handleEvent()
+                return command.drainIntents()
+            }
+
+            `when`("the resolver answers ADMIN for a roles mention, which needs the administration permission") {
+                val effects = effectsOfRolesMention(resolvedRole = UserRole.ADMIN)
+
+                then("the executed command carries the resolved role, so it lists the role grants") {
+                    effects shouldBe listOf(CommandIntent.ListRoles)
+                }
+            }
+
+            `when`("the resolver answers USER for the same roles mention") {
+                val effects = effectsOfRolesMention(resolvedRole = UserRole.USER)
+
+                then("the executed command carries the resolved role, so it only answers with the permission notice") {
+                    effects
+                        .single()
+                        .shouldBeInstanceOf<OutboundMessage.Ephemeral>()
+                        .content
+                        .shouldBeInstanceOf<MessageContent.Text>()
+                        .markdown shouldContain "You don't have permission to use `roles`"
                 }
             }
         }

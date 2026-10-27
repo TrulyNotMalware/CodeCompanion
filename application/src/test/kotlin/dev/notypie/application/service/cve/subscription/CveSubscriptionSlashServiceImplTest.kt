@@ -3,6 +3,7 @@ package dev.notypie.application.service.cve.subscription
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.application.service.command.CommandExecutor
 import dev.notypie.domain.command.SubCommandDefinition
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -64,7 +65,8 @@ class CveSubscriptionSlashServiceImplTest :
                 eventPublisher = publisher,
             )
 
-        fun OutboundMessage.Ephemeral.shouldCopyToRequesterDm() {
+        fun OutboundMessage.Ephemeral.shouldCopyToRequesterDm(stagedBasicInfo: CapturingSlot<CommandBasicInfo>) {
+            stagedBasicInfo.captured.channel shouldBe "C_CMD"
             fallback shouldBe
                 directFallbackOf(
                     channel = ConversationTarget(id = "C_CMD"),
@@ -73,9 +75,12 @@ class CveSubscriptionSlashServiceImplTest :
                 )
         }
 
-        fun stagerCapturing(staged: CapturingSlot<OutboundMessage>): OutboundMessageStager {
+        fun stagerCapturing(
+            staged: CapturingSlot<OutboundMessage>,
+            stagedBasicInfo: CapturingSlot<CommandBasicInfo>,
+        ): OutboundMessageStager {
             val stager = mockk<OutboundMessageStager>()
-            every { stager.stage(message = capture(staged), basicInfo = any()) } returns
+            every { stager.stage(message = capture(staged), basicInfo = capture(stagedBasicInfo)) } returns
                 mockk<CommandEvent<EventPayload>>(relaxed = true)
             return stager
         }
@@ -134,6 +139,7 @@ class CveSubscriptionSlashServiceImplTest :
             every { topicRepository.findActiveTopics() } returns emptyList()
             val commandExecutor = mockk<CommandExecutor>(relaxed = true)
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val publisher = mockk<EventPublisher>(relaxed = true)
             val service =
                 serviceWith(
@@ -141,7 +147,7 @@ class CveSubscriptionSlashServiceImplTest :
                     topicRepository = topicRepository,
                     subscriptionRepository = mockk(relaxed = true),
                     commandExecutor = commandExecutor,
-                    stager = stagerCapturing(staged = staged),
+                    stager = stagerCapturing(staged = staged, stagedBasicInfo = stagedBasicInfo),
                     publisher = publisher,
                 )
 
@@ -153,7 +159,7 @@ class CveSubscriptionSlashServiceImplTest :
                     val ephemeral = staged.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldContain
                         "no CVE topics available"
-                    ephemeral.shouldCopyToRequesterDm()
+                    ephemeral.shouldCopyToRequesterDm(stagedBasicInfo = stagedBasicInfo)
                     verify(exactly = 1) { publisher.publishEvent(events = any()) }
                 }
             }
@@ -164,13 +170,14 @@ class CveSubscriptionSlashServiceImplTest :
             every { subscriptionRepository.findSubscribedTopics(userId = "U_SUB") } returns emptyList()
             val commandExecutor = mockk<CommandExecutor>(relaxed = true)
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     enabled = true,
                     topicRepository = mockk(relaxed = true),
                     subscriptionRepository = subscriptionRepository,
                     commandExecutor = commandExecutor,
-                    stager = stagerCapturing(staged = staged),
+                    stager = stagerCapturing(staged = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("/unsubscribe is received") {
@@ -181,7 +188,7 @@ class CveSubscriptionSlashServiceImplTest :
                     val ephemeral = staged.captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
                     ephemeral.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldContain
                         "no CVE topic subscriptions to remove"
-                    ephemeral.shouldCopyToRequesterDm()
+                    ephemeral.shouldCopyToRequesterDm(stagedBasicInfo = stagedBasicInfo)
                 }
             }
         }

@@ -70,7 +70,21 @@ fun multiUsersSelectStateJson(selectedUsers: List<String>) =
         }]}"""
     }
 
-fun plainTextInputStateJson(value: String) = """{"type":"plain_text_input","value":"$value"}"""
+private fun jsonEscaped(value: String): String =
+    buildString {
+        value.forEach { char ->
+            when {
+                char == '"' -> append("\\\"")
+                char == '\\' -> append("\\\\")
+                char.code < CONTROL_CHARACTER_LIMIT -> append("\\u%04x".format(char.code))
+                else -> append(char)
+            }
+        }
+    }
+
+private const val CONTROL_CHARACTER_LIMIT = 0x20
+
+fun plainTextInputStateJson(value: String) = """{"type":"plain_text_input","value":"${jsonEscaped(value = value)}"}"""
 
 fun datepickerStateJson(selectedDate: String) = """{"type":"datepicker","selected_date":"$selectedDate"}"""
 
@@ -85,6 +99,27 @@ fun checkboxesStateJson(selectedOptions: List<Pair<String, String>>) =
                 """{"text":{"type":"plain_text","text":"$text"},"value":"$value"}"""
             }
         }]}"""
+    }
+
+fun conversationsSelectStateJson(selectedConversation: String?) =
+    if (selectedConversation == null) {
+        """{"type":"conversations_select","selected_conversation":null}"""
+    } else {
+        """{"type":"conversations_select","selected_conversation":"$selectedConversation"}"""
+    }
+
+fun staticSelectStateJson(value: String, text: String = value) =
+    """{"type":"static_select","selected_option":{"text":{"type":"plain_text","text":"$text"},"value":"$value"}}"""
+
+data class StateValueEntry(
+    val blockId: String,
+    val actionId: String,
+    val stateJson: String,
+)
+
+fun inputBlockStateValuesJson(entries: List<StateValueEntry>): String =
+    entries.joinToString(separator = ",", prefix = "{", postfix = "}") { (blockId, actionId, stateJson) ->
+        """"$blockId":{"$actionId":$stateJson}"""
     }
 
 fun unknownStateJson(type: String = "some_unknown_type") = """{"type":"$type"}"""

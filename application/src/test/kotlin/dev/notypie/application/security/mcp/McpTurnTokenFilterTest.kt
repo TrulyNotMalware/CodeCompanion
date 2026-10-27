@@ -1,6 +1,7 @@
 package dev.notypie.application.security.mcp
 
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import jakarta.servlet.Filter
@@ -30,6 +31,12 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicReference
 
+private data class RejectedTokenCase(
+    val description: String,
+    val authorization: String?,
+    val reason: String,
+)
+
 class McpTurnTokenFilterTest :
     BehaviorSpec({
         val now = Instant.parse("2026-07-08T12:00:00Z")
@@ -41,13 +48,24 @@ class McpTurnTokenFilterTest :
                 clock = Clock.fixed(now, ZoneOffset.UTC),
             )
         val token = codec.mint(userId = "U123", sessionKey = "C1:1751.0001", turnId = "turn-1")
+        val tamperedToken = token.dropLast(n = 1) + if (token.last() == 'A') 'B' else 'A'
+        val expiredToken =
+            ScopedTurnTokenCodec(
+                signingSecret = "test-signing-secret",
+                tokenTtl = Duration.ofSeconds(300L),
+                clockSkew = Duration.ofSeconds(30L),
+                clock = Clock.fixed(now.minusSeconds(331L), ZoneOffset.UTC),
+            ).mint(userId = "U123", sessionKey = "C1:1751.0001", turnId = "turn-1")
 
-        fun mcpRequest(remoteAddr: String, extraHeaders: Map<String, String> = emptyMap()) =
-            MockHttpServletRequest("POST", "/mcp").apply {
-                this.remoteAddr = remoteAddr
-                addHeader("Authorization", "Bearer $token")
-                extraHeaders.forEach { (name, value) -> addHeader(name, value) }
-            }
+        fun mcpRequest(
+            remoteAddr: String,
+            extraHeaders: Map<String, String> = emptyMap(),
+            authorization: String? = "Bearer $token",
+        ) = MockHttpServletRequest("POST", "/mcp").apply {
+            this.remoteAddr = remoteAddr
+            authorization?.let { addHeader("Authorization", it) }
+            extraHeaders.forEach { (name, value) -> addHeader(name, value) }
+        }
 
         fun filterResult(filter: McpTurnTokenFilter, request: MockHttpServletRequest): Pair<Int, Boolean> {
             val response = MockHttpServletResponse()
@@ -85,7 +103,46 @@ class McpTurnTokenFilterTest :
                     then("it is rejected even though the socket address is loopback") {
                         response.status shouldBe 401
                         response.contentAsString shouldContain "loopback-only"
-                        (chain.request == null) shouldBe true
+                        chain.request.shouldBeNull()
+                    }
+                }
+            }
+
+            listOf(
+                RejectedTokenCase(
+                    description = "no Authorization header",
+                    authorization = null,
+                    reason = "missing token",
+                ),
+                RejectedTokenCase(
+                    description = "a valid turn token under the Basic scheme",
+                    authorization = "Basic $token",
+                    reason = "missing token",
+                ),
+                RejectedTokenCase(
+                    description = "a turn token with one signature character changed",
+                    authorization = "Bearer $tamperedToken",
+                    reason = "invalid token",
+                ),
+                RejectedTokenCase(
+                    description = "a turn token that expired beyond the clock skew",
+                    authorization = "Bearer $expiredToken",
+                    reason = "invalid token",
+                ),
+            ).forEach { (description, authorization, reason) ->
+                `when`("a loopback caller presents $description") {
+                    val response = MockHttpServletResponse()
+                    val chain = MockFilterChain()
+                    filter.doFilter(
+                        mcpRequest(remoteAddr = "127.0.0.1", authorization = authorization),
+                        response,
+                        chain,
+                    )
+
+                    then("it is rejected with 401 and reason '$reason' before reaching the MCP server") {
+                        response.status shouldBe 401
+                        response.contentAsString shouldContain "\"reason\":\"$reason\""
+                        chain.request.shouldBeNull()
                     }
                 }
             }

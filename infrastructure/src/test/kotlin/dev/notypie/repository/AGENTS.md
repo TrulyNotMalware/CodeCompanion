@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # infrastructure/src/test/kotlin/dev/notypie/repository
 
@@ -7,8 +7,8 @@
 Specs for the persistence lanes in main `repository/`. Each covered lane follows the
 pairing convention: `Jpa*RepositoryTest` is a `@DataJpaTest` on the shared H2 that exercises real JPQL and
 native CAS statements, and `*RepositoryImplTest` is a plain Kotest spec with a MockK'd JPA repository that
-pins the mapping/delegation layer. Coverage gaps as of this writing: `standup/`, `agent/`, `mcp/` and `authorization/` have
-only the H2 specs listed below, and `JpaCveSubscriptionRepository` has no H2 spec. `outbox/` covers the codec,
+pins the mapping/delegation layer. Coverage gaps as of this writing: `agent/` and `mcp/` have
+only the H2 specs listed below (`standup/` has `StandupRepositoryImplTest` and `StandupReadQueriesTest`, `authorization/` has `UserCommandRoleRepositoryImplTest`), and `JpaCveSubscriptionRepository` has no H2 spec. `outbox/` covers the codec,
 the row builder and, in `MessageOutboxRepositoryTest`, every native claim / renew / defer / complete /
 abandon / purge statement of `MessageOutboxRepository` on H2.
 
@@ -27,7 +27,7 @@ abandon / purge statement of `MessageOutboxRepository` on H2.
 | `mcp/` | `McpToolCallHistoryRepositoryImplTest` — tool-call counts per tool and outcome since a window start (see `mcp/AGENTS.md`) |
 | `meeting/` | `JpaMeetingRepositoryTest`, `MeetingRepositoryImplTest`, and the Spring-booting `MeetingRepositoryWriteTest` (see `meeting/AGENTS.md`) |
 | `outbox/` | `MessageOutboxRepositoryTest` (H2 native statements), `OutboundMessageCodecTest`; `schema/` holds `OutboxMessageTest` (see `outbox/AGENTS.md`) |
-| `standup/` | `JpaStandupSessionRepositoryTest` (both collections map each answer once) and `StandupDispatchSweepTest` (clock-bound stuck sweep) (see `standup/AGENTS.md`) |
+| `standup/` | `JpaStandupSessionRepositoryTest` (both collections map each answer once), `StandupDispatchSweepTest` (clock-bound stuck sweep), `StandupRepositoryImplTest` (adapter writes, CAS, skip/answer and lock-order handshakes on a committed H2) and `StandupReadQueriesTest` (the six read queries at their boundaries, fetch pinned by calling the unproxied Impl outside a transaction) (see `standup/AGENTS.md`) |
 | `calendar/` | `JpaGoogleOAuthStateRepositoryTest` (single-use consume CAS, per-user delete, purge), `GoogleCalendarConnectionRepositoryImplTest` (upsert in place, delete, active-connection check, `markRevoked`, the `@Version` races of reconnect and disconnect) and `JpaMeetingCalendarEventRepositoryTest` (mirror queue on its own `MODE=MariaDB` H2 database: enqueue upsert/touch, claim snapshot, generation CAS on success and failure, delete/release, retry/fail, stuck sweep, per-user fail and the id-bounded revive (`touchForUser`), worker transaction guard, sync view) (see `calendar/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

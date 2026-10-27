@@ -124,6 +124,48 @@ class InteractionCommandTest :
                 }
             }
 
+            `when`("payload is InboundInteraction with MEETING_APPROVAL_REQUEST") {
+                val idempotencyKey = UUID.randomUUID()
+                val interactionPayload =
+                    createInboundInteraction(
+                        detailType = CommandDetailType.MEETING_APPROVAL_REQUEST,
+                        idempotencyKey = idempotencyKey,
+                    )
+
+                val command =
+                    InteractionCommand(
+                        appName = "TestApp",
+                        idempotencyKey = idempotencyKey,
+                        commandData = createInteractionResponseInboundCommand(interaction = interactionPayload),
+                        actorRole = UserRole.ADMIN,
+                    )
+
+                then("should return MeetingSubCommandDefinition.NONE") {
+                    command.findSubCommandDefinition() shouldBe MeetingSubCommandDefinition.NONE
+                }
+            }
+
+            `when`("payload is InboundInteraction with CANCEL_MEETING") {
+                val idempotencyKey = UUID.randomUUID()
+                val interactionPayload =
+                    createInboundInteraction(
+                        detailType = CommandDetailType.CANCEL_MEETING,
+                        idempotencyKey = idempotencyKey,
+                    )
+
+                val command =
+                    InteractionCommand(
+                        appName = "TestApp",
+                        idempotencyKey = idempotencyKey,
+                        commandData = createInteractionResponseInboundCommand(interaction = interactionPayload),
+                        actorRole = UserRole.ADMIN,
+                    )
+
+                then("should return NoSubCommands") {
+                    command.findSubCommandDefinition().shouldBeInstanceOf<NoSubCommands>()
+                }
+            }
+
             `when`("payload is not InboundInteraction") {
                 val commandData = createMentionInboundCommand(commandTokens = listOf("notice"))
                 val idempotencyKey = UUID.randomUUID()

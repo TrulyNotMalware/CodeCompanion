@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/command
 
@@ -31,7 +31,7 @@ always succeeds, and fresh `IntentQueue` / `EventQueue` instances. Every context
   it. `createCommandBasicInfo` is the default `responseBasicInfo` everywhere.
 - **Field helpers** mirror what the production mapper produces: `applyButtonField()` / `rejectButtonField()`
   are `UNKNOWN`-kind selected fields (a button carries no input semantics), `plainTextField` is `TEXT`,
-  the date/time pickers format with the pattern you pass, and `multiUsersField(name, n)` joins
+  the date/time pickers format with the pattern you pass, and `usersField(userIds)` joins an explicit id list, `multiUsersField(name, n)` joins
   `name1,name2,…` with `SEPARATOR` when `n > 0`. Used by `MeetingContextTest`,
   `MeetingApprovalResponseContextTest`, `StandupFillContextTest`, `InboundInteractionTest`.
 - **Envelopes**: `createMentionInboundCommand` (`CommandTest`, `InteractionCommandTest`,

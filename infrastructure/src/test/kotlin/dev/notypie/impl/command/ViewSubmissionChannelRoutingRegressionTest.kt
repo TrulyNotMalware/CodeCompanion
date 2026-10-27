@@ -1,7 +1,16 @@
 package dev.notypie.impl.command
 
 import com.slack.api.model.block.ActionsBlock
+import com.slack.api.model.block.InputBlock
+import com.slack.api.model.block.element.BlockElement
 import com.slack.api.model.block.element.ButtonElement
+import com.slack.api.model.block.element.ConversationsSelectElement
+import com.slack.api.model.block.element.DatePickerElement
+import com.slack.api.model.block.element.MultiStaticSelectElement
+import com.slack.api.model.block.element.MultiUsersSelectElement
+import com.slack.api.model.block.element.PlainTextInputElement
+import com.slack.api.model.block.element.StaticSelectElement
+import com.slack.api.model.block.element.TimePickerElement
 import com.slack.api.model.view.View
 import com.slack.api.util.json.GsonFactory
 import dev.notypie.domain.TEST_BOT_TOKEN
@@ -11,6 +20,7 @@ import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.InteractionCommand
+import dev.notypie.domain.command.inbound.InboundInteraction
 import dev.notypie.domain.command.inbound.InboundSubmission
 import dev.notypie.domain.command.intent.CommandEffect
 import dev.notypie.domain.command.intent.CommandIntent
@@ -33,6 +43,8 @@ import dev.notypie.templates.StandupModalIds
 import dev.notypie.templates.StandupSetupModalIds
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldContainAll
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
@@ -536,6 +548,203 @@ class ViewSubmissionChannelRoutingRegressionTest :
                     reschedule.requesterId shouldBe originChannel
                     output.channel shouldNotBe originChannel
                     output.channel shouldBe requesterId
+                }
+            }
+        }
+
+        fun stateEntryOf(element: BlockElement, answer: String): Pair<String, String> =
+            when (element) {
+                is PlainTextInputElement ->
+                    element.actionId to plainTextInputStateJson(value = answer)
+                is MultiUsersSelectElement ->
+                    element.actionId to multiUsersSelectStateJson(selectedUsers = answer.split(","))
+                is ConversationsSelectElement ->
+                    element.actionId to conversationsSelectStateJson(selectedConversation = answer)
+                is TimePickerElement ->
+                    element.actionId to timepickerStateJson(selectedTime = answer)
+                is DatePickerElement ->
+                    element.actionId to datepickerStateJson(selectedDate = answer)
+                is StaticSelectElement -> {
+                    element.options.map { it.value } shouldContain answer
+                    element.actionId to staticSelectStateJson(value = answer)
+                }
+                is MultiStaticSelectElement -> {
+                    val picked = answer.split(",")
+                    element.options.map { it.value }.shouldContainAll(picked)
+                    element.actionId to multiStaticSelectStateJson(selectedOptions = picked.map { it to it })
+                }
+                else -> error("no state synthesiser for element type ${element::class.simpleName}")
+            }
+
+        fun submitEmittedModal(
+            modalJson: String,
+            callbackId: String,
+            answers: Map<String, String>,
+        ): InboundInteraction {
+            val view = GsonFactory.createSnakeCase().fromJson(modalJson, View::class.java)
+            view.callbackId shouldBe callbackId
+            val inputs = view.blocks.filterIsInstance<InputBlock>()
+            inputs.map { it.blockId }.toSet() shouldBe answers.keys
+            val entries =
+                inputs.map { input ->
+                    val (actionId, entry) =
+                        stateEntryOf(element = input.element, answer = answers.getValue(input.blockId))
+                    StateValueEntry(blockId = input.blockId, actionId = actionId, stateJson = entry)
+                }
+            val payload =
+                createRoutingOnlyViewSubmissionJson(
+                    callbackId = view.callbackId,
+                    privateMetadata = view.privateMetadata,
+                    stateValues = inputBlockStateValuesJson(entries = entries),
+                )
+            return parser.parseStringPayload(payload = payload).toInbound()
+        }
+
+        given("the standup-setup modal's emitted input elements are filled and read back") {
+            val setupKey = UUID.randomUUID()
+            val modalJson =
+                templateBuilder.standupSetupModalViewJson(
+                    idempotencyKey = setupKey,
+                    creatorId = "U_CREATOR",
+                    commandChannel = "C_COMMAND",
+                )
+
+            `when`("every emitted input block is answered according to its element type") {
+                val inbound =
+                    submitEmittedModal(
+                        modalJson = modalJson,
+                        callbackId = StandupSetupModalIds.CALLBACK_ID,
+                        answers =
+                            mapOf(
+                                "standup_setup_name" to "daily",
+                                "standup_setup_questions" to "Done?\nBlocked?",
+                                "standup_setup_members" to "U_A,U_B",
+                                "standup_setup_summary_channel" to "C_SUMMARY",
+                                "standup_setup_weekdays" to "MONDAY,FRIDAY",
+                                "standup_setup_time" to "09:15",
+                                "standup_setup_cutoff" to "90",
+                                "standup_setup_timezone" to "Asia/Seoul",
+                            ),
+                    )
+
+                then("the parser and mapper deliver each answer to its own StandupSetup field") {
+                    inbound.submission shouldBe
+                        InboundSubmission.StandupSetup(
+                            idempotencyKeyRaw = setupKey.toString(),
+                            creatorId = "U_CREATOR",
+                            commandChannel = "C_COMMAND",
+                            name = "daily",
+                            questionsRaw = "Done?\nBlocked?",
+                            membersRaw = "U_A,U_B",
+                            summaryChannel = "C_SUMMARY",
+                            weekdaysRaw = "MONDAY, FRIDAY",
+                            timeRaw = "09:15",
+                            cutoffRaw = "90",
+                            timezoneRaw = "Asia/Seoul",
+                        )
+                }
+            }
+        }
+
+        given("the add-participant modal's emitted input elements are filled and read back") {
+            val meetingUid = UUID.randomUUID()
+            val modalJson =
+                templateBuilder.addParticipantModalViewJson(
+                    meetingUid = meetingUid,
+                    requesterId = "U_HOST",
+                    channel = "C_ORIGIN",
+                    listResponseUrl = "",
+                )
+
+            `when`("the participants are picked") {
+                val inbound =
+                    submitEmittedModal(
+                        modalJson = modalJson,
+                        callbackId = AddParticipantModalIds.CALLBACK_ID,
+                        answers = mapOf("add_participant_users" to "U_NEW1,U_NEW2"),
+                    )
+
+                then("AddParticipant carries the picked users, meeting and requester") {
+                    inbound.submission shouldBe
+                        InboundSubmission.AddParticipant(
+                            meetingUidRaw = meetingUid.toString(),
+                            requesterId = "U_HOST",
+                            participantUserIdsRaw = "U_NEW1,U_NEW2",
+                            listHandle = null,
+                        )
+                }
+            }
+        }
+
+        given("the decline-reason modal's emitted input elements are filled and read back") {
+            val meetingKey = UUID.randomUUID()
+            val modalJson =
+                templateBuilder.declineReasonModalViewJson(
+                    meetingTitle = "Project sync",
+                    meetingIdempotencyKey = meetingKey,
+                    participantUserId = "U_GUEST",
+                    noticeChannel = "D_NOTICE",
+                    noticeMessageTs = "1700000000.000900",
+                )
+
+            `when`("a reason and a detail are entered") {
+                val inbound =
+                    submitEmittedModal(
+                        modalJson = modalJson,
+                        callbackId = DeclineReasonModalIds.CALLBACK_ID,
+                        answers =
+                            mapOf(
+                                "decline_reason_block" to "OTHER",
+                                "decline_reason_detail_block" to "childcare",
+                            ),
+                    )
+
+                then("the select becomes the reason and the text input becomes the detail") {
+                    inbound.submission shouldBe
+                        InboundSubmission.DeclineReason(
+                            meetingIdempotencyKeyRaw = meetingKey.toString(),
+                            participantUserId = "U_GUEST",
+                            noticeChannel = "D_NOTICE",
+                            noticeMessageTs = "1700000000.000900",
+                            reasonRaw = "OTHER",
+                            detailRaw = "childcare",
+                        )
+                }
+            }
+        }
+
+        given("the reschedule modal's emitted pickers are filled and read back") {
+            val meetingUid = UUID.randomUUID()
+            val modalJson =
+                templateBuilder.rescheduleMeetingModalViewJson(
+                    meetingUid = meetingUid,
+                    currentStartAt = LocalDateTime.of(2026, 7, 1, 14, 30),
+                    requesterId = "U_HOST",
+                    channel = "C_ORIGIN",
+                    listResponseUrl = "",
+                )
+
+            `when`("a new date and time are picked") {
+                val inbound =
+                    submitEmittedModal(
+                        modalJson = modalJson,
+                        callbackId = RescheduleMeetingModalIds.CALLBACK_ID,
+                        answers =
+                            mapOf(
+                                "reschedule_meeting_date" to "2099-07-10",
+                                "reschedule_meeting_time" to "15:45",
+                            ),
+                    )
+
+                then("RescheduleMeeting carries the picked date and time") {
+                    inbound.submission shouldBe
+                        InboundSubmission.RescheduleMeeting(
+                            meetingUidRaw = meetingUid.toString(),
+                            requesterId = "U_HOST",
+                            date = "2099-07-10",
+                            time = "15:45",
+                            listHandle = null,
+                        )
                 }
             }
         }

@@ -4,6 +4,7 @@ import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.TEST_CHANNEL_ID
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createCveOpsRequestEvent
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.CveOpsAction
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -35,10 +36,11 @@ class CveOpsServiceTest :
             topicRepository: CveTopicRepository,
             eventRepository: CveEventRepository,
             stagedMessage: CapturingSlot<OutboundMessage>,
+            stagedBasicInfo: CapturingSlot<CommandBasicInfo>,
             enabled: Boolean = true,
         ): Pair<CveOpsService, EventPublisher> {
             val stager = mockk<OutboundMessageStager>()
-            every { stager.stage(message = capture(stagedMessage), basicInfo = any()) } returns
+            every { stager.stage(message = capture(stagedMessage), basicInfo = capture(stagedBasicInfo)) } returns
                 mockk<CommandEvent<EventPayload>>(relaxed = true)
             val publisher = mockk<EventPublisher>(relaxed = true)
             val service =
@@ -56,9 +58,10 @@ class CveOpsServiceTest :
             return service to publisher
         }
 
-        fun CapturingSlot<OutboundMessage>.markdown(): String {
+        fun CapturingSlot<OutboundMessage>.markdown(stagedBasicInfo: CapturingSlot<CommandBasicInfo>): String {
             val reply = captured.shouldBeInstanceOf<OutboundMessage.Ephemeral>()
             reply.target.id shouldBe TEST_CHANNEL_ID
+            stagedBasicInfo.captured.channel shouldBe TEST_CHANNEL_ID
             reply.recipient shouldBe UserRef(id = TEST_USER_ID)
             val content = reply.content.shouldBeInstanceOf<MessageContent.Text>()
             content.headline shouldBe "CodeCompanion — CVE operations"
@@ -88,18 +91,20 @@ class CveOpsServiceTest :
             every { eventRepository.countEventsByTopic(topicIds = listOf(1L, 2L)) } returns
                 listOf(TopicEventCount(topicId = 1L, count = 7L))
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
                 service.handleCveOps(event = createCveOpsRequestEvent(action = CveOpsAction.LIST_TOPICS))
 
                 then("every topic is listed with mode, active flag, and event count (zero when absent)") {
-                    val markdown = staged.markdown()
+                    val markdown = staged.markdown(stagedBasicInfo = stagedBasicInfo)
                     markdown shouldContain "CVE topics (2):"
                     markdown shouldContain "• *Kotlin* (`kotlin`) — digest, active, 7 event(s)"
                     markdown shouldContain "• *Java CVE* (`cve-java`) — immediate, inactive, 0 event(s)"
@@ -113,11 +118,13 @@ class CveOpsServiceTest :
             every { topicRepository.findAllTopics() } returns
                 listOf(createCveTopic(id = 1L, topicKey = "kotlin", displayName = "Kotlin", active = true))
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -127,7 +134,8 @@ class CveOpsServiceTest :
 
                 then("the flag is flipped and the reply confirms the old to new transition") {
                     verify(exactly = 1) { topicRepository.setActive(topicKey = "kotlin", active = false) }
-                    staged.markdown() shouldBe "Topic *Kotlin* (`kotlin`): active → inactive."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe
+                        "Topic *Kotlin* (`kotlin`): active → inactive."
                 }
             }
         }
@@ -139,18 +147,21 @@ class CveOpsServiceTest :
                 listOf(createCveTopic(id = 1L, topicKey = "r&d", displayName = "<!channel>", active = true))
             every { eventRepository.countEventsByTopic(topicIds = listOf(1L)) } returns emptyList()
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("the topics are listed") {
                 service.handleCveOps(event = createCveOpsRequestEvent(action = CveOpsAction.LIST_TOPICS))
 
                 then("the name and key are escaped") {
-                    staged.markdown() shouldContain "• *&lt;!channel&gt;* (`r&amp;d`) — "
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldContain
+                        "• *&lt;!channel&gt;* (`r&amp;d`) — "
                 }
             }
 
@@ -160,7 +171,8 @@ class CveOpsServiceTest :
                 )
 
                 then("the echoed name and key are escaped") {
-                    staged.markdown() shouldBe "Topic *&lt;!channel&gt;* (`r&amp;d`): active → inactive."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe
+                        "Topic *&lt;!channel&gt;* (`r&amp;d`): active → inactive."
                 }
             }
 
@@ -170,7 +182,7 @@ class CveOpsServiceTest :
                 )
 
                 then("the echoed key is escaped") {
-                    staged.markdown() shouldBe "No CVE topic with key `&lt;!here&gt;`."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe "No CVE topic with key `&lt;!here&gt;`."
                 }
             }
         }
@@ -181,11 +193,13 @@ class CveOpsServiceTest :
             every { topicRepository.findAllTopics() } returns
                 listOf(createCveTopic(id = 1L, topicKey = "springBoot", displayName = "Spring Boot", active = true))
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -195,7 +209,8 @@ class CveOpsServiceTest :
 
                 then("the stored mixed-case key is found and toggled") {
                     verify(exactly = 1) { topicRepository.setActive(topicKey = "springBoot", active = false) }
-                    staged.markdown() shouldBe "Topic *Spring Boot* (`springBoot`): active → inactive."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe
+                        "Topic *Spring Boot* (`springBoot`): active → inactive."
                 }
             }
         }
@@ -205,11 +220,13 @@ class CveOpsServiceTest :
             val eventRepository = mockk<CveEventRepository>()
             every { topicRepository.findAllTopics() } returns emptyList()
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -219,7 +236,7 @@ class CveOpsServiceTest :
 
                 then("an error text is returned without flipping anything") {
                     verify(exactly = 0) { topicRepository.setActive(topicKey = any(), active = any()) }
-                    staged.markdown() shouldBe "No CVE topic with key `ghost`."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe "No CVE topic with key `ghost`."
                 }
             }
         }
@@ -229,18 +246,21 @@ class CveOpsServiceTest :
             val eventRepository = mockk<CveEventRepository>()
             every { eventRepository.resetDeadLetters(maxRetries = maxRetries) } returns 3
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, publisher) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
                 service.handleCveOps(event = createCveOpsRequestEvent(action = CveOpsAction.RETRY_ALL))
 
                 then("the revived count is reported and the reply is published") {
-                    staged.markdown() shouldBe "Re-queued 3 dead-letter event(s) for summarization."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe
+                        "Re-queued 3 dead-letter event(s) for summarization."
                     verify(exactly = 1) { publisher.publishEvent(events = any()) }
                 }
             }
@@ -251,11 +271,13 @@ class CveOpsServiceTest :
             val eventRepository = mockk<CveEventRepository>()
             every { eventRepository.resetDeadLetter(id = 42L, maxRetries = maxRetries) } returns 1
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -264,7 +286,7 @@ class CveOpsServiceTest :
                 )
 
                 then("the event is reported as re-queued") {
-                    staged.markdown() shouldBe "Re-queued event #42 for summarization."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe "Re-queued event #42 for summarization."
                 }
             }
         }
@@ -274,11 +296,13 @@ class CveOpsServiceTest :
             val eventRepository = mockk<CveEventRepository>()
             every { eventRepository.resetDeadLetter(id = 99L, maxRetries = maxRetries) } returns 0
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -287,7 +311,7 @@ class CveOpsServiceTest :
                 )
 
                 then("a not-a-dead-letter text is returned rather than an exception") {
-                    staged.markdown() shouldContain "Event #99 is not a dead-letter"
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldContain "Event #99 is not a dead-letter"
                 }
             }
         }
@@ -296,11 +320,13 @@ class CveOpsServiceTest :
             val topicRepository = mockk<CveTopicRepository>(relaxed = true)
             val eventRepository = mockk<CveEventRepository>(relaxed = true)
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, publisher) =
                 serviceWith(
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
                     stagedMessage = staged,
+                    stagedBasicInfo = stagedBasicInfo,
                     enabled = false,
                 )
 
@@ -310,7 +336,7 @@ class CveOpsServiceTest :
                 then("nothing is written but the admin still gets a disabled reply") {
                     verify(exactly = 0) { eventRepository.resetDeadLetters(maxRetries = any()) }
                     verify(exactly = 0) { topicRepository.findAllTopics() }
-                    staged.markdown() shouldBe "The CVE feature is currently disabled."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe "The CVE feature is currently disabled."
                     verify(exactly = 1) { publisher.publishEvent(events = any()) }
                 }
             }

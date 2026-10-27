@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # application/security/mcp
 
@@ -52,10 +52,11 @@ inside/outside the skew window, tampered signature, wrong version, and blank sec
 covers the filter's address gate: a loopback caller with a valid token reaches the chain; a non-loopback
 caller, or a loopback one carrying `X-Forwarded-For` / `X-Real-IP`-style headers, gets 401 `loopback-only`
 without the chain (also behind a real Jetty connector and with the Kubernetes forward-header settings); with
-remote callers allowed the token alone decides. Every request in it carries a valid token, so a missing,
-non-Bearer, tampered or expired token on a loopback request is not pinned (review finding C-05); use
-`MockHttpServletRequest` and `MockFilterChain` as that spec does. Build tokens with `createScopedTurnToken()` from
-`src/testFixtures/kotlin/dev/notypie/application/security/mcp/ScopedTurnTokenCreator.kt`.
+remote callers allowed the token alone decides. The token gate on loopback requests is pinned too: no
+`Authorization`, a `Basic` scheme, a tampered token and an expired token each get 401 with their `reason` and
+no chain call. Use `MockHttpServletRequest` and `MockFilterChain` as that spec does; `createScopedTurnToken()` in
+`src/testFixtures/kotlin/dev/notypie/application/security/mcp/ScopedTurnTokenCreator.kt` builds the decoded
+claims object, and token strings are minted with the spec's own `ScopedTurnTokenCodec`.
 
 ### Common Patterns
 - Constructor-injected `Clock` (no default; `McpServerConfiguration` passes the context bean) for every time decision.

@@ -117,6 +117,9 @@ fun unselectedTimePickerField() = inboundField(kind = InboundFieldKind.TIME, isS
 
 fun toggleField(isSelected: Boolean = false) = inboundField(kind = InboundFieldKind.TOGGLE, isSelected = isSelected)
 
+fun usersField(userIds: List<String>) =
+    inboundField(kind = InboundFieldKind.USERS, isSelected = true, rawValue = userIds.joinToString(SEPARATOR))
+
 fun multiUsersField(userName: String = TEST_USER_NAME, maximumSequence: Int = 0) =
     inboundField(
         kind = InboundFieldKind.USERS,

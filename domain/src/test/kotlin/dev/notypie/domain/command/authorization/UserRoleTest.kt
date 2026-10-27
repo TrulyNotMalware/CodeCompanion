@@ -26,6 +26,32 @@ class UserRoleTest :
                     UserRole.DEVELOPER.grants(permission = CommandPermission.ADMINISTRATION) shouldBe false
                 }
 
+                then("each role holds exactly the permissions the role table lists") {
+                    val expected =
+                        mapOf(
+                            UserRole.USER to setOf(CommandPermission.BASIC),
+                            UserRole.AI_USER to setOf(CommandPermission.BASIC, CommandPermission.AI),
+                            UserRole.DEVELOPER to
+                                setOf(CommandPermission.BASIC, CommandPermission.AI, CommandPermission.OPERATIONS),
+                            UserRole.ADMIN to
+                                setOf(
+                                    CommandPermission.BASIC,
+                                    CommandPermission.AI,
+                                    CommandPermission.OPERATIONS,
+                                    CommandPermission.ADMINISTRATION,
+                                ),
+                        )
+                    UserRole.entries.forEach { role ->
+                        CommandPermission.entries.filter { role.grants(permission = it) }.toSet() shouldBe
+                            expected.getValue(key = role)
+                    }
+                }
+
+                then("USER and AI_USER lack ADMINISTRATION") {
+                    UserRole.USER.grants(permission = CommandPermission.ADMINISTRATION) shouldBe false
+                    UserRole.AI_USER.grants(permission = CommandPermission.ADMINISTRATION) shouldBe false
+                }
+
                 then("ADMIN holds every permission, including ones added later") {
                     CommandPermission.entries.forEach { permission ->
                         UserRole.ADMIN.grants(permission = permission) shouldBe true

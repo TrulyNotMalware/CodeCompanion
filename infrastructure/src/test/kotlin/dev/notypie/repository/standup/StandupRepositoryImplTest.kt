@@ -16,6 +16,7 @@ import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldNotContain
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest
@@ -24,12 +25,23 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 private const val LOCK_HOLD_MILLIS = 300L
+
+private const val BLOCK_PROBE_MILLIS = 500L
+
+private const val HANDSHAKE_TIMEOUT_SECONDS = 10L
+
+private data class HeldLockOutcome<H, W>(
+    val held: H,
+    val waited: W,
+    val waiterBlockedWhileHeld: Boolean,
+)
 
 private const val MARIADB_MODE_H2_URL =
     "jdbc:h2:mem:standup_mariadb;MODE=MariaDB;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false"
@@ -87,6 +99,76 @@ class StandupRepositoryImplTest
 
             fun skip(sessionUid: UUID, skippedAt: Instant) =
                 inTx { repository.recordSkip(sessionUid = sessionUid, userId = "U_A", skippedAt = skippedAt) }
+
+            fun <H : Any, W : Any> withHeldLock(
+                holder: (hold: () -> Unit) -> H,
+                waiter: () -> W,
+            ): HeldLockOutcome<H, W> {
+                val acquired = CountDownLatch(1)
+                val release = CountDownLatch(1)
+                val waiterStarted = CountDownLatch(1)
+                val waiterDone = CountDownLatch(1)
+                val held = AtomicReference<H?>()
+                val waited = AtomicReference<W?>()
+                val failures = ConcurrentLinkedQueue<Throwable>()
+                val joinMillis = TimeUnit.SECONDS.toMillis(HANDSHAKE_TIMEOUT_SECONDS)
+                val holderThread =
+                    thread {
+                        runCatching {
+                            held.set(
+                                inTx {
+                                    holder {
+                                        acquired.countDown()
+                                        check(release.await(HANDSHAKE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                                            "the holder was never released"
+                                        }
+                                    }
+                                },
+                            )
+                        }.onFailure { failures.add(it) }
+                        acquired.countDown()
+                    }
+                var waiterThread: Thread? = null
+                var blocked = false
+                try {
+                    check(
+                        acquired.await(HANDSHAKE_TIMEOUT_SECONDS, TimeUnit.SECONDS),
+                    ) { "the holder never took its lock" }
+                    waiterThread =
+                        thread {
+                            runCatching {
+                                waited.set(
+                                    inTx {
+                                        waiterStarted.countDown()
+                                        waiter()
+                                    },
+                                )
+                            }.onFailure { failures.add(it) }
+                            waiterDone.countDown()
+                        }
+                    check(waiterStarted.await(HANDSHAKE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                        "the waiter never started its transaction"
+                    }
+                    blocked = !waiterDone.await(BLOCK_PROBE_MILLIS, TimeUnit.MILLISECONDS)
+                } catch (cause: Throwable) {
+                    failures.add(cause)
+                } finally {
+                    release.countDown()
+                    listOfNotNull(holderThread, waiterThread).forEach { worker ->
+                        worker.join(joinMillis)
+                        if (worker.isAlive) {
+                            worker.interrupt()
+                            failures.add(IllegalStateException("worker ${worker.name} did not finish"))
+                        }
+                    }
+                }
+                failures.toList() shouldBe emptyList()
+                return HeldLockOutcome(
+                    held = held.get().shouldNotBeNull(),
+                    waited = waited.get().shouldNotBeNull(),
+                    waiterBlockedWhileHeld = blocked,
+                )
+            }
 
             fun createActiveRoutine(name: String, creatorId: String, commandChannel: String) =
                 inTx {
@@ -173,7 +255,7 @@ class StandupRepositoryImplTest
                                 submittedAt = cutoffAt.minusSeconds(300L),
                             )
                         } shouldBe AnswerRecordResult.RECORDED
-                        val answers = repository.findSession(sessionUid = sessionUid)!!.answers
+                        val answers = repository.findSession(sessionUid = sessionUid).shouldNotBeNull().answers
                         answers.map { it.userId } shouldContainExactly listOf("U_A")
                         answers.single().responses shouldContainExactly listOf("second", "final")
                         answers.single().submittedAt shouldBe cutoffAt.minusSeconds(300L)
@@ -216,7 +298,7 @@ class StandupRepositoryImplTest
                     then("both are recorded and the member keeps one row with the later answer, no unique violation") {
                         firstResult.get() shouldBe AnswerRecordResult.RECORDED
                         second shouldBe AnswerRecordResult.RECORDED
-                        val answers = repository.findSession(sessionUid = sessionUid)!!.answers
+                        val answers = repository.findSession(sessionUid = sessionUid).shouldNotBeNull().answers
                         answers.single().responses shouldContainExactly listOf("second")
                         answers.single().submittedAt shouldBe cutoffAt.minusSeconds(60L)
                     }
@@ -261,7 +343,7 @@ class StandupRepositoryImplTest
                     then("H2 records both and keeps the later answer in one row") {
                         first shouldBe AnswerRecordResult.RECORDED
                         secondResult.get().getOrThrow() shouldBe AnswerRecordResult.RECORDED
-                        val answers = repository.findSession(sessionUid = sessionUid)!!.answers
+                        val answers = repository.findSession(sessionUid = sessionUid).shouldNotBeNull().answers
                         answers.single().responses shouldContainExactly listOf("second")
                         answers.single().submittedAt shouldBe cutoffAt.minusSeconds(60L)
                     }
@@ -280,7 +362,11 @@ class StandupRepositoryImplTest
 
                     then("it is rejected as closed and no answer row is written") {
                         result shouldBe AnswerRecordResult.SESSION_CLOSED
-                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                        repository
+                            .findSession(sessionUid = sessionUid)
+                            .shouldNotBeNull()
+                            .answers
+                            .shouldBeEmpty()
                     }
                 }
 
@@ -290,7 +376,11 @@ class StandupRepositoryImplTest
 
                     then("it is rejected as closed, since the summary may already be reading the answers") {
                         result shouldBe AnswerRecordResult.SESSION_CLOSED
-                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                        repository
+                            .findSession(sessionUid = sessionUid)
+                            .shouldNotBeNull()
+                            .answers
+                            .shouldBeEmpty()
                     }
                 }
 
@@ -304,7 +394,7 @@ class StandupRepositoryImplTest
 
                 `when`("the summary commits before the answering transaction, whose first statement is the lock") {
                     val sessionUid = openSession()
-                    val sessionId = repository.findSession(sessionUid = sessionUid)!!.sessionId
+                    val sessionId = repository.findSession(sessionUid = sessionUid).shouldNotBeNull().sessionId
                     inTx { repository.markSessionSummarized(sessionId = sessionId, messageTs = "outbox:before") }
                     val result =
                         record(
@@ -315,7 +405,11 @@ class StandupRepositoryImplTest
 
                     then("it is rejected as closed and no answer row is written") {
                         result shouldBe AnswerRecordResult.SESSION_CLOSED
-                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                        repository
+                            .findSession(sessionUid = sessionUid)
+                            .shouldNotBeNull()
+                            .answers
+                            .shouldBeEmpty()
                     }
                 }
 
@@ -326,7 +420,7 @@ class StandupRepositoryImplTest
                     val sessionUid = openSession()
                     val result =
                         inTx {
-                            val loaded = repository.findSession(sessionUid = sessionUid)!!
+                            val loaded = repository.findSession(sessionUid = sessionUid).shouldNotBeNull()
                             thread {
                                 inTx {
                                     repository.markSessionSummarized(
@@ -345,7 +439,11 @@ class StandupRepositoryImplTest
 
                     then("H2 reads SUMMARIZED under the lock, not the managed instance's stale COLLECTING") {
                         result shouldBe AnswerRecordResult.SESSION_CLOSED
-                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                        repository
+                            .findSession(sessionUid = sessionUid)
+                            .shouldNotBeNull()
+                            .answers
+                            .shouldBeEmpty()
                     }
                 }
             }
@@ -359,7 +457,11 @@ class StandupRepositoryImplTest
                         thread {
                             runCatching {
                                 inTx {
-                                    val session = repository.findSessionForSummary(sessionUid = sessionUid)!!
+                                    val session =
+                                        repository
+                                            .findSessionForSummary(
+                                                sessionUid = sessionUid,
+                                            ).shouldNotBeNull()
                                     summaryLocked.countDown()
                                     Thread.sleep(LOCK_HOLD_MILLIS)
                                     repository.markSessionSummarized(
@@ -382,7 +484,11 @@ class StandupRepositoryImplTest
                     then("the answer waits for the summary and is told closed instead of submitted") {
                         summaryFailure.get() shouldBe null
                         result shouldBe AnswerRecordResult.SESSION_CLOSED
-                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                        repository
+                            .findSession(sessionUid = sessionUid)
+                            .shouldNotBeNull()
+                            .answers
+                            .shouldBeEmpty()
                     }
                 }
 
@@ -409,7 +515,8 @@ class StandupRepositoryImplTest
                             answerLocked.countDown()
                         }
                     answerLocked.await(5L, TimeUnit.SECONDS)
-                    val summaryRead = inTx { repository.findSessionForSummary(sessionUid = sessionUid)!! }
+                    val summaryRead =
+                        inTx { repository.findSessionForSummary(sessionUid = sessionUid).shouldNotBeNull() }
                     answer.join()
 
                     then("the summary read waits for the answer's commit and includes it") {
@@ -436,10 +543,20 @@ class StandupRepositoryImplTest
                     then("both are recorded, the first skip time is kept, and the nudge sees the member as skipped") {
                         first shouldBe AnswerRecordResult.RECORDED
                         second shouldBe AnswerRecordResult.RECORDED
-                        val dispatch = repository.findSession(sessionUid = sessionUid)!!.dispatches.single()
+                        val dispatch =
+                            repository
+                                .findSession(
+                                    sessionUid = sessionUid,
+                                ).shouldNotBeNull()
+                                .dispatches
+                                .single()
                         dispatch.skippedAt shouldBe cutoffAt.minusSeconds(600L)
                         dispatch.dmStatus shouldBe DispatchStatus.PENDING
-                        repository.findSession(sessionUid = sessionUid)!!.answers.shouldBeEmpty()
+                        repository
+                            .findSession(sessionUid = sessionUid)
+                            .shouldNotBeNull()
+                            .answers
+                            .shouldBeEmpty()
                         nudgeCandidate.skippedUserIds shouldBe setOf("U_A")
                     }
                 }
@@ -469,6 +586,119 @@ class StandupRepositoryImplTest
                             .dispatches
                             .single()
                             .skippedAt shouldBe null
+                    }
+                }
+
+                `when`("a member skips and then submits an answer") {
+                    val sessionUid = openSession()
+                    val skipped = skip(sessionUid = sessionUid, skippedAt = cutoffAt.minusSeconds(600L))
+                    val answered =
+                        record(
+                            sessionUid = sessionUid,
+                            responses = listOf("changed my mind"),
+                            submittedAt = cutoffAt.minusSeconds(300L),
+                        )
+                    val session = repository.findSession(sessionUid = sessionUid).shouldNotBeNull()
+                    val nudgeCandidate =
+                        inTx {
+                            repository
+                                .findCollectingSessionsForNudge(
+                                    now = cutoffAt.minusSeconds(60L),
+                                    nudgeWindowEnd = cutoffAt,
+                                ).single { it.sessionUid == sessionUid }
+                        }
+
+                    then("the answer is stored and the skip time is kept, so the member counts as both") {
+                        skipped shouldBe AnswerRecordResult.RECORDED
+                        answered shouldBe AnswerRecordResult.RECORDED
+                        session.answers.single().responses shouldContainExactly listOf("changed my mind")
+                        session.dispatches.single().skippedAt shouldBe cutoffAt.minusSeconds(600L)
+                        nudgeCandidate.answeredUserIds shouldBe setOf("U_A")
+                        nudgeCandidate.skippedUserIds shouldBe setOf("U_A")
+                    }
+                }
+
+                `when`("a member answers and then clicks Skip") {
+                    val sessionUid = openSession()
+                    val answered =
+                        record(
+                            sessionUid = sessionUid,
+                            responses = listOf("done"),
+                            submittedAt = cutoffAt.minusSeconds(600L),
+                        )
+                    val skipped = skip(sessionUid = sessionUid, skippedAt = cutoffAt.minusSeconds(300L))
+                    val session = repository.findSession(sessionUid = sessionUid).shouldNotBeNull()
+
+                    then("the answer is untouched and the skip time is recorded") {
+                        answered shouldBe AnswerRecordResult.RECORDED
+                        skipped shouldBe AnswerRecordResult.RECORDED
+                        session.answers.single().responses shouldContainExactly listOf("done")
+                        session.dispatches.single().skippedAt shouldBe cutoffAt.minusSeconds(300L)
+                    }
+                }
+
+                `when`("the summary holds the session lock while a skip arrives") {
+                    val sessionUid = openSession()
+                    val outcome =
+                        withHeldLock(
+                            holder = { hold ->
+                                val read = repository.findSessionForSummary(sessionUid = sessionUid).shouldNotBeNull()
+                                val marked =
+                                    repository.markSessionSummarized(sessionId = read.sessionId, messageTs = "outbox:1")
+                                hold()
+                                read to marked
+                            },
+                            waiter = {
+                                repository.recordSkip(
+                                    sessionUid = sessionUid,
+                                    userId = "U_A",
+                                    skippedAt = cutoffAt.minusSeconds(60L),
+                                )
+                            },
+                        )
+                    val session = repository.findSession(sessionUid = sessionUid).shouldNotBeNull()
+
+                    then("the skip waits, is rejected as closed, and neither the summary read nor the row has it") {
+                        outcome.waiterBlockedWhileHeld shouldBe true
+                        outcome.held.second shouldBe true
+                        outcome.held.first.dispatches
+                            .single()
+                            .skippedAt shouldBe null
+                        outcome.waited shouldBe AnswerRecordResult.SESSION_CLOSED
+                        session.status shouldBe SessionStatus.SUMMARIZED
+                        session.dispatches.single().skippedAt shouldBe null
+                    }
+                }
+
+                `when`("a skip holds the session lock while the summary reads the session") {
+                    val sessionUid = openSession()
+                    val outcome =
+                        withHeldLock(
+                            holder = { hold ->
+                                repository
+                                    .recordSkip(
+                                        sessionUid = sessionUid,
+                                        userId = "U_A",
+                                        skippedAt = cutoffAt.minusSeconds(60L),
+                                    ).also { hold() }
+                            },
+                            waiter = {
+                                val read = repository.findSessionForSummary(sessionUid = sessionUid).shouldNotBeNull()
+                                read to
+                                    repository.markSessionSummarized(sessionId = read.sessionId, messageTs = "outbox:1")
+                            },
+                        )
+                    val session = repository.findSession(sessionUid = sessionUid).shouldNotBeNull()
+
+                    then("the summary waits for the skip's commit, includes it, and the row ends summarized with it") {
+                        outcome.waiterBlockedWhileHeld shouldBe true
+                        outcome.held shouldBe AnswerRecordResult.RECORDED
+                        outcome.waited.first.dispatches
+                            .single()
+                            .skippedAt shouldBe cutoffAt.minusSeconds(60L)
+                        outcome.waited.second shouldBe true
+                        session.status shouldBe SessionStatus.SUMMARIZED
+                        session.dispatches.single().skippedAt shouldBe cutoffAt.minusSeconds(60L)
                     }
                 }
 
@@ -515,7 +745,7 @@ class StandupRepositoryImplTest
                             skippedAt = cutoffAt.minusSeconds(600L),
                         )
                     }
-                    val sessionId = repository.findSession(sessionUid = sessionUid)!!.sessionId
+                    val sessionId = repository.findSession(sessionUid = sessionUid).shouldNotBeNull().sessionId
                     val (claimed, recipients) =
                         inTx {
                             repository.claimNudge(sessionId = sessionId) to
@@ -540,39 +770,31 @@ class StandupRepositoryImplTest
                                     sentDispatch(userId = "U_B"),
                                 ),
                         )
-                    val sessionId = repository.findSession(sessionUid = sessionUid)!!.sessionId
-                    val answerLocked = CountDownLatch(1)
-                    val answerResult = AtomicReference<AnswerRecordResult?>()
-                    val answer =
-                        thread {
-                            runCatching {
-                                inTx {
-                                    repository
-                                        .recordAnswer(
-                                            sessionUid = sessionUid,
-                                            userId = "U_A",
-                                            responses = listOf("made it"),
-                                            submittedAt = cutoffAt.minusSeconds(60L),
-                                        ).also {
-                                            answerLocked.countDown()
-                                            Thread.sleep(LOCK_HOLD_MILLIS)
-                                        }
-                                }
-                            }.onSuccess { answerResult.set(it) }
-                            answerLocked.countDown()
-                        }
-                    answerLocked.await(5L, TimeUnit.SECONDS)
-                    val (claimed, recipients) =
-                        inTx {
-                            repository.claimNudge(sessionId = sessionId) to
-                                repository.findLockedNudgeRecipients(sessionUid = sessionUid)
-                        }
-                    answer.join()
+                    val sessionId = repository.findSession(sessionUid = sessionUid).shouldNotBeNull().sessionId
+                    val outcome =
+                        withHeldLock(
+                            holder = { hold ->
+                                repository
+                                    .recordAnswer(
+                                        sessionUid = sessionUid,
+                                        userId = "U_A",
+                                        responses = listOf("made it"),
+                                        submittedAt = cutoffAt.minusSeconds(60L),
+                                    ).also { hold() }
+                            },
+                            waiter = {
+                                repository.claimNudge(sessionId = sessionId) to
+                                    repository.findLockedNudgeRecipients(sessionUid = sessionUid)
+                            },
+                        )
 
-                    then("the claim waits for the answer's commit and the re-read counts the member as answered") {
-                        answerResult.get() shouldBe AnswerRecordResult.RECORDED
-                        claimed shouldBe true
-                        recipients.answeredUserIds shouldBe setOf("U_A")
+                    then(
+                        "the claim is blocked until the answer commits and the re-read counts the member as answered",
+                    ) {
+                        outcome.waiterBlockedWhileHeld shouldBe true
+                        outcome.held shouldBe AnswerRecordResult.RECORDED
+                        outcome.waited.first shouldBe true
+                        outcome.waited.second.answeredUserIds shouldBe setOf("U_A")
                     }
                 }
 
@@ -660,7 +882,13 @@ class StandupRepositoryImplTest
                     then("the row ends once, as FAILED with a skipped: reason the previous release can read") {
                         first shouldBe true
                         second shouldBe false
-                        val dispatch = repository.findSession(sessionUid = sessionUid)!!.dispatches.single()
+                        val dispatch =
+                            repository
+                                .findSession(
+                                    sessionUid = sessionUid,
+                                ).shouldNotBeNull()
+                                .dispatches
+                                .single()
                         dispatch.dmStatus shouldBe DispatchStatus.FAILED
                         dispatch.failureReason shouldBe "skipped: closed"
                         repository

@@ -14,6 +14,8 @@ import dev.notypie.domain.command.createCalendarConnectionRequestEvent
 import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.CalendarConnectionAction
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.ConversationTarget
 import dev.notypie.domain.command.outbound.MessageContent
@@ -132,12 +134,13 @@ class CalendarConnectionServiceTest :
             }
 
             val staged = mutableListOf<OutboundMessage>()
+            val stagedEvent = mockk<CommandEvent<EventPayload>>(relaxed = true)
             val basicInfos = mutableListOf<CommandBasicInfo>()
             val revocations = mutableListOf<Any>()
             val stager =
                 mockk<OutboundMessageStager> {
                     every { stage(message = capture(staged), basicInfo = capture(basicInfos)) } returns
-                        mockk(relaxed = true)
+                        stagedEvent
                 }
             val publisher = mockk<EventPublisher>(relaxed = true)
             val springEvents =
@@ -571,6 +574,9 @@ class CalendarConnectionServiceTest :
                     val dm = h.directMessage()
                     dm.target.id shouldBe TEST_USER_ID
                     with(h) { dm.markdown() shouldBe "Google Calendar connected as dev@example.com." }
+                    verify(
+                        exactly = 1,
+                    ) { h.publisher.publishEvent(events = match { it.toList() == listOf(h.stagedEvent) }) }
                     h.revocations.shouldBeEmpty()
                 }
 

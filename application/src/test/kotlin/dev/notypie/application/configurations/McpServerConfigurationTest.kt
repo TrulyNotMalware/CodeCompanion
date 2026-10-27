@@ -1,5 +1,9 @@
 package dev.notypie.application.configurations
 
+import dev.notypie.application.security.mcp.McpTurnTokenFilter
+import dev.notypie.application.security.mcp.SCOPED_TURN_TOKEN_CONTEXT_KEY
+import dev.notypie.application.security.mcp.ScopedTurnToken
+import dev.notypie.application.security.mcp.ScopedTurnTokenCodec
 import dev.notypie.application.service.agent.AgentUsageReportService
 import dev.notypie.application.service.command.CommandRoleResolver
 import dev.notypie.application.service.command.RoleManagementService
@@ -11,22 +15,29 @@ import dev.notypie.repository.meeting.MeetingRepository
 import dev.notypie.repository.standup.StandupRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.mockk.mockk
+import io.modelcontextprotocol.common.McpTransportContext
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper
+import io.modelcontextprotocol.server.McpTransportContextExtractor
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerStreamableHttpProperties
 import org.springframework.ai.mcp.server.webmvc.transport.WebMvcStreamableServerTransportProvider
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
+import org.springframework.core.Ordered
 import org.springframework.mock.env.MockEnvironment
+import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.test.util.ReflectionTestUtils
+import org.springframework.web.servlet.function.ServerRequest
 import tools.jackson.databind.json.JsonMapper
 import java.time.Clock
 import java.util.function.Supplier
@@ -151,6 +162,84 @@ class McpServerConfigurationTest :
                         mcpMapper.jsonMapper shouldBeSameInstanceAs context.getBean(JsonMapper::class.java)
                         mcpMapper.readValue("""{"name":"tool","count":2}""", McpMapperProbe::class.java) shouldBe
                             McpMapperProbe(name = "tool", count = 2)
+                    }
+                }
+            }
+
+            `when`("the turn-token filter is registered while the transport serves a non-default endpoint") {
+                then("it guards that endpoint and its subpaths with the context's codec, loopback-only by default") {
+                    contextRunner
+                        .withAllowBeanDefinitionOverriding(true)
+                        .withBean(McpServerStreamableHttpProperties::class.java, {
+                            McpServerStreamableHttpProperties().apply { mcpEndpoint = "/agent/mcp" }
+                        })
+                        .run { context ->
+                            val servedEndpoint =
+                                ReflectionTestUtils
+                                    .getField(
+                                        context.getBean(WebMvcStreamableServerTransportProvider::class.java),
+                                        "mcpEndpoint",
+                                    ).shouldBeInstanceOf<String>()
+                            val registration = context.getBean(FilterRegistrationBean::class.java)
+                            val filter = registration.filter.shouldBeInstanceOf<McpTurnTokenFilter>()
+
+                            servedEndpoint shouldBe "/agent/mcp"
+                            registration.urlPatterns shouldContainExactlyInAnyOrder
+                                listOf(servedEndpoint, "$servedEndpoint/*")
+                            registration.order shouldBe Ordered.HIGHEST_PRECEDENCE + 20
+                            registration.isEnabled shouldBe true
+                            ReflectionTestUtils.getField(filter, "scopedTurnTokenCodec") shouldBeSameInstanceAs
+                                context.getBean(ScopedTurnTokenCodec::class.java)
+                            ReflectionTestUtils.getField(filter, "allowRemote") shouldBe false
+                        }
+                }
+            }
+
+            `when`("remote callers are allowed by configuration") {
+                then("the registered filter carries allowRemote = true, so the flag is read from the bound config") {
+                    contextRunner
+                        .withPropertyValues("slack.app.mcp.allow-remote=true")
+                        .run { context ->
+                            val registration = context.getBean(FilterRegistrationBean::class.java)
+                            val filter = registration.filter.shouldBeInstanceOf<McpTurnTokenFilter>()
+                            ReflectionTestUtils.getField(filter, "allowRemote") shouldBe true
+                        }
+                }
+            }
+
+            `when`("the transport reads the Authorization header into the MCP transport context") {
+                then("a Bearer turn token yields the decoded token; no header or the Basic scheme yields none") {
+                    contextRunner.run { context ->
+                        @Suppress("UNCHECKED_CAST")
+                        val extractor =
+                            ReflectionTestUtils.getField(
+                                context.getBean(WebMvcStreamableServerTransportProvider::class.java),
+                                "contextExtractor",
+                            ) as McpTransportContextExtractor<ServerRequest>
+                        val token =
+                            context
+                                .getBean(ScopedTurnTokenCodec::class.java)
+                                .mint(userId = "U_MCP", sessionKey = "C1:1751.0001", turnId = "turn-1")
+
+                        fun extract(authorization: String?): McpTransportContext =
+                            extractor.extract(
+                                ServerRequest.create(
+                                    MockHttpServletRequest("POST", "/mcp").apply {
+                                        authorization?.let { addHeader("Authorization", it) }
+                                    },
+                                    emptyList(),
+                                ),
+                            )
+
+                        val decoded =
+                            extract(authorization = "Bearer $token")
+                                .get(SCOPED_TURN_TOKEN_CONTEXT_KEY)
+                                .shouldBeInstanceOf<ScopedTurnToken>()
+                        decoded.userId shouldBe "U_MCP"
+                        decoded.sessionKey shouldBe "C1:1751.0001"
+                        decoded.turnId shouldBe "turn-1"
+                        extract(authorization = null) shouldBeSameInstanceAs McpTransportContext.EMPTY
+                        extract(authorization = "Basic $token") shouldBeSameInstanceAs McpTransportContext.EMPTY
                     }
                 }
             }

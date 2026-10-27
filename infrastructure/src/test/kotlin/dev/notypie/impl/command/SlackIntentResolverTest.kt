@@ -1,18 +1,26 @@
 package dev.notypie.impl.command
 
+import dev.notypie.domain.command.authorization.UserRole
 import dev.notypie.domain.command.createCommandBasicInfo
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.event.AddParticipantEvent
+import dev.notypie.domain.command.entity.event.AgentConverseRequestEvent
 import dev.notypie.domain.command.entity.event.AgentUsageReportRequestEvent
 import dev.notypie.domain.command.entity.event.CalendarConnectionAction
 import dev.notypie.domain.command.entity.event.CalendarConnectionRequestEvent
 import dev.notypie.domain.command.entity.event.CancelMeetingEvent
+import dev.notypie.domain.command.entity.event.CreateStandupRoutineEvent
+import dev.notypie.domain.command.entity.event.CveLatestRequestEvent
+import dev.notypie.domain.command.entity.event.CveOpsAction
+import dev.notypie.domain.command.entity.event.CveOpsRequestEvent
 import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.CveSubscriptionRequestEvent
 import dev.notypie.domain.command.entity.event.GetMeetingListEvent
 import dev.notypie.domain.command.entity.event.RecordStandupAnswerEvent
 import dev.notypie.domain.command.entity.event.RecordStandupSkipEvent
 import dev.notypie.domain.command.entity.event.RescheduleMeetingEvent
+import dev.notypie.domain.command.entity.event.RoleManageAction
+import dev.notypie.domain.command.entity.event.RoleManageRequestEvent
 import dev.notypie.domain.command.entity.event.StandupOpsAction
 import dev.notypie.domain.command.entity.event.StandupOpsRequestEvent
 import dev.notypie.domain.command.entity.event.StatusReportRequestEvent
@@ -27,7 +35,10 @@ import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import java.time.DayOfWeek
 import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 import java.util.UUID
 
 class SlackIntentResolverTest :
@@ -495,6 +506,163 @@ class SlackIntentResolverTest :
                         event.type shouldBe CommandDetailType.CALENDAR_CONNECTION
                     }
                 }
+            }
+        }
+
+        given("GrantRole, RevokeRole and ListRoles intents") {
+            val events =
+                resolver.resolveAll(
+                    intents =
+                        listOf(
+                            CommandIntent.GrantRole(targetUserId = "U_GRANTED", role = UserRole.ADMIN),
+                            CommandIntent.RevokeRole(targetUserId = "U_REVOKED"),
+                            CommandIntent.ListRoles,
+                        ),
+                    basicInfo = basicInfo,
+                )
+
+            then("each maps to its own RoleManageAction with the target and role") {
+                events shouldHaveSize 3
+                val grant = events[0].shouldBeInstanceOf<RoleManageRequestEvent>()
+                grant.payload.action shouldBe RoleManageAction.GRANT
+                grant.payload.targetUserId shouldBe "U_GRANTED"
+                grant.payload.role shouldBe UserRole.ADMIN
+                val revoke = events[1].shouldBeInstanceOf<RoleManageRequestEvent>()
+                revoke.payload.action shouldBe RoleManageAction.REVOKE
+                revoke.payload.targetUserId shouldBe "U_REVOKED"
+                revoke.payload.role shouldBe null
+                val list = events[2].shouldBeInstanceOf<RoleManageRequestEvent>()
+                list.payload.action shouldBe RoleManageAction.LIST
+                list.payload.targetUserId shouldBe null
+                events.forEach {
+                    it.type shouldBe CommandDetailType.SIMPLE_TEXT
+                    it.idempotencyKey shouldBe basicInfo.idempotencyKey
+                    it.shouldBeInstanceOf<RoleManageRequestEvent>().payload.responseBasicInfo shouldBe basicInfo
+                }
+            }
+        }
+
+        given("AgentConverse intent") {
+            val events =
+                resolver.resolveAll(
+                    intents =
+                        listOf(
+                            CommandIntent.AgentConverse(
+                                prompt = "summarize the incident",
+                                threadId = "1700000000.000100",
+                                requesterName = "alice",
+                                channelName = "ops-room",
+                            ),
+                        ),
+                    basicInfo = basicInfo,
+                )
+
+            then("produces an AgentConverseRequestEvent carrying the prompt, thread and names") {
+                events shouldHaveSize 1
+                val event = events.first().shouldBeInstanceOf<AgentConverseRequestEvent>()
+                event.type shouldBe CommandDetailType.AGENT_CONVERSE
+                event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                event.payload.prompt shouldBe "summarize the incident"
+                event.payload.threadId shouldBe "1700000000.000100"
+                event.payload.requesterName shouldBe "alice"
+                event.payload.channelName shouldBe "ops-room"
+                event.payload.responseBasicInfo shouldBe basicInfo
+            }
+        }
+
+        given("CreateStandupRoutine intent") {
+            val events =
+                resolver.resolveAll(
+                    intents =
+                        listOf(
+                            CommandIntent.CreateStandupRoutine(
+                                name = "daily-sync",
+                                creatorId = "U_CREATOR",
+                                commandChannel = "C_COMMAND",
+                                summaryChannel = "C_SUMMARY",
+                                questions = listOf("What did you do?", "Any blockers?"),
+                                memberIds = listOf("U_ONE", "U_TWO"),
+                                weekdays = setOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY),
+                                triggerLocalTime = LocalTime.of(9, 30),
+                                cutoffMinutes = 45L,
+                                timezone = ZoneId.of("Asia/Seoul"),
+                            ),
+                        ),
+                    basicInfo = basicInfo,
+                )
+
+            then("keeps command and summary channels distinct and copies every field") {
+                events shouldHaveSize 1
+                val event = events.first().shouldBeInstanceOf<CreateStandupRoutineEvent>()
+                event.type shouldBe CommandDetailType.STANDUP_SETUP_SUBMIT
+                event.idempotencyKey shouldBe basicInfo.idempotencyKey
+                event.payload.name shouldBe "daily-sync"
+                event.payload.creatorId shouldBe "U_CREATOR"
+                event.payload.commandChannel shouldBe "C_COMMAND"
+                event.payload.summaryChannel shouldBe "C_SUMMARY"
+                event.payload.questions shouldBe listOf("What did you do?", "Any blockers?")
+                event.payload.memberIds shouldBe listOf("U_ONE", "U_TWO")
+                event.payload.weekdays shouldBe setOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY)
+                event.payload.triggerLocalTime shouldBe LocalTime.of(9, 30)
+                event.payload.cutoffMinutes shouldBe 45L
+                event.payload.timezone shouldBe ZoneId.of("Asia/Seoul")
+                event.payload.responseBasicInfo shouldBe basicInfo
+            }
+        }
+
+        given("CveLatest intent") {
+            val events =
+                resolver.resolveAll(
+                    intents =
+                        listOf(
+                            CommandIntent.CveLatest(userId = "U_ASKER", topicKey = "spring-boot"),
+                            CommandIntent.CveLatest(userId = "U_ASKER", topicKey = null),
+                        ),
+                    basicInfo = basicInfo,
+                )
+
+            then("produces CveLatestRequestEvents with and without a topic key") {
+                events shouldHaveSize 2
+                val withTopic = events[0].shouldBeInstanceOf<CveLatestRequestEvent>()
+                withTopic.type shouldBe CommandDetailType.CVE_LATEST
+                withTopic.payload.userId shouldBe "U_ASKER"
+                withTopic.payload.topicKey shouldBe "spring-boot"
+                withTopic.payload.responseBasicInfo shouldBe basicInfo
+                events[1].shouldBeInstanceOf<CveLatestRequestEvent>().payload.topicKey shouldBe null
+            }
+        }
+
+        given("CVE operator intents") {
+            val events =
+                resolver.resolveAll(
+                    intents =
+                        listOf(
+                            CommandIntent.CveListTopics,
+                            CommandIntent.CveSetTopicActive(topicKey = "kafka", active = true),
+                            CommandIntent.CveSetTopicActive(topicKey = "kafka", active = false),
+                            CommandIntent.CveRetryDeadLetters,
+                            CommandIntent.CveRetryDeadLetter(eventId = 4242L),
+                        ),
+                    basicInfo = basicInfo,
+                )
+
+            then("each maps to its own CveOpsAction with the topic key or event id") {
+                events shouldHaveSize 5
+                val payloads = events.map { it.shouldBeInstanceOf<CveOpsRequestEvent>().payload }
+                events.forEach {
+                    it.type shouldBe CommandDetailType.SIMPLE_TEXT
+                    it.idempotencyKey shouldBe basicInfo.idempotencyKey
+                }
+                payloads.forEach { it.responseBasicInfo shouldBe basicInfo }
+                payloads[0].action shouldBe CveOpsAction.LIST_TOPICS
+                payloads[1].action shouldBe CveOpsAction.ACTIVATE_TOPIC
+                payloads[1].topicKey shouldBe "kafka"
+                payloads[2].action shouldBe CveOpsAction.DEACTIVATE_TOPIC
+                payloads[2].topicKey shouldBe "kafka"
+                payloads[3].action shouldBe CveOpsAction.RETRY_ALL
+                payloads[3].targetEventId shouldBe null
+                payloads[4].action shouldBe CveOpsAction.RETRY_EVENT
+                payloads[4].targetEventId shouldBe 4242L
             }
         }
 

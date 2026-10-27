@@ -220,6 +220,24 @@ class SlackInteractionRequestParserTest :
                 }
             }
 
+            `when`("a plain_text_input value carries quotes, a backslash and control characters") {
+                val typed = "say \"hi\" C:\\temp\nline\u0008back\u000cform\ttab"
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = plainTextInputStateJson(value = typed),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("the value round-trips unchanged") {
+                    val state = result.states.first { it.type == ActionElementTypes.PLAIN_TEXT_INPUT }
+                    state.selectedValue shouldBe typed
+                }
+            }
+
             `when`("payload contains datepicker state") {
                 val payload =
                     createBlockActionPayloadJson(
@@ -327,6 +345,42 @@ class SlackInteractionRequestParserTest :
                 then("states should contain unselected CHECKBOX") {
                     val state = result.states.first { it.type == ActionElementTypes.CHECKBOX }
                     state.isSelected shouldBe false
+                }
+            }
+
+            `when`("payload contains conversations_select state with a selection") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = conversationsSelectStateJson(selectedConversation = "C_PICKED"),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain a selected CONVERSATIONS_SELECT with the conversation id") {
+                    val state = result.states.first { it.type == ActionElementTypes.CONVERSATIONS_SELECT }
+                    state.isSelected shouldBe true
+                    state.selectedValue shouldBe "C_PICKED"
+                }
+            }
+
+            `when`("payload contains conversations_select state without a selection") {
+                val payload =
+                    createBlockActionPayloadJson(
+                        stateValues =
+                            stateValuesJson(
+                                stateEntry = conversationsSelectStateJson(selectedConversation = null),
+                            ),
+                    )
+
+                val result = parser.parseStringPayload(payload = payload)
+
+                then("states should contain an unselected CONVERSATIONS_SELECT with an empty value") {
+                    val state = result.states.first { it.type == ActionElementTypes.CONVERSATIONS_SELECT }
+                    state.isSelected shouldBe false
+                    state.selectedValue shouldBe ""
                 }
             }
 
