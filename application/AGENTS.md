@@ -90,8 +90,8 @@ This module also consumes `testFixtures(project(":domain"))` and `testFixtures(p
   retention and `AgentAskThreadStarter` jobs) or a public tick that specs call directly (`PollingMessageProcessor`,
   `CveCollector`, `CveSummaryWorker`, `CveNotificationDispatcher`). The thin `*Scheduler` + service split
   (standup, meeting reminder, daily agenda, calendar sync) is the shape of four jobs: the scheduler's
-  tick wraps each service phase in `containFailure`, so use it when one tick runs several phases that must fail
-  independently.
+  tick wraps each service phase in `containFailure`. Consider it when one tick runs several phases that must fail
+  independently; it is not an invariant — unsplit jobs contain failures per step as well.
 - The scheduler pool is sized to 4 in `application.yaml` — Spring's single-thread default would let one
   slow job (e.g. the CVE collector's outbound HTTP) starve every other job. The size applies only because
   `SchedulingConfig` declares a `ThreadPoolTaskScheduler`: with virtual threads on, Boot's default is

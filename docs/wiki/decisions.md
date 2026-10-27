@@ -723,9 +723,11 @@ _type: decision · updated: 2026-10-26_
     `DailyAgendaScheduler`, `CalendarSyncScheduler` → `CalendarSyncService`)이고, 나머지 10개는 로직과 같은 클래스에서 공개 1회 실행 함수(`recoverOnce`/`purgeOnce`/
     `resumeOnce`, 다섯 클래스)나 공개 tick(`pollPending`, `CveCollector.tick`, `CveSummaryWorker.tick`, `CveNotificationDispatcher.immediateTick`/`digestTick`)을
     테스트 진입점으로 둔다. 이유: 규칙이 관행과 반대면 규칙을 따른 새 코드가 주변과 어긋나므로, 관행을 규칙으로 올렸다.
-    - **분리의 기준은 단계별 실패 격리다.** 트랜잭션 경계 수로는 가를 수 없다 — 분리된 `DailyAgendaSchedulingService.sendDailyAgenda`는 틱마다 `runInTx` 하나이고,
-      분리되지 않은 `CveNotificationDispatcher`는 쌍·사용자마다 `runInTx`를 연다. 분리된 넷의 공통점은 얇은 스케줄러가 서비스 단계마다 `containFailure`로 실패를
-      가둔다는 것이다(스탠드업 4단계, 리마인더 2단계, 안건·캘린더 1단계). 그래서 한 틱이 따로 실패해야 하는 단계 여럿을 돌리는 잡에 분리를 쓴다.
+    - **분리는 단계별 실패 격리가 필요할 때 고려하는 형태이지 불변 기준은 아니다.** 트랜잭션 경계 수로는 가를 수 없다 — 분리된
+      `DailyAgendaSchedulingService.sendDailyAgenda`는 틱마다 `runInTx` 하나이고, 분리되지 않은 `CveNotificationDispatcher`는 쌍·사용자마다 `runInTx`를
+      연다. 분리된 넷의 공통점은 얇은 스케줄러가 서비스 단계마다 `containFailure`로 실패를 가둔다는 것이다(스탠드업 4단계, 리마인더 2단계, 안건·캘린더
+      1단계). 다만 미분리 잡도 같은 격리를 한다(`AgentRetentionScheduler.purgeOnce`는 테이블마다, CVE 수집은 수집과 정리를 따로 가둔다) — 실패 격리는
+      클래스 배치와 무관하게 `containFailure`로 요구한다.
     - **예외.** `CalendarSyncScheduler`와 `GoogleOAuthStateRetentionScheduler`, `GoogleOAuthCallbackController`는 스캔 대상이면서
       `@Conditional(OnGoogleCalendarEnabled::class)`을 달고, `SocketModeReceiver`는 `@Component` + `@Profile("local")`이다.
     - **기각.** ① 코드를 옛 규칙에 맞춰 스캔 대상을 `@Bean`으로 옮기는 안 — 얻는 것 없이 배선 변경만 크다; ② 스케줄 잡 10개를 `*Scheduler` + 서비스로 쪼개는 안 —

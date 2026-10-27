@@ -31,9 +31,9 @@ Persistence for command-role grants: one `user_command_role` row per workspace m
   `domain/command/authorization/UserRole` orphans existing grants. **Adding** a constant also needs a `V*`
   migration that alters `user_command_role.role`: `V12__add_user_command_role_table.sql` declares it as
   `ENUM ('USER', 'AI_USER', 'DEVELOPER', 'ADMIN')`, so H2 test schemas (regenerated each run) accept the new
-  constant, a local or dev database whose table already exists keeps the old column under `ddl-auto: update`,
-  and production (`ddl-auto: none`) fails the first `grant` of it with "Data truncated for column 'role'"
-  (strict `sql_mode`, the MariaDB default).
+  constant; do not rely on `ddl-auto: update` (local/dev) to widen the ENUM of an existing table — it is not
+  guaranteed; and production (`ddl-auto: none`, unchanged schema, strict `sql_mode` — the MariaDB default) fails
+  the first `grant` of it with "Data truncated for column 'role'".
 - Rows are managed by the in-bot `grant` / `revoke` commands (`RoleManagementService`) and read by
   `CommandRoleResolver`; the same `UserRole` is also written to `mcp_tool_call_history.resolved_role`
   with `length = 16` — keep constant names within 16 characters.

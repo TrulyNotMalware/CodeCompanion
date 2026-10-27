@@ -54,8 +54,10 @@ that the relay lane dispatches.
   for specs — a once-function or a public tick (`relay/PollingMessageProcessor.pollPending`,
   `cve/collector/CveCollector.tick`, `cve/ai/CveSummaryWorker.tick`,
   `cve/notification/CveNotificationDispatcher.immediateTick` / `digestTick`). The thin `*Scheduler` + service
-  split (`standup`, `meeting` reminder and daily agenda, `calendar` sync) is for ticks whose phases must fail
-  independently: the scheduler wraps each phase in `containFailure` (decision #56). Keep jobs short — the shared
+  split (`standup`, `meeting` reminder and daily agenda, `calendar` sync) is worth considering when a tick runs
+  phases that must fail independently — the scheduler wraps each phase in `containFailure` — but it is not what
+  separates the two layouts: unsplit jobs contain failures per step too (decision #56). Containment is required
+  whatever the layout. Keep jobs short — the shared
   scheduler pool is 4 threads. The sweeps and purges keep trigger and logic in one class (`relay/OutboxRecoveryScheduler`,
   `relay/OutboxRetentionScheduler`, `agent/AgentAskThreadStarter`, `agent/AgentRetentionScheduler`,
   `calendar/GoogleOAuthStateRetentionScheduler`): the `@Scheduled`

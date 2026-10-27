@@ -441,7 +441,7 @@ class SlackInteractionHandlerImplTest :
             }
 
             `when`("an InteractionCommand returns an ok result whose status is FAILED") {
-                then("it is still published, so a notice failure keeps the meeting") {
+                then("it is still published because the guard is ok, not status") {
                     stubPrimaryInteraction()
                     val result = createRequestMeetingContextResult().copy(status = Status.FAILED)
                     every { commandExecutor.execute(command = any<Command<*>>()) } returns result
@@ -449,6 +449,21 @@ class SlackInteractionHandlerImplTest :
                     handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
 
                     verify(exactly = 1) { applicationEventPublisher.publishEvent(refEq(result)) }
+                }
+            }
+
+            `when`("an InteractionCommand returns a meeting result with ok = false") {
+                then("nothing is published") {
+                    stubPrimaryInteraction()
+                    every { commandExecutor.execute(command = any<Command<*>>()) } returns
+                        createRequestMeetingContextResult().copy(ok = false)
+
+                    handler.handleInteraction(headers = LinkedMultiValueMap(), payload = "dummy-payload")
+
+                    verify(exactly = 1) {
+                        commandExecutor.execute(command = match<Command<*>> { it is InteractionCommand })
+                    }
+                    verify(exactly = 0) { applicationEventPublisher.publishEvent(any<Any>()) }
                 }
             }
 
