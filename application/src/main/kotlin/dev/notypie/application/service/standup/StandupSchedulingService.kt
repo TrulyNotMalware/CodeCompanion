@@ -238,12 +238,13 @@ class StandupSchedulingService(
             return
         }
 
-        val nonResponders = candidate.sentMemberIds - candidate.answeredUserIds - candidate.skippedUserIds
-        if (nonResponders.isEmpty()) return
+        if (candidate.nonResponders().isEmpty()) return
 
-        val outcome: Result<Boolean> =
+        val outcome: Result<Set<String>?> =
             transactionTemplate.runInTx {
-                if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return@runInTx false
+                if (!standupRepository.claimNudge(sessionId = candidate.sessionId)) return@runInTx null
+                val nonResponders =
+                    standupRepository.findLockedNudgeRecipients(sessionUid = candidate.sessionUid).nonResponders()
                 nonResponders.forEach { userId ->
                     val commandBasicInfo =
                         CommandBasicInfo.forOutbound(publisherId = userId, channel = userId)
@@ -258,15 +259,22 @@ class StandupSchedulingService(
                         outboundMessagePort.toRow(message = message, basicInfo = commandBasicInfo),
                     )
                 }
-                true
+                nonResponders
             }
 
         outcome
-            .onSuccess { enqueued ->
-                if (!enqueued) return@onSuccess
+            .onSuccess { nudged ->
+                if (nudged == null) return@onSuccess
+                if (nudged.isEmpty()) {
+                    log.info {
+                        "Standup nudge claimed with no non-responder left under the session lock: " +
+                            "sessionUid=${candidate.sessionUid} routineUid=${candidate.routineUid}"
+                    }
+                    return@onSuccess
+                }
                 log.info {
                     "Standup nudge enqueued: sessionUid=${candidate.sessionUid} " +
-                        "routineUid=${candidate.routineUid} nonResponders=${nonResponders.size}"
+                        "routineUid=${candidate.routineUid} nonResponders=${nudged.size}"
                 }
             }.onFailure { ex ->
                 log.error(ex) {
@@ -296,6 +304,8 @@ class StandupSchedulingService(
         }
     }
 }
+
+private fun NudgeCandidateSession.nonResponders(): Set<String> = sentMemberIds - answeredUserIds - skippedUserIds
 
 internal fun buildDmNotice(
     sessionUid: UUID,

@@ -308,10 +308,12 @@ fi
 # Build JVM options
 ###############################################################################
 
-# Common options
+# Common options. user.timezone matches application/Dockerfile: the only Clock is
+# Clock.systemDefaultZone(), so on a UTC host meeting reminders would fire nine hours off.
 COMMON_OPTS=(
     "-Dfile.encoding=UTF-8"
     "-Djava.awt.headless=true"
+    "-Duser.timezone=Asia/Seoul"
 )
 
 # Memory options

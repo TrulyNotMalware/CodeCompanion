@@ -28,6 +28,14 @@ private val log = KotlinLogging.logger {}
 
 val AGENT_TURN_DISCARD_BUDGET: Duration = Duration.ofSeconds(3L)
 
+internal val AGENT_TURN_UNCAUGHT_LOGGER: Thread.UncaughtExceptionHandler =
+    Thread.UncaughtExceptionHandler { thread, failure ->
+        log.error(failure) {
+            "Agent turn worker ${thread.name} ended on an uncaught ${failure::class.java.name}; an unsettled " +
+                "/ask turn is left to the ask sweep"
+        }
+    }
+
 @Configuration
 class AgentConfiguration(
     private val appConfig: AppConfig,
@@ -91,6 +99,9 @@ class AgentTurnExecutor(
     private val discardBudget: Duration,
     private val meterRegistry: MeterRegistry,
 ) : ThreadPoolTaskExecutor() {
+    override fun newThread(runnable: Runnable): Thread =
+        super.newThread(runnable).apply { uncaughtExceptionHandler = AGENT_TURN_UNCAUGHT_LOGGER }
+
     override fun shutdown() {
         super.shutdown()
         val unstarted = ArrayList<Runnable>()

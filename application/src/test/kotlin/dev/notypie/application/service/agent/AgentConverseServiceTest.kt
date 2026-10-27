@@ -21,6 +21,7 @@ import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.logging.captureLogs
+import dev.notypie.logging.eventsAt
 import dev.notypie.logging.messagesAt
 import dev.notypie.repository.agent.AgentSessionRepository
 import dev.notypie.repository.agent.AgentTurnHistoryRepository
@@ -31,6 +32,7 @@ import dev.notypie.repository.agent.schema.AgentTurnOutcome
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.schema.createOutboxMessage
 import dev.notypie.templates.SlackBlockLimits
+import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeGreaterThan
@@ -42,6 +44,7 @@ import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.kotest.matchers.types.shouldBeSameInstanceAs
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.Called
 import io.mockk.CapturingSlot
@@ -56,6 +59,7 @@ import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.orm.jpa.JpaTransactionManager
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
+import org.springframework.transaction.CannotCreateTransactionException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.TransactionSynchronization
@@ -1262,6 +1266,126 @@ class AgentConverseServiceTest :
                 then("the turn is audited as FAILED with the sidecar error code") {
                     recordedTurn.captured.outcome shouldBe AgentTurnOutcome.FAILED
                     recordedTurn.captured.errorCode shouldBe "timeout"
+                }
+            }
+        }
+
+        given("a mention turn whose session lookup fails before the sidecar call") {
+            val event = createAgentConverseRequestEvent()
+            val basicInfo = event.payload.responseBasicInfo
+            val gateway = mockk<AgentGateway>()
+            val sessionRepository = mockk<AgentSessionRepository>()
+            every { sessionRepository.findProviderSessionId(sessionKey = any()) } throws
+                CannotCreateTransactionException("Could not open JPA EntityManager for transaction")
+            val historyRepository = mockk<AgentTurnHistoryRepository>()
+            val stagedMessage = slot<OutboundMessage>()
+            val eventPublisher = mockk<EventPublisher>(relaxed = true)
+            val meterRegistry = SimpleMeterRegistry()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    agentTurnHistoryRepository = historyRepository,
+                    outboundStager = stagerCapturing(stagedMessage = stagedMessage),
+                    eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
+                )
+
+            `when`("handleAgentConverse") {
+                val errors =
+                    captureLogs(loggerName = loggerName) { service.handleAgentConverse(event = event) }
+                        .eventsAt(level = Level.ERROR)
+
+                then("the sidecar is never called and the requester gets the failure notice in the thread") {
+                    verify { listOf(gateway, historyRepository) wasNot Called }
+                    val staged = stagedMessage.captured.shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
+                    staged.threadId shouldBe event.payload.threadId
+                    staged.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
+                        AgentConverseService.FAILURE_MESSAGE
+                    verify(exactly = 1) { eventPublisher.publishEvent(events = any()) }
+                }
+
+                then("one ERROR carries the turn's keys and its cause, and the run counts as failed") {
+                    val error = errors.single()
+                    error.formattedMessage shouldBe
+                        "Agent turn failed before the sidecar call " +
+                        "sessionKey=${basicInfo.channel}:${event.payload.threadId}:${basicInfo.publisherId} " +
+                        "idempotencyKey=${event.idempotencyKey}"
+                    error.throwableProxy.className shouldBe CannotCreateTransactionException::class.java.name
+                    meterRegistry.turns(outcome = "failed") shouldBe 1.0
+                }
+            }
+        }
+
+        given("a leased turn whose session lookup fails after its lease began") {
+            val event = createAgentConverseRequestEvent()
+            val gateway = mockk<AgentGateway>()
+            val sessionRepository = mockk<AgentSessionRepository>()
+            every { sessionRepository.findProviderSessionId(sessionKey = any()) } throws
+                CannotCreateTransactionException("Could not open JPA EntityManager for transaction")
+            val outboundStager = mockk<OutboundMessageStager>()
+            val eventPublisher = mockk<EventPublisher>()
+            val meterRegistry = SimpleMeterRegistry()
+            val lease = leaseThat()
+            val service =
+                buildService(
+                    agentGateway = gateway,
+                    agentSessionRepository = sessionRepository,
+                    outboundStager = outboundStager,
+                    eventPublisher = eventPublisher,
+                    meterRegistry = meterRegistry,
+                )
+
+            `when`("it is submitted with its lease") {
+                val (accepted, logs) =
+                    captureLogs(loggerName = loggerName) { service.submit(event = event, lease = lease) }
+
+                then("nothing is posted and the lease stays begun, so the ask sweep takes the turn up again") {
+                    accepted shouldBe true
+                    verify(exactly = 1) { lease.begin() }
+                    verify(exactly = 0) { lease.settle() }
+                    verify(exactly = 0) { lease.giveBack() }
+                    verify(exactly = 0) { lease.abandon() }
+                    verify { listOf(gateway, outboundStager, eventPublisher) wasNot Called }
+                }
+
+                then("one ERROR carries the turn's keys and its cause, and the run counts as failed") {
+                    val error = logs.eventsAt(level = Level.ERROR).single()
+                    error.formattedMessage shouldStartWith
+                        "Agent turn failed before the sidecar call; the ask sweep takes it up again sessionKey="
+                    error.formattedMessage shouldEndWith "idempotencyKey=${event.idempotencyKey}"
+                    error.throwableProxy.className shouldBe CannotCreateTransactionException::class.java.name
+                    meterRegistry.turns(outcome = "failed") shouldBe 1.0
+                }
+            }
+        }
+
+        given("a turn whose start is cut short by an Error or an interrupt") {
+            listOf(StackOverflowError("deep"), InterruptedException("shutting down")).forEach { failure ->
+                `when`("the session lookup throws ${failure::class.java.simpleName}") {
+                    val sessionRepository = mockk<AgentSessionRepository>()
+                    every { sessionRepository.findProviderSessionId(sessionKey = any()) } throws failure
+                    val outboundStager = mockk<OutboundMessageStager>()
+                    val eventPublisher = mockk<EventPublisher>()
+                    val meterRegistry = SimpleMeterRegistry()
+                    val service =
+                        buildService(
+                            agentGateway = mockk(),
+                            agentSessionRepository = sessionRepository,
+                            outboundStager = outboundStager,
+                            eventPublisher = eventPublisher,
+                            meterRegistry = meterRegistry,
+                        )
+                    val thrown =
+                        shouldThrowAny { service.handleAgentConverse(event = createAgentConverseRequestEvent()) }
+                    val keptInterrupt = Thread.interrupted()
+
+                    then("the same instance propagates, nothing is posted or counted, an interrupt keeps its flag") {
+                        thrown shouldBeSameInstanceAs failure
+                        keptInterrupt shouldBe (failure is InterruptedException)
+                        verify { listOf(outboundStager, eventPublisher) wasNot Called }
+                        meterRegistry.meters.shouldBeEmpty()
+                    }
                 }
             }
         }

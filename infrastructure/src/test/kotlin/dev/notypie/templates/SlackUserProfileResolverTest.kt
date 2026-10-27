@@ -1,16 +1,24 @@
 package dev.notypie.templates
 
+import ch.qos.logback.classic.Level
 import dev.notypie.common.jsonMapper
 import dev.notypie.domain.TEST_BOT_TOKEN
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.impl.command.RestRequester
 import dev.notypie.impl.command.dto.SlackUserProfileDto
+import dev.notypie.impl.command.dto.createMinimalUserProfileResponseJson
 import dev.notypie.impl.command.dto.createProfile
+import dev.notypie.impl.command.dto.createUserProfileErrorJson
 import dev.notypie.impl.command.dto.createUserProfileResponseJson
+import dev.notypie.logging.captureLogs
+import dev.notypie.logging.eventsAt
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -145,7 +153,7 @@ class SlackUserProfileResolverTest :
                 )
 
             then("the body still decodes, so the publisher is named instead of the bare mention") {
-                dto.profile.email.shouldBeNull()
+                dto.profile?.displayName shouldBe "junho"
                 resolver.resolve(userId = TEST_USER_ID) shouldBe
                     PublisherView(displayName = "junho", thumbnailUrl = "https://example.com/img24.png")
             }
@@ -171,13 +179,13 @@ class SlackUserProfileResolverTest :
             }
         }
 
-        given("a profile response with ok=false") {
-            val requester =
-                requesterReturning(
-                    Result.success(
-                        ResponseEntity.ok(SlackUserProfileDto(ok = false, profile = createProfile(displayName = "x"))),
-                    ),
+        given("a users.profile.get body Slack sends for an unknown user") {
+            val dto =
+                jsonMapper.readValue(
+                    createUserProfileErrorJson(error = "user_not_found"),
+                    SlackUserProfileDto::class.java,
                 )
+            val requester = requesterReturning(Result.success(ResponseEntity.ok(dto)))
             val resolver =
                 SlackUserProfileResolver(
                     restRequester = requester,
@@ -186,13 +194,42 @@ class SlackUserProfileResolverTest :
                 )
 
             `when`("resolved twice") {
-                val first = resolver.resolve(userId = TEST_USER_ID)
+                val (first, logs) =
+                    captureLogs(loggerName = "dev.notypie.templates") { resolver.resolve(userId = TEST_USER_ID) }
                 resolver.resolve(userId = TEST_USER_ID)
 
-                then("it ignores the profile, renders the bare mention and caches that fallback") {
+                then("the body decodes without a profile") {
+                    dto shouldBe SlackUserProfileDto(ok = false, error = "user_not_found", profile = null)
+                }
+
+                then("it renders the bare mention, caches it and logs Slack's error code once at WARN, no stack") {
                     first shouldBe PublisherView(displayName = "<@$TEST_USER_ID>", thumbnailUrl = null)
                     requester.verifyLookups(times = 1)
+                    val warnings = logs.eventsAt(level = Level.WARN)
+                    warnings shouldHaveSize 1
+                    warnings.single().formattedMessage shouldContain "error=user_not_found"
+                    warnings.single().throwableProxy.shouldBeNull()
+                    logs.eventsAt(level = Level.ERROR).shouldBeEmpty()
                 }
+            }
+        }
+
+        given("a minimal ok=true body carrying only the display name") {
+            val dto =
+                jsonMapper.readValue(
+                    createMinimalUserProfileResponseJson(displayName = "junho"),
+                    SlackUserProfileDto::class.java,
+                )
+            val resolver =
+                SlackUserProfileResolver(
+                    restRequester = requesterReturning(Result.success(ResponseEntity.ok(dto))),
+                    slackApiToken = TEST_BOT_TOKEN,
+                )
+
+            then("it decodes and names the publisher without a thumbnail") {
+                dto.error.shouldBeNull()
+                resolver.resolve(userId = TEST_USER_ID) shouldBe
+                    PublisherView(displayName = "junho", thumbnailUrl = null)
             }
         }
 

@@ -24,11 +24,14 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.springframework.dao.CannotAcquireLockException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.CannotCreateTransactionException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionStatus
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
@@ -309,6 +312,7 @@ class MeetingReminderSchedulingServiceTest :
                 offsetMinutes: Int,
                 attendingUserIds: List<String>,
                 startAt: LocalDateTime = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(offsetMinutes.toLong()),
+                scheduledAt: Instant = nowInstant,
             ): ReadyReminder =
                 ReadyReminder(
                     reminder =
@@ -316,7 +320,7 @@ class MeetingReminderSchedulingServiceTest :
                             id = reminderId,
                             meetingId = 7L,
                             offsetMinutes = offsetMinutes,
-                            scheduledAt = nowInstant,
+                            scheduledAt = scheduledAt,
                         ),
                     meetingId = 7L,
                     meetingTitle = "Sprint Planning",
@@ -346,6 +350,82 @@ class MeetingReminderSchedulingServiceTest :
                     verify(exactly = 1) { repo.discardReminder(reminderId = 42L, scheduledAt = nowInstant) }
                     verify(exactly = 0) { repo.claimReminder(reminderId = any(), claimToken = any(), now = any()) }
                     verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("reminders armed for the current start come due only once their meeting has started") {
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>(relaxed = true)
+                val service = buildService(repo = repo, outboxRepo = outboxRepo)
+                val startedAt = LocalDateTime.ofInstant(nowInstant, seoul).minusMinutes(2L)
+                val startedArmedAt = startedAt.atZone(seoul).toInstant().minusSeconds(300L)
+                val startingNowArmedAt = nowInstant.minusSeconds(900L)
+                val started =
+                    readyReminderOf(
+                        reminderId = 44L,
+                        offsetMinutes = 5,
+                        attendingUserIds = listOf("U_A"),
+                        startAt = startedAt,
+                        scheduledAt = startedArmedAt,
+                    )
+                val startingNow =
+                    readyReminderOf(
+                        reminderId = 45L,
+                        offsetMinutes = 15,
+                        attendingUserIds = listOf("U_A"),
+                        startAt = LocalDateTime.ofInstant(nowInstant, seoul),
+                        scheduledAt = startingNowArmedAt,
+                    )
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(started, startingNow)
+                every { repo.discardReminder(reminderId = 44L, scheduledAt = startedArmedAt) } returns true
+                every { repo.discardReminder(reminderId = 45L, scheduledAt = startingNowArmedAt) } returns true
+
+                val warnings =
+                    captureLogs(loggerName = MeetingReminderSchedulingService::class.java.name) {
+                        service.sendDueReminders()
+                    }.messagesAt(level = Level.WARN)
+
+                then("each is discarded at the time it was read with a WARN, never claimed or sent") {
+                    verify(exactly = 1) { repo.discardReminder(reminderId = 44L, scheduledAt = startedArmedAt) }
+                    verify(exactly = 1) { repo.discardReminder(reminderId = 45L, scheduledAt = startingNowArmedAt) }
+                    verify(exactly = 0) { repo.claimReminder(reminderId = any(), claimToken = any(), now = any()) }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                    warnings shouldBe
+                        listOf(
+                            "Discarded meeting reminder after its meeting started: reminderId=44 meetingId=7 " +
+                                "startAt=2026-05-04T11:58",
+                            "Discarded meeting reminder after its meeting started: reminderId=45 meetingId=7 " +
+                                "startAt=2026-05-04T12:00",
+                        )
+                }
+            }
+
+            `when`("a reminder comes due late, after an outage, but its meeting has not started yet") {
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service = buildService(repo = repo, outboxRepo = outboxRepo)
+                val late =
+                    readyReminderOf(
+                        reminderId = 46L,
+                        offsetMinutes = 15,
+                        attendingUserIds = listOf("U_A"),
+                        startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(1L),
+                        scheduledAt = nowInstant.minusSeconds(840L),
+                    )
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(late)
+                every { repo.claimReminder(reminderId = 46L, claimToken = any(), now = any()) } returns true
+                every { repo.markReminderSent(reminderId = 46L, claimToken = any(), sentAt = any()) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                service.sendDueReminders()
+
+                then("it is still claimed and sent: lateness alone does not drop a reminder") {
+                    verify(exactly = 0) { repo.discardReminder(reminderId = any(), scheduledAt = any()) }
+                    verify(exactly = 1) { repo.claimReminder(reminderId = 46L, claimToken = any(), now = any()) }
+                    verify(exactly = 1) { outboxRepo.save(any()) }
+                    verify(exactly = 1) { repo.markReminderSent(reminderId = 46L, claimToken = any(), sentAt = any()) }
                 }
             }
 
@@ -482,6 +562,154 @@ class MeetingReminderSchedulingServiceTest :
                     verify(
                         exactly = 0,
                     ) { repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any()) }
+                }
+            }
+
+            `when`("the outbox transaction cannot even be opened because the connection pool is exhausted") {
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val transactionManager = mockk<PlatformTransactionManager>()
+                every { transactionManager.getTransaction(any()) } throws
+                    CannotCreateTransactionException("Could not open JDBC Connection for transaction")
+                val service =
+                    buildService(repo = repo, outboxRepo = outboxRepo, transactionManager = transactionManager)
+                val ready = readyReminderOf(reminderId = 48L, offsetMinutes = 15, attendingUserIds = listOf("U_A"))
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.claimReminder(reminderId = 48L, claimToken = any(), now = any()) } returns true
+                every { repo.releaseReminder(reminderId = 48L, claimToken = any(), now = nowInstant) } returns true
+                every {
+                    repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any())
+                } returns true
+
+                service.sendDueReminders()
+
+                then("the claim is released for the next tick instead of being marked FAILED") {
+                    verify(exactly = 1) { repo.releaseReminder(reminderId = 48L, claimToken = any(), now = nowInstant) }
+                    verify(exactly = 0) {
+                        repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any())
+                    }
+                    verify(exactly = 0) { outboxRepo.save(any()) }
+                }
+            }
+
+            `when`("the outbox transaction hits a lock timeout after one DM row, on a real transaction manager") {
+                val dataSource = createH2DataSource()
+                val jdbc = JdbcTemplate(dataSource)
+                jdbc.execute("CREATE TABLE outbox_probe (event_id VARCHAR(64) PRIMARY KEY)")
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service =
+                    buildService(
+                        repo = repo,
+                        outboxRepo = outboxRepo,
+                        transactionManager = createH2TransactionManager(dataSource = dataSource),
+                    )
+                val ready =
+                    readyReminderOf(reminderId = 47L, offsetMinutes = 15, attendingUserIds = listOf("U_A", "U_B"))
+                val claimedToken = slot<String>()
+                val releasedToken = slot<String>()
+
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.claimReminder(reminderId = 47L, claimToken = capture(claimedToken), now = any()) } returns
+                    true
+                every { outboxRepo.save(any()) } answers {
+                    jdbc.update("INSERT INTO outbox_probe (event_id) VALUES (?)", firstArg<OutboxMessage>().eventId)
+                    firstArg()
+                } andThenThrows CannotAcquireLockException("Lock wait timeout exceeded; try restarting transaction")
+                every {
+                    repo.releaseReminder(reminderId = 47L, claimToken = capture(releasedToken), now = nowInstant)
+                } returns true
+                every {
+                    repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any())
+                } returns true
+
+                val warnings =
+                    captureLogs(loggerName = MeetingReminderSchedulingService::class.java.name) {
+                        service.sendDueReminders()
+                    }.messagesAt(level = Level.WARN)
+
+                then("the DM row written before the failure rolls back and the claim is released, not FAILED") {
+                    jdbc.queryForObject("SELECT COUNT(*) FROM outbox_probe", Int::class.java) shouldBe 0
+                    verify(exactly = 1) {
+                        repo.releaseReminder(reminderId = 47L, claimToken = any(), now = nowInstant)
+                    }
+                    releasedToken.captured shouldBe claimedToken.captured
+                    verify(exactly = 0) {
+                        repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any())
+                    }
+                    warnings shouldBe
+                        listOf(
+                            "Meeting reminder dispatch hit a transient failure, releasing it for the next tick: " +
+                                "reminderId=47 meetingId=7",
+                        )
+                }
+            }
+
+            `when`("markReminderSent fails with a MariaDB snapshot-isolation conflict") {
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service = buildService(repo = repo, outboxRepo = outboxRepo)
+                val ready = readyReminderOf(reminderId = 48L, offsetMinutes = 15, attendingUserIds = listOf("U_A"))
+
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.claimReminder(reminderId = 48L, claimToken = any(), now = any()) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+                every { repo.markReminderSent(reminderId = 48L, claimToken = any(), sentAt = any()) } throws
+                    createSnapshotIsolationFailure(table = "meeting_reminder")
+                every { repo.releaseReminder(reminderId = 48L, claimToken = any(), now = any()) } returns false
+                every {
+                    repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any())
+                } returns true
+
+                val warnings =
+                    captureLogs(loggerName = MeetingReminderSchedulingService::class.java.name) {
+                        service.sendDueReminders()
+                    }.messagesAt(level = Level.WARN)
+
+                then("the conflict is transient too, and a release that finds the row moved on is logged") {
+                    verify(exactly = 1) { repo.releaseReminder(reminderId = 48L, claimToken = any(), now = any()) }
+                    verify(exactly = 0) {
+                        repo.markReminderFailed(reminderId = any(), claimToken = any(), reason = any(), now = any())
+                    }
+                    warnings shouldBe
+                        listOf(
+                            "Meeting reminder dispatch hit a transient failure, releasing it for the next tick: " +
+                                "reminderId=48 meetingId=7",
+                            "releaseReminder no-op for reminder 48 — recovery already reset or re-claimed.",
+                        )
+                }
+            }
+
+            `when`("the outbox write fails with a data access exception that is not transient") {
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service = buildService(repo = repo, outboxRepo = outboxRepo)
+                val ready = readyReminderOf(reminderId = 49L, offsetMinutes = 15, attendingUserIds = listOf("U_A"))
+
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(ready)
+                every { repo.claimReminder(reminderId = 49L, claimToken = any(), now = any()) } returns true
+                every { outboxRepo.save(any()) } throws
+                    DataIntegrityViolationException("Duplicate entry for key 'uk_outbox_event_id'")
+                every {
+                    repo.markReminderFailed(reminderId = 49L, claimToken = any(), reason = any(), now = any())
+                } returns true
+
+                service.sendDueReminders()
+
+                then("the reminder is marked FAILED as before and the claim is not released") {
+                    verify(exactly = 1) {
+                        repo.markReminderFailed(
+                            reminderId = 49L,
+                            claimToken = any(),
+                            reason = match { it.contains("uk_outbox_event_id") },
+                            now = any(),
+                        )
+                    }
+                    verify(exactly = 0) { repo.releaseReminder(reminderId = any(), claimToken = any(), now = any()) }
                 }
             }
 

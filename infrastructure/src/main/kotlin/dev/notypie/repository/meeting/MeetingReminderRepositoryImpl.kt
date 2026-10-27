@@ -97,6 +97,10 @@ open class MeetingReminderRepositoryImpl(
     ): Boolean =
         jpaMeetingReminderRepository.markFailed(id = reminderId, token = claimToken, reason = reason, now = now) == 1
 
+    @Transactional
+    override fun releaseReminder(reminderId: Long, claimToken: String, now: Instant): Boolean =
+        jpaMeetingReminderRepository.releaseClaim(id = reminderId, token = claimToken, now = now) == 1
+
     override fun resetStuckReminders(olderThan: Instant, now: Instant): Int =
         jpaMeetingReminderRepository.resetStuckSending(olderThan = olderThan, now = now)
 

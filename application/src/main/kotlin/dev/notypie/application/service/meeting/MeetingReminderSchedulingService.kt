@@ -16,7 +16,9 @@ import dev.notypie.repository.outbox.OutboundMessagePort
 import dev.notypie.templates.escapeMrkdwn
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.dao.TransientDataAccessException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.CannotCreateTransactionException
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.Clock
@@ -126,6 +128,15 @@ class MeetingReminderSchedulingService(
             }
             return
         }
+        if (!item.startAt.isAfter(LocalDateTime.now(clock))) {
+            if (reminderRepository.discardReminder(reminderId = reminderId, scheduledAt = item.reminder.scheduledAt)) {
+                log.warn {
+                    "Discarded meeting reminder after its meeting started: reminderId=$reminderId " +
+                        "meetingId=${item.meetingId} startAt=${item.startAt}"
+                }
+            }
+            return
+        }
         val claimToken = UUID.randomUUID().toString()
 
         if (!reminderRepository.claimReminder(
@@ -167,19 +178,39 @@ class MeetingReminderSchedulingService(
             }
 
         val ex = outcome.exceptionOrNull()
-        if (ex != null) {
-            log.error(ex) { "Meeting reminder dispatch failed: reminderId=$reminderId meetingId=${item.meetingId}" }
-            if (!reminderRepository.markReminderFailed(
-                    reminderId = reminderId,
-                    claimToken = claimToken,
-                    reason = ex.message ?: "unknown",
-                    now = clock.instant(),
-                )
-            ) {
-                log.warn { "markReminderFailed no-op for reminder $reminderId — recovery already reset or re-claimed." }
+        when {
+            ex == null ->
+                log.info { "Meeting reminder enqueued: reminderId=$reminderId attendees=${item.attendingUserIds.size}" }
+            ex is TransientDataAccessException || ex is CannotCreateTransactionException -> {
+                log.warn(ex) {
+                    "Meeting reminder dispatch hit a transient failure, releasing it for the next tick: " +
+                        "reminderId=$reminderId meetingId=${item.meetingId}"
+                }
+                if (!reminderRepository.releaseReminder(
+                        reminderId = reminderId,
+                        claimToken = claimToken,
+                        now = clock.instant(),
+                    )
+                ) {
+                    log.warn {
+                        "releaseReminder no-op for reminder $reminderId — recovery already reset or re-claimed."
+                    }
+                }
             }
-        } else {
-            log.info { "Meeting reminder enqueued: reminderId=$reminderId attendees=${item.attendingUserIds.size}" }
+            else -> {
+                log.error(ex) { "Meeting reminder dispatch failed: reminderId=$reminderId meetingId=${item.meetingId}" }
+                if (!reminderRepository.markReminderFailed(
+                        reminderId = reminderId,
+                        claimToken = claimToken,
+                        reason = ex.message ?: "unknown",
+                        now = clock.instant(),
+                    )
+                ) {
+                    log.warn {
+                        "markReminderFailed no-op for reminder $reminderId — recovery already reset or re-claimed."
+                    }
+                }
+            }
         }
     }
 }

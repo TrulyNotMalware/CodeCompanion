@@ -125,6 +125,7 @@ class GithubReleaseSourceAdapter(
     }
 
     private fun toRawEvent(node: JsonNode): RawSourceEvent? {
+        if (node["draft"]?.asBoolean(false) == true) return null
         val externalId = node["id"]?.stringOrNull() ?: return null
         val title = node["name"]?.stringOrNull() ?: node["tag_name"]?.stringOrNull() ?: return null
         return RawSourceEvent(

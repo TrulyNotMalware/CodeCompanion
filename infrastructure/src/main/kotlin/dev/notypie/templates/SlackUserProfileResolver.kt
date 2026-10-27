@@ -101,11 +101,18 @@ class SlackUserProfileResolver(
             ).map { response -> response.body }
             .onFailure { logger.warn(it) { "users.profile.get failed for $userId; rendering the bare mention" } }
             .getOrNull()
-            ?.takeIf { it.ok }
             ?.let { dto ->
+                if (dto.ok) {
+                    dto.profile
+                } else {
+                    logger.warn { "users.profile.get answered ok=false for $userId: error=${dto.error}" }
+                    null
+                }
+            }?.let { profile ->
                 PublisherView(
-                    displayName = dto.profile.displayName.ifBlank { dto.profile.realName.ifBlank { "<@$userId>" } },
-                    thumbnailUrl = dto.profile.imageSize24.takeIf { it.isNotBlank() },
+                    displayName =
+                        profile.displayName.orEmpty().ifBlank { profile.realName.orEmpty().ifBlank { "<@$userId>" } },
+                    thumbnailUrl = profile.imageSize24?.takeIf { it.isNotBlank() },
                 )
             }
 }

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
 
 # application/configurations/conditions
 
@@ -13,7 +13,7 @@ classes in `../ConsumerConfig.kt`.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `Conditions.kt` | `OnGoogleCalendarEnabled` / `OnGoogleCalendarDisabled` (2026-10-07): the bound `calendar.google.enabled` Boolean and its negation, so `yes`/`on`/`1` and `true` agree with `AppConfig` and exactly one of `CalendarConfiguration` / `CalendarDisabledConfiguration` loads (a `@ConditionalOnProperty` string compare would have matched neither for `yes`); `Environment.extractAppConfig(): AppConfig` — `Binder.get(this).bind(APP_CONFIG_PROPERTIES_PREFIX, AppConfig::class.java).orElseGet { AppConfig() }`. Four `Condition`s whose `matches(context, metadata)` read `context.environment.extractAppConfig().mode`: `OnPollingConsumer` (`outboxReadingStrategy == OutboxReaderStrategy.POLLING`), `OnCdcConsumer` (`== CDC`), `OnKafkaEventPublisher` (`eventPublisher == EventPublisherType.KAFKA`), `OnApplicationEventPublisher` (`== APPLICATION_EVENT`) |
+| `Conditions.kt` | `OnCveEnabled` (2026-10-26: the bound `cve.enabled` Boolean, gating `CveConfiguration`; the former `@ConditionalOnProperty(havingValue = "true")` left every CVE bean out for `1`/`yes`/`on` while the services saw CVE as on); `OnGoogleCalendarEnabled` / `OnGoogleCalendarDisabled` (2026-10-07): the bound `calendar.google.enabled` Boolean and its negation, so `yes`/`on`/`1` and `true` agree with `AppConfig` and exactly one of `CalendarConfiguration` / `CalendarDisabledConfiguration` loads (a `@ConditionalOnProperty` string compare would have matched neither for `yes`); `Environment.extractAppConfig(): AppConfig` — `Binder.get(this).bind(APP_CONFIG_PROPERTIES_PREFIX, AppConfig::class.java).orElseGet { AppConfig() }`. Four `Condition`s whose `matches(context, metadata)` read `context.environment.extractAppConfig().mode`: `OnPollingConsumer` (`outboxReadingStrategy == OutboxReaderStrategy.POLLING`), `OnCdcConsumer` (`== CDC`), `OnKafkaEventPublisher` (`eventPublisher == EventPublisherType.KAFKA`), `OnApplicationEventPublisher` (`== APPLICATION_EVENT`) |
 
 ## For AI Agents
 
@@ -35,7 +35,7 @@ classes in `../ConsumerConfig.kt`.
 ```bash
 ./gradlew :application:test
 ```
-No spec covers this file today. When adding one, build a `MockEnvironment` with
+`CveConfigurationTest` (`ApplicationContextRunner`) pins `OnCveEnabled` (`true`/`TRUE`/`yes`/`on`/`1` load the CVE beans; `false`/`no`/`off`/`0`/absent do not) and `CalendarConfigurationTest` pins the calendar pair; the mode conditions have no direct spec. When adding one, build a `MockEnvironment` with
 `slack.app.mode.outbox-reading-strategy=cdc` (and the publisher property), wrap it in a MockK
 `ConditionContext`, and assert both the matching and the non-matching branch of each condition, plus
 the empty-environment default.

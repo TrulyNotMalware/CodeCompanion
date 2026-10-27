@@ -92,5 +92,7 @@ interface StandupRepository {
 
     fun claimNudge(sessionId: Long): Boolean
 
+    fun findLockedNudgeRecipients(sessionUid: UUID): NudgeCandidateSession
+
     fun replaceSummaryMessageTs(currentMessageTs: String, messageTs: String): Boolean
 }

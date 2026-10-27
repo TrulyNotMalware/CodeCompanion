@@ -3,10 +3,13 @@ package dev.notypie.repository.standup
 import dev.notypie.domain.standup.createRoutine
 import dev.notypie.domain.standup.createSessionDispatch
 import dev.notypie.domain.standup.createStandupSession
+import dev.notypie.domain.standup.entity.SessionDispatch
 import dev.notypie.domain.standup.entity.enums.DispatchStatus
 import dev.notypie.domain.standup.entity.enums.SessionStatus
+import dev.notypie.exception.meeting.DatabaseException
 import dev.notypie.schema.createRoutineStopCandidate
 import io.kotest.assertions.throwables.shouldNotThrowAny
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -53,7 +56,11 @@ class StandupRepositoryImplTest
 
             fun <T : Any> inTx(action: () -> T): T = transactionTemplate.execute { action() }
 
-            fun openSession(status: SessionStatus = SessionStatus.COLLECTING, summaryMessageTs: String? = null): UUID =
+            fun openSession(
+                status: SessionStatus = SessionStatus.COLLECTING,
+                summaryMessageTs: String? = null,
+                dispatches: List<SessionDispatch> = listOf(createSessionDispatch(userId = "U_A")),
+            ): UUID =
                 inTx {
                     repository
                         .createSession(
@@ -63,7 +70,7 @@ class StandupRepositoryImplTest
                                     cutoffAt = cutoffAt,
                                     status = status,
                                     summaryMessageTs = summaryMessageTs,
-                                    dispatches = listOf(createSessionDispatch(userId = "U_A")),
+                                    dispatches = dispatches,
                                 ),
                         ).sessionUid
                 }
@@ -470,6 +477,110 @@ class StandupRepositoryImplTest
 
                     then("it reports SESSION_NOT_FOUND") {
                         result shouldBe AnswerRecordResult.SESSION_NOT_FOUND
+                    }
+                }
+            }
+
+            given("findLockedNudgeRecipients") {
+                fun sentDispatch(userId: String) =
+                    createSessionDispatch(
+                        userId = userId,
+                        dmSentAt = cutoffAt.minusSeconds(3_600L),
+                        dmStatus = DispatchStatus.SENT,
+                    )
+
+                `when`("a session has silent, answered and skipped members plus one whose DM is not sent yet") {
+                    val sessionUid =
+                        openSession(
+                            dispatches =
+                                listOf(
+                                    sentDispatch(userId = "U_SILENT"),
+                                    sentDispatch(userId = "U_ANSWERED"),
+                                    sentDispatch(userId = "U_SKIPPED"),
+                                    createSessionDispatch(userId = "U_PENDING"),
+                                ),
+                        )
+                    inTx {
+                        repository.recordAnswer(
+                            sessionUid = sessionUid,
+                            userId = "U_ANSWERED",
+                            responses = listOf("done"),
+                            submittedAt = cutoffAt.minusSeconds(600L),
+                        )
+                    }
+                    inTx {
+                        repository.recordSkip(
+                            sessionUid = sessionUid,
+                            userId = "U_SKIPPED",
+                            skippedAt = cutoffAt.minusSeconds(600L),
+                        )
+                    }
+                    val sessionId = repository.findSession(sessionUid = sessionUid)!!.sessionId
+                    val (claimed, recipients) =
+                        inTx {
+                            repository.claimNudge(sessionId = sessionId) to
+                                repository.findLockedNudgeRecipients(sessionUid = sessionUid)
+                        }
+
+                    then("the read under the claim's lock reports the sent, answered and skipped members") {
+                        claimed shouldBe true
+                        recipients.sessionId shouldBe sessionId
+                        recipients.sentMemberIds shouldBe setOf("U_SILENT", "U_ANSWERED", "U_SKIPPED")
+                        recipients.answeredUserIds shouldBe setOf("U_ANSWERED")
+                        recipients.skippedUserIds shouldBe setOf("U_SKIPPED")
+                    }
+                }
+
+                `when`("an answer holds the session lock while the nudge claims and re-reads") {
+                    val sessionUid =
+                        openSession(
+                            dispatches =
+                                listOf(
+                                    sentDispatch(userId = "U_A"),
+                                    sentDispatch(userId = "U_B"),
+                                ),
+                        )
+                    val sessionId = repository.findSession(sessionUid = sessionUid)!!.sessionId
+                    val answerLocked = CountDownLatch(1)
+                    val answerResult = AtomicReference<AnswerRecordResult?>()
+                    val answer =
+                        thread {
+                            runCatching {
+                                inTx {
+                                    repository
+                                        .recordAnswer(
+                                            sessionUid = sessionUid,
+                                            userId = "U_A",
+                                            responses = listOf("made it"),
+                                            submittedAt = cutoffAt.minusSeconds(60L),
+                                        ).also {
+                                            answerLocked.countDown()
+                                            Thread.sleep(LOCK_HOLD_MILLIS)
+                                        }
+                                }
+                            }.onSuccess { answerResult.set(it) }
+                            answerLocked.countDown()
+                        }
+                    answerLocked.await(5L, TimeUnit.SECONDS)
+                    val (claimed, recipients) =
+                        inTx {
+                            repository.claimNudge(sessionId = sessionId) to
+                                repository.findLockedNudgeRecipients(sessionUid = sessionUid)
+                        }
+                    answer.join()
+
+                    then("the claim waits for the answer's commit and the re-read counts the member as answered") {
+                        answerResult.get() shouldBe AnswerRecordResult.RECORDED
+                        claimed shouldBe true
+                        recipients.answeredUserIds shouldBe setOf("U_A")
+                    }
+                }
+
+                `when`("the session uid is unknown") {
+                    then("it throws instead of reporting nobody to nudge") {
+                        shouldThrow<DatabaseException> {
+                            inTx { repository.findLockedNudgeRecipients(sessionUid = UUID.randomUUID()) }
+                        }
                     }
                 }
             }

@@ -12,10 +12,13 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import io.kotest.matchers.string.shouldStartWith
+import io.kotest.matchers.types.shouldBeInstanceOf
 import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class GoogleOAuthClientTest :
     BehaviorSpec({
@@ -62,6 +65,14 @@ class GoogleOAuthClientTest :
                 exchange.sendResponseHeaders(status, bytes.size.toLong())
                 exchange.responseBody.use { it.write(bytes) }
             }
+
+        fun Thread.awaitParkedIn(methodName: String) {
+            val deadline = System.nanoTime() + Duration.ofSeconds(5L).toNanos()
+            while (state != Thread.State.WAITING || stackTrace.none { it.methodName == methodName }) {
+                check(System.nanoTime() < deadline) { "$name never parked in $methodName" }
+                Thread.sleep(10L)
+            }
+        }
 
         fun formFields(body: String): Map<String, String> =
             body.split("&").associate { pair ->
@@ -365,6 +376,35 @@ class GoogleOAuthClientTest :
 
                 then("it reports failure") {
                     client.revoke(token = "1//refresh") shouldBe false
+                }
+            }
+
+            `when`("Google answers 200 and the thread is interrupted while the body is still on its way") {
+                val headersSent = CountDownLatch(1)
+                val release = CountDownLatch(1)
+                respond = { exchange ->
+                    exchange.sendResponseHeaders(200, 0)
+                    exchange.responseBody.flush()
+                    headersSent.countDown()
+                    release.await(10L, TimeUnit.SECONDS)
+                    exchange.close()
+                }
+                var outcome: Result<Boolean>? = null
+                var keptInterrupt = false
+                val revoking =
+                    Thread {
+                        outcome = runCatching { client.revoke(token = "1//refresh") }
+                        keptInterrupt = Thread.currentThread().isInterrupted
+                    }.apply { start() }
+                headersSent.await(5L, TimeUnit.SECONDS)
+                revoking.awaitParkedIn(methodName = "readNBytes")
+                revoking.interrupt()
+                revoking.join(5_000L)
+                release.countDown()
+
+                then("the interrupt propagates with its flag instead of reading as a failed revoke") {
+                    outcome?.exceptionOrNull().shouldBeInstanceOf<InterruptedException>()
+                    keptInterrupt shouldBe true
                 }
             }
         }

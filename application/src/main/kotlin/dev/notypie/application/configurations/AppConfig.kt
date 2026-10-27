@@ -165,7 +165,16 @@ data class AppConfig(
         data class Retention(
             val days: Long = 14L,
             val batchSize: Int = 1_000,
-        )
+        ) {
+            init {
+                require(days in 1L..Agent.Retention.MAX_RETENTION_DAYS) {
+                    "outbox.retention.days must be between 1 and ${Agent.Retention.MAX_RETENTION_DAYS}: $days"
+                }
+                require(batchSize in 1..Agent.Retention.MAX_BATCH_SIZE) {
+                    "outbox.retention.batch-size must be between 1 and ${Agent.Retention.MAX_BATCH_SIZE}: $batchSize"
+                }
+            }
+        }
 
         data class Polling(
             val batchSize: Int = 100,
