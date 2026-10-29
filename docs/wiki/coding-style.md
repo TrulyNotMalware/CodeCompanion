@@ -1,13 +1,19 @@
 # 코딩 스타일 가이드
 
-_type: guide · updated: 2026-10-26_
+_type: guide · updated: 2026-10-29_
 
 > Kotlin답게, non-null 우선으로, 주석 대신 코드가 설명하게, 파일은 적게 — 그리고 리팩토링에는 반드시
 > 테스트가 따라온다.
 
 ## 원칙
 
-1. **파일 최소화 · 응집성 우선.** 파일을 여럿 만들지 않는다. 쓸데없이 쪼개졌거나 너무 작은 파일은 합친다.
+1. **파일 최소화 · 응집성 우선.** 파일을 여럿 만들지 않는다. 쓸데없이 쪼개졌거나 너무 작은 파일은 합친다. 합치기 전에
+   두 가지를 본다 — 받는 파일이 같은 이름의 어노테이션을 import하고 있지 않은지(명시적 import가 같은 파일의 선언보다
+   먼저 풀린다. `@Payload`를 import하는 `DebeziumLogTailingProcessor.kt`에 `DebeziumOutboxMessage.kt`의 `data class Payload`를
+   옮기면 `Envelope.payload`가 어노테이션 타입이 되어 `.after`에서 컴파일이 깨진다 — 2026-10-29 실측. 필드를 읽지 않는
+   파일이었다면 조용히 어노테이션 타입으로 컴파일된다), 톱레벨 함수·프로퍼티를 옮기면 그것들이 들어가는 JVM 파일 클래스
+   (`XxxKt`)가 달라지므로(클래스 선언은 이름이 그대로다. `SlackMrkdwn.kt`를 `SlackBlockLimits.kt`에 합치면 `SlackMrkdwnKt`가
+   사라지고 그 멤버가 `SlackBlockLimitsKt`로 옮겨진다) `@file:JvmName`·`@JvmMultifileClass`·리플렉션·Java 호출자가 없는지.
 2. **Kotlin다운 코드.** 스코프 함수(`let`/`run`/`apply`/`also`/`with`), 고차 함수, DSL을 적극 쓴다. 자체
    DSL(`validate {}`, `exceptionDetails {}`, 모달 템플릿 빌더)이 이미 있으면 그것을 쓴다.
 3. **non-null 우선.** nullable 변수·프로퍼티·파라미터를 지양한다. null 가능성은 경계(외부 입력·파싱·조회)에서
@@ -91,6 +97,10 @@ _type: guide · updated: 2026-10-26_
   `service/relay/SlackMessageRelayServiceImpl.kt`(`saveOutboxMessage`), `service/{mention,interaction}/*HandlerImpl.kt`,
   `infrastructure/src/main/kotlin/dev/notypie/impl/command/SlackViewOpenDispatcher.kt`(`ViewOpenDeferral`)
 - `.github/dependabot.yml`
+- 파일 병합 함정(원칙 1, PR #65): `application/src/main/kotlin/dev/notypie/application/service/relay/DebeziumLogTailingProcessor.kt`(`@Payload` import)·
+  `application/src/main/kotlin/dev/notypie/application/service/relay/DebeziumOutboxMessage.kt`(`data class Payload`),
+  `infrastructure/src/main/kotlin/dev/notypie/templates/SlackBlockLimits.kt`(구 `SlackMrkdwn.kt`). 2026-10-29 스크래치 worktree 에서 두 클래스를 옮기고
+  `:application:compileKotlin`: `Unresolved reference 'after' on receiver of type 'Payload'`
 
 ## 관련 페이지
 
