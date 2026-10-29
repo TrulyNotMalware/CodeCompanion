@@ -208,6 +208,194 @@ class SlackInboundMapperTest :
             }
         }
 
+        given("a standup-setup view_submission carrying all eight form fields") {
+            val setupKey = UUID.randomUUID()
+
+            fun stateOf(type: ActionElementTypes, blockId: String, value: String) =
+                States(type = type, isSelected = value.isNotBlank(), selectedValue = value, blockId = blockId)
+
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states =
+                        listOf(
+                            stateOf(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_NAME,
+                                value = "daily",
+                            ),
+                            stateOf(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_QUESTIONS,
+                                value = "Done?\nBlocked?",
+                            ),
+                            stateOf(
+                                type = ActionElementTypes.MULTI_USERS_SELECT,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_MEMBERS,
+                                value = "U_A,U_B",
+                            ),
+                            stateOf(
+                                type = ActionElementTypes.CONVERSATIONS_SELECT,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_SUMMARY_CHANNEL,
+                                value = "C_SUMMARY",
+                            ),
+                            stateOf(
+                                type = ActionElementTypes.MULTI_STATIC_SELECT,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_WEEKDAYS,
+                                value = "MONDAY, FRIDAY",
+                            ),
+                            stateOf(
+                                type = ActionElementTypes.TIME_PICKER,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_TIME,
+                                value = "09:15",
+                            ),
+                            stateOf(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_CUTOFF,
+                                value = "90",
+                            ),
+                            stateOf(
+                                type = ActionElementTypes.STATIC_SELECT,
+                                blockId = InboundFieldKeys.STANDUP_SETUP_TIMEZONE,
+                                value = "Asia/Seoul",
+                            ),
+                        ),
+                    idempotencyKey = setupKey,
+                ).copy(routingExtras = listOf("U_CREATOR", "C_COMMAND"))
+
+            `when`("mapped to the neutral inbound model") {
+                val submission = payload.toInbound().submission
+
+                then("every field lands in its own StandupSetup slot, with routing from the extras") {
+                    submission shouldBe
+                        InboundSubmission.StandupSetup(
+                            idempotencyKeyRaw = setupKey.toString(),
+                            creatorId = "U_CREATOR",
+                            commandChannel = "C_COMMAND",
+                            name = "daily",
+                            questionsRaw = "Done?\nBlocked?",
+                            membersRaw = "U_A,U_B",
+                            summaryChannel = "C_SUMMARY",
+                            weekdaysRaw = "MONDAY, FRIDAY",
+                            timeRaw = "09:15",
+                            cutoffRaw = "90",
+                            timezoneRaw = "Asia/Seoul",
+                        )
+                }
+            }
+
+            `when`("the form carries no fields") {
+                val submission = payload.copy(states = emptyList()).toInbound().submission
+
+                then("every form slot is blank while the routing slots stay filled") {
+                    val setup = submission.shouldBeInstanceOf<InboundSubmission.StandupSetup>()
+                    setup.creatorId shouldBe "U_CREATOR"
+                    setup.commandChannel shouldBe "C_COMMAND"
+                    listOf(
+                        setup.name,
+                        setup.questionsRaw,
+                        setup.membersRaw,
+                        setup.summaryChannel,
+                        setup.weekdaysRaw,
+                        setup.timeRaw,
+                        setup.cutoffRaw,
+                        setup.timezoneRaw,
+                    ).forEach { it shouldBe "" }
+                }
+            }
+        }
+
+        given("an add-participant view_submission with a multi-user select") {
+            val meetingUid = UUID.randomUUID()
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.MEETING_ADD_PARTICIPANT_SUBMIT,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states =
+                        listOf(
+                            States(
+                                type = ActionElementTypes.MULTI_USERS_SELECT,
+                                isSelected = true,
+                                selectedValue = "U_NEW1,U_NEW2",
+                                blockId = InboundFieldKeys.ADD_PARTICIPANT_USERS,
+                            ),
+                        ),
+                    idempotencyKey = meetingUid,
+                ).copy(routingExtras = listOf("U_HOST", "C_ORIGIN", "https://hooks.slack.test/list"))
+
+            `when`("mapped to the neutral inbound model") {
+                val inbound = payload.toInbound()
+
+                then("the selected users, meeting and requester land in AddParticipant") {
+                    val add = inbound.submission.shouldBeInstanceOf<InboundSubmission.AddParticipant>()
+                    add.meetingUidRaw shouldBe meetingUid.toString()
+                    add.requesterId shouldBe "U_HOST"
+                    add.participantUserIdsRaw shouldBe "U_NEW1,U_NEW2"
+                    add.listHandle?.raw shouldBe "https://hooks.slack.test/list"
+                }
+            }
+
+            `when`("the select state is missing") {
+                val add = payload.copy(states = emptyList()).toInbound().submission
+
+                then("the raw users are blank") {
+                    add.shouldBeInstanceOf<InboundSubmission.AddParticipant>().participantUserIdsRaw shouldBe ""
+                }
+            }
+        }
+
+        given("a decline-reason view_submission with a reason select and a detail input") {
+            val meetingKey = UUID.randomUUID()
+            val payload =
+                createInteractionPayloadInput(
+                    commandDetailType = CommandDetailType.MEETING_DECLINE_REASON,
+                    currentAction = States(type = ActionElementTypes.APPLY_BUTTON, isSelected = true),
+                    states =
+                        listOf(
+                            States(
+                                type = ActionElementTypes.STATIC_SELECT,
+                                isSelected = true,
+                                selectedValue = "SCHEDULE_CONFLICT",
+                                blockId = "reason_block",
+                            ),
+                            States(
+                                type = ActionElementTypes.PLAIN_TEXT_INPUT,
+                                isSelected = true,
+                                selectedValue = "double booked",
+                                blockId = "detail_block",
+                            ),
+                        ),
+                    idempotencyKey = meetingKey,
+                ).copy(routingExtras = listOf("U_GUEST", "D_NOTICE", "1700000000.000900"))
+
+            `when`("mapped to the neutral inbound model") {
+                val submission = payload.toInbound().submission
+
+                then("the choice becomes the reason and the text becomes the detail") {
+                    submission shouldBe
+                        InboundSubmission.DeclineReason(
+                            meetingIdempotencyKeyRaw = meetingKey.toString(),
+                            participantUserId = "U_GUEST",
+                            noticeChannel = "D_NOTICE",
+                            noticeMessageTs = "1700000000.000900",
+                            reasonRaw = "SCHEDULE_CONFLICT",
+                            detailRaw = "double booked",
+                        )
+                }
+            }
+
+            `when`("the optional detail input is absent") {
+                val submission = payload.copy(states = payload.states.take(n = 1)).toInbound().submission
+
+                then("the reason is kept and the detail is blank") {
+                    val decline = submission.shouldBeInstanceOf<InboundSubmission.DeclineReason>()
+                    decline.reasonRaw shouldBe "SCHEDULE_CONFLICT"
+                    decline.detailRaw shouldBe ""
+                }
+            }
+        }
+
         given("States covering every element type") {
             fun field(type: ActionElementTypes) =
                 States(type = type, isSelected = true, selectedValue = "v", blockId = "b").toInboundField()

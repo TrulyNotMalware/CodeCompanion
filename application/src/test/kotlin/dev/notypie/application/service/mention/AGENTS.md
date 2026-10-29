@@ -1,17 +1,18 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-20 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # test/kotlin/dev/notypie/application/service/mention
 
 ## Purpose
-Spec for `SlackMentionEventHandlerImpl.parseAppMentionEvent`, the step that turns a raw `app_mention`
-event map into an `InboundCommand`. Only parsing is covered; the dispatch path through `CommandExecutor`
-is not exercised here.
+Spec for `SlackMentionEventHandlerImpl`: `parseAppMentionEvent`, the step that turns a raw `app_mention`
+event map into an `InboundCommand`, and `handleEvent`, which drops the app's own and user-less mentions and
+otherwise builds the `InteractionCommand` with the role `CommandRoleResolver` returns. `CommandExecutor` is a
+mock; the role cases run the captured command's own `handleEvent()` to read its effects.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK; the handler gets a real H2 `createH2TransactionManager()`. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, and the payload's `"token"` (`TEST_BOT_TOKEN`) is accepted but appears nowhere in the parsed command's `toString()` (fails when a token field comes back, 2026-10-20); `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`. `handleEvent(headers, payload)`: a message posted by this app (`botAppId = TEST_APP_ID`), one whose only `bot_profile.app_id` names this app, and one without `user` (and `blocks`) → `Status.DO_NOTHING` with no role lookup and no execution; a plain human mention and a person posting through another app (`botAppId = "A_OTHER_APP"`) → the role is resolved for `TEST_USER_ID` and the command runs once. |
+| `SlackMentionEventHandlerImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK; the handler gets a real H2 `createH2TransactionManager()`. Payload with `api_app_id` → `appId == TEST_APP_ID`, `channel == TEST_CHANNEL_ID`, `actorId == TEST_USER_ID`, and the payload's `"token"` (`TEST_BOT_TOKEN`) is accepted but appears nowhere in the parsed command's `toString()` (fails when a token field comes back, 2026-10-20); `appId = null` → `AppIdNotFoundException`; `type = "not_a_real_type"` → `UnsupportedSlackCommandTypeException` with `rawCommandType` echoed; `botId = null` (human-typed mention, regression) → parses; `botId = "B001"` (app-posted, with `bot_profile`) → parses; custom `channel`/`publisherId`/`userName` → reflected in `channel`/`actorId`. `handleEvent(headers, payload)`: a message posted by this app (`botAppId = TEST_APP_ID`), one whose only `bot_profile.app_id` names this app, and one without `user` (and `blocks`) → `Status.DO_NOTHING` with no role lookup and no execution; a plain human mention and a person posting through another app (`botAppId = "A_OTHER_APP"`) → the role is resolved for `TEST_USER_ID` and the command runs once. Role propagation (2026-10-27; decision #13 gates mention commands by this role): `handleEvent(commandData = createMentionInboundCommand(commandTokens = listOf("roles")))` with the resolver answering `ADMIN` → the `Command` captured with `slot` yields exactly `[CommandIntent.ListRoles]` when run; answering `USER` → it yields one `OutboundMessage.Ephemeral` whose text contains "You don't have permission to use `roles`". Replacing the resolved role with a fixed `USER` fails the first, a fixed `ADMIN` the second (both while still calling the resolver). |
 
 ## For AI Agents
 
@@ -21,8 +22,9 @@ is not exercised here.
   parsing once required those keys.
 - `event.ts` is a string and `event_ts` a double in the fixture, mirroring the wire shape; a parser change
   that types either differently will surface here first.
-- `commandExecutor` is `relaxed` and `commandRoleResolver` strict, but neither is called by
-  `parseAppMentionEvent`; they exist only to construct the handler.
+- The spec-level `commandExecutor` is `relaxed` and `commandRoleResolver` strict, but neither is called by
+  `parseAppMentionEvent`; they exist only to construct the handler. `handleEvent` cases build their own pair through
+  the local `handlerWith(executor, roleResolver)`.
 - Headers are a `LinkedMultiValueMap` with `Content-Type: application/json`; nothing asserts on them.
 
 ### Testing Requirements
@@ -30,8 +32,9 @@ is not exercised here.
 ./gradlew :application:test --tests 'dev.notypie.application.service.mention.*'
 ```
 Fixtures used: `application` testFixtures `service/mention/AppMentionPayloadCreator.kt`
-(`createAppMentionPayload`), `domain` testFixtures `Constants.kt` (`TEST_APP_ID`, `TEST_BOT_TOKEN`,
-`TEST_CHANNEL_ID`, `TEST_USER_ID`).
+(`createAppMentionPayload`, `withoutEventKeys`), `service/meeting/MeetingTransactionFixtures.kt`
+(`createH2TransactionManager`), `domain` testFixtures `Constants.kt` (`TEST_APP_ID`, `TEST_BOT_TOKEN`,
+`TEST_CHANNEL_ID`, `TEST_USER_ID`) and `command/InboundCommandCreator.kt` (`createMentionInboundCommand`).
 
 ### Common Patterns
 - Exceptions are asserted with `shouldThrow<...>` and, for the unsupported type, by reading the exception's

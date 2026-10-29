@@ -8,6 +8,8 @@ import dev.notypie.application.outbox.createStubTransactionManager
 import dev.notypie.application.service.meeting.createH2MeetingJpaStore
 import dev.notypie.application.service.meeting.createH2TransactionManager
 import dev.notypie.domain.command.dto.CommandBasicInfo
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -128,7 +130,9 @@ class CalendarSyncServiceTest :
             val connections = mockk<GoogleCalendarConnectionRepository>()
             val tokenProvider = mockk<GoogleAccessTokenProvider>()
             val calendarClient = mockk<GoogleCalendarClient>()
+            val publisher = mockk<EventPublisher>(relaxed = true)
             val staged = mutableListOf<OutboundMessage>()
+            val stagedEvent = mockk<CommandEvent<EventPayload>>(relaxed = true)
             val stagedInfos = mutableListOf<CommandBasicInfo>()
             val claimTokens = mutableListOf<String>()
             val stagedInsideTransaction = mutableListOf<Boolean>()
@@ -142,7 +146,7 @@ class CalendarSyncServiceTest :
                     every { stage(message = capture(staged), basicInfo = capture(stagedInfos)) } answers {
                         stagedInsideTransaction += TransactionSynchronizationManager.isActualTransactionActive()
                         transactionsSeen += currentTransaction()
-                        mockk(relaxed = true)
+                        stagedEvent
                     }
                 }
             val service =
@@ -152,7 +156,7 @@ class CalendarSyncServiceTest :
                     tokenProvider = tokenProvider,
                     calendarClient = calendarClient,
                     outboundStager = stager,
-                    eventPublisher = mockk<EventPublisher>(relaxed = true),
+                    eventPublisher = publisher,
                     transactionManager = transactionManager,
                     clock = clock,
                     appConfig = appConfig,
@@ -597,6 +601,7 @@ class CalendarSyncServiceTest :
                     val errors = h.sync()
 
                     then("the row is deleted while its claim and change_seq still match") {
+                        verify(exactly = 1) { h.calendarClient.delete(accessToken = "ya29.token", eventId = "evt-1") }
                         verify(exactly = 1) { h.queue.deleteSynced(id = 1L, token = h.token(), observedSeq = 3L) }
                         verify(exactly = 0) { h.queue.releaseWithoutEvent(id = any(), token = any(), now = any()) }
                         errors.shouldBeEmpty()
@@ -612,6 +617,7 @@ class CalendarSyncServiceTest :
                 h.sync()
 
                 then("that counts as deleted") {
+                    verify(exactly = 1) { h.calendarClient.delete(accessToken = "ya29.token", eventId = "evt-1") }
                     verify(exactly = 1) { h.queue.deleteSynced(id = 1L, token = h.token(), observedSeq = 3L) }
                     h.verifyNoRetryOrFailure()
                 }
@@ -627,6 +633,7 @@ class CalendarSyncServiceTest :
                 h.sync()
 
                 then("the row is released without its event id so the next pass decides again") {
+                    verify(exactly = 1) { h.calendarClient.delete(accessToken = "ya29.token", eventId = "evt-1") }
                     verify(exactly = 1) { h.queue.releaseWithoutEvent(id = 1L, token = h.token(), now = start) }
                 }
             }
@@ -645,6 +652,7 @@ class CalendarSyncServiceTest :
                     "the pair is re-queued once, so an event another worker re-created meanwhile is restored by " +
                         "the next pass; nothing else is written and no ERROR is raised",
                 ) {
+                    verify(exactly = 1) { h.calendarClient.delete(accessToken = "ya29.token", eventId = "evt-1") }
                     verify(exactly = 1) { h.queue.deleteSynced(id = 1L, token = h.token(), observedSeq = 3L) }
                     verify(exactly = 1) { h.queue.releaseWithoutEvent(id = 1L, token = h.token(), now = start) }
                     verify(exactly = 1) { h.queue.enqueue(meetingId = 7L, slackUserId = guest, now = start) }
@@ -1040,6 +1048,9 @@ class CalendarSyncServiceTest :
 
             then("the user is told once, in words that cover an expired grant too, how to reconnect") {
                 h.directMessages() shouldBe listOf(host to CalendarSyncService.GRANT_REJECTED_MESSAGE)
+                verify(
+                    exactly = 1,
+                ) { h.publisher.publishEvent(events = match { it.toList() == listOf(h.stagedEvent) }) }
                 CalendarSyncService.GRANT_REJECTED_MESSAGE shouldBe
                     "Google no longer accepts CodeCompanion's access to your calendar (it was revoked or expired), " +
                     "so meetings are no longer mirrored. Run `/calendar connect` to reconnect."

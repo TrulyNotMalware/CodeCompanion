@@ -20,6 +20,7 @@ import dev.notypie.domain.standup.createStandupAnswerDto
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -35,6 +36,12 @@ class OutboundMessageCodecTest :
             "\"basicInfo\":{\"appId\":\"A12ABCDEFG\"," +
                 "\"publisherId\":\"U012ABCDEFG\",\"channel\":\"C012ABCDEFG\"," +
                 "\"idempotencyKey\":\"00000000-0000-0000-0000-000000000001\"}"
+
+        val v7Row =
+            "{\"message\":{\"@type\":\"ChannelMessage\",\"target\":\"C012ABCDEFG\"," +
+                "\"content\":{\"@type\":\"StandupSummary\",\"routineName\":\"Daily\"," +
+                "\"sessionDate\":\"2026-05-01\",\"members\":[],\"answers\":[],\"questions\":[\"Q?\"]}," +
+                "\"detailType\":null,\"threadId\":null},$basicInfoJson}"
 
         fun roundTrip(message: OutboundMessage): OutboundEnvelope =
             OutboundMessageCodec.decode(
@@ -163,12 +170,6 @@ class OutboundMessageCodecTest :
                             ),
                     ),
             )
-            val v7Row =
-                "{\"message\":{\"@type\":\"ChannelMessage\",\"target\":\"C012ABCDEFG\"," +
-                    "\"content\":{\"@type\":\"StandupSummary\",\"routineName\":\"Daily\"," +
-                    "\"sessionDate\":\"2026-05-01\",\"members\":[],\"answers\":[],\"questions\":[\"Q?\"]}," +
-                    "\"detailType\":null,\"threadId\":null},$basicInfoJson}"
-
             OutboundMessageCodec.decode(json = v7Row) shouldBe
                 OutboundEnvelope(
                     message =
@@ -186,6 +187,46 @@ class OutboundMessageCodecTest :
                         ),
                     basicInfo = fixtureBasicInfo,
                 )
+        }
+
+        "a row written with skippedUserIds is the pre-field row plus one additive key and round-trips" {
+            val summary =
+                MessageContent.StandupSummary(
+                    routineName = "Daily",
+                    sessionDate = LocalDate.of(2026, 5, 1),
+                    members = emptyList(),
+                    answers = emptyList(),
+                    questions = listOf("Q?"),
+                    skippedUserIds = setOf("U_SKIP"),
+                )
+            val encoded =
+                OutboundMessageCodec.encode(
+                    envelope =
+                        OutboundEnvelope(
+                            message = OutboundMessage.ChannelMessage(target = target, content = summary),
+                            basicInfo = fixtureBasicInfo,
+                        ),
+                )
+            val additiveKey = ",\"skippedUserIds\":[\"U_SKIP\"]"
+
+            encoded shouldContain additiveKey
+            Regex
+                .escape(additiveKey)
+                .toRegex()
+                .findAll(encoded)
+                .count() shouldBe 1
+            encoded.replace(additiveKey, "") shouldBe v7Row
+            OutboundMessageCodec.decode(json = encoded) shouldBe
+                OutboundEnvelope(
+                    message = OutboundMessage.ChannelMessage(target = target, content = summary),
+                    basicInfo = fixtureBasicInfo,
+                )
+        }
+
+        "a StandupSummary row carrying a property the reader does not know decodes without it" {
+            val futureRow = v7Row.replace("\"questions\":[\"Q?\"]", "\"questions\":[\"Q?\"],\"futureField\":[\"X\"]")
+
+            OutboundMessageCodec.decode(json = futureRow) shouldBe OutboundMessageCodec.decode(json = v7Row)
         }
 
         "ChannelMessage with AgentQuestion round-trips with its detailType" {

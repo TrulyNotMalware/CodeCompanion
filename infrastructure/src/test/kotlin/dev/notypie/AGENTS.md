@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # infrastructure/src/test/kotlin/dev/notypie
 
@@ -45,11 +45,10 @@ testFixtures package of the same name.
 ./gradlew :infrastructure:test --tests 'dev.notypie.<package>.*' # one package
 ./gradlew :infrastructure:test --tests 'dev.notypie.<package>.<SpecName>'
 ```
-Spring-booting specs share a cached context per configuration: all `@DataJpaTest` specs share one H2, and
+Spring-booting specs share a cached context per configuration: most `@DataJpaTest` specs share one H2 (specs that commit rows or must stay isolated — `StandupRepositoryImplTest`, `StandupReadQueriesTest`, `JpaMeetingCalendarEventRepositoryTest` and the others that set their own `spring.datasource.url` — get a database of their own), and
 `impl/command/KafkaEventPublisherTest` (`@SpringBootTest` + `@EmbeddedKafka`) is its own context and the only
-broker start in the module. Two specs need the network: `impl/command/RestClientRequesterTest` (live
-jsonplaceholder API) and nothing else — `impl/agent` and `impl/cve` stub HTTP with the JDK `HttpServer` on
-loopback.
+broker start in the module. No spec needs the external network: `impl/command/RestClientRequesterTest`, `impl/agent` and `impl/cve` stub HTTP with
+the JDK `HttpServer` on loopback.
 
 ### Common Patterns
 - Spring specs: constructor injection with `@Autowired constructor(...)` plus

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-20 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # test/kotlin/dev/notypie/application/service/cve/query
 
@@ -11,7 +11,7 @@ that gates on the feature flag and normalizes the optional topic-key argument.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CveLatestQueryServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Disabled → no `stage`; no subscriptions and no key → DM contains `no CVE topic subscriptions`; two subscriptions → `findRecentDoneEvents(topicIds = listOf(11L, 12L), limit = 5)` rendered as `*Kotlin* — *v2.3.0*`, `New release.`, `*Java CVE* — *CVE-2026-1111*`; subscribed but nothing summarized → `No recent CVE updates`; five events with 500-char titles and 700-char summaries → markdown length `2900 + "\n…(truncated)".length` and contains `…(truncated)`; a summary whose emoji straddles the 700-character cap → cut to the 699 characters before it; key `ghost` not in `findActiveTopics` → `` `ghost` is not available ``; key `kotlin` → read scoped to `topicIds = listOf(11L)` verified once. `R&D` / `<!here> v2` / `<https://evil.example|Patch here>` → rendered exactly escaped; two 700-character `<` summaries → capped on the escaped body, no raw `<`, ending on a whole `&lt;`; unknown key `<!channel>` → ``Topic `&lt;!channel&gt;` is not available.``. Stored key `springBoot` with the argument run through `extractTopicKey` → found. |
+| `CveLatestQueryServiceTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Disabled → no `stage`; no subscriptions and no key → DM contains `no CVE topic subscriptions`; two subscriptions → `findRecentDoneEvents(topicIds = listOf(11L, 12L), limit = 5)` rendered as `*Kotlin* — *v2.3.0*`, `New release.`, `*Java CVE* — *CVE-2026-1111*`; subscribed but nothing summarized → `No recent CVE updates`; five events with 500-char titles and 700-char summaries → markdown length `2900 + "\n…(truncated)".length` and contains `…(truncated)`; a summary whose emoji straddles the 700-character cap → cut to the 699 characters before it; key `ghost` not in `findActiveTopics` → `` `ghost` is not available ``; key `kotlin` → read scoped to `topicIds = listOf(11L)` verified once. `R&D` / `<!here> v2` / `<https://evil.example|Patch here>` → rendered exactly escaped; two 700-character `<` summaries → capped on the escaped body, no raw `<`, ending on a whole `&lt;`; unknown key `<!channel>` → ``Topic `&lt;!channel&gt;` is not available.``. Stored key `springBoot` with the argument run through `extractTopicKey` → found. Every DM case also asserts the staged `basicInfo.channel` is the caller (`TEST_USER_ID`), the field `SlackOutboundRenderer` reads, not only `target.id`; the no-subscriptions case verifies `eventPublisher.publishEvent(events = any())` exactly once, because only the published event makes the BEFORE_COMMIT listener write the outbox row. |
 | `CveQuerySlashServiceImplTest.kt` | Plain Kotest `BehaviorSpec` + MockK. Disabled → `commandExecutor.execute` never; enabled with `subCommands = listOf("kotlin")` → exactly one `execute<NoSubCommands>` whose command `is CveLatestSlashCommand`; `extractTopicKey`: empty → null, `listOf("  ", "spring")` → `spring`, `Kotlin` → `kotlin`. |
 
 ## For AI Agents
@@ -25,8 +25,9 @@ that gates on the feature flag and normalizes the optional topic-key argument.
   first, then the aggregate cap, which is why five oversized events still produce one marker.
 - `extractTopicKey` is a companion function tested directly; the slash spec never inspects the executed
   command's key, so key normalization is covered only there.
-- `eventPublisher` is a relaxed mock that is never verified in the query spec; add a `verify` if publish
-  behaviour becomes part of the contract.
+- `eventPublisher` is a relaxed mock passed in through `serviceWith(publisher = ...)`; staging alone sends nothing, so the
+  no-subscriptions case verifies `publishEvent(events = any())` once. `stagerCapturing` also captures `basicInfo` into a
+  spec-level slot that `markdown()` checks against `TEST_USER_ID`.
 
 ### Testing Requirements
 ```bash

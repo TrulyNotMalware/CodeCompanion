@@ -93,6 +93,27 @@ class SlackRequestVerificationFilterTest :
                 }
             }
 
+            `when`("an events request carries a multi-byte UTF-8 body and a signature computed outside the JVM") {
+                val response = MockHttpServletResponse()
+                val chain = CountingFilterChain()
+
+                filter(signingSecret = REFERENCE_SIGNING_SECRET).doFilter(
+                    slackRequest(
+                        rawBody = REFERENCE_UTF8_BODY,
+                        path = EVENTS_PATH,
+                        timestamp = REFERENCE_TIMESTAMP,
+                        signature = REFERENCE_UTF8_SIGNATURE,
+                    ),
+                    response,
+                    chain,
+                )
+
+                then("the filter verifies the bytes it buffered and the request reaches the handlers") {
+                    response.status shouldBe 200
+                    chain.invocationCount shouldBe 1
+                }
+            }
+
             `when`("the Slack signature is invalid") {
                 val response = MockHttpServletResponse()
                 val chain = CountingFilterChain()
@@ -581,6 +602,24 @@ class SlackRequestVerificationFilterTest :
                     }.messagesAt(level = Level.WARN).filter { it.startsWith("Rejected Slack request headers") }
 
                 then("the one WARN shows each of them as ? in the path") {
+                    rejections.size shouldBe 1
+                    rejections.single() shouldContain "path=/api/slack/x?a?b?c"
+                }
+            }
+
+            `when`("the rejected browser request's path carries encoded NEL, line separator and bidi override") {
+                val rejections =
+                    captureLogs(loggerName = SlackRequestVerificationFilter::class.java.name) {
+                        filter(signingSecret = "", profiles = arrayOf("local")).doFilter(
+                            unsignedRequest(requestUri = "/api/slack/x%C2%85a%E2%80%A8b%E2%80%AEc").apply {
+                                addHeader(HttpHeaders.ORIGIN, BROWSER_ORIGIN)
+                            },
+                            MockHttpServletResponse(),
+                            CountingFilterChain(),
+                        )
+                    }.messagesAt(level = Level.WARN).filter { it.startsWith("Rejected browser-originated request") }
+
+                then("the one Origin WARN shows each of them as ? in the path as well") {
                     rejections.size shouldBe 1
                     rejections.single() shouldContain "path=/api/slack/x?a?b?c"
                 }

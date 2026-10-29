@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer
 import com.zaxxer.hikari.HikariDataSource
 import dev.notypie.application.configurations.McpSwitchesCheck
 import dev.notypie.application.configurations.createCveTopicConfigDefinition
+import dev.notypie.application.security.SlackRequestVerificationFilter
 import dev.notypie.application.security.SlackRetryDeduplicator
 import dev.notypie.application.service.agent.ASK_RESUME_PERIOD_MILLIS
 import dev.notypie.application.service.agent.AgentAskThreadStarter
@@ -50,8 +51,10 @@ import dev.notypie.repository.outbox.CodecOutboundMessagePort
 import dev.notypie.repository.outbox.MessageOutboxRepository
 import dev.notypie.repository.outbox.dto.MessageDeliveredEvent
 import dev.notypie.repository.outbox.schema.MessageStatus
+import dev.notypie.repository.standup.StandupRepository
 import dev.notypie.schema.createMeetingSchemaWithParticipant
 import io.kotest.assertions.nondeterministic.eventually
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -84,6 +87,7 @@ import org.springframework.scheduling.config.FixedDelayTask
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.util.AopTestUtils
 import org.springframework.test.util.ReflectionTestUtils
+import org.springframework.transaction.IllegalTransactionStateException
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate
 import java.net.InetSocketAddress
@@ -133,6 +137,10 @@ class ApplicationContextSmokeTest
 
                     then("the component scan registers the MCP switch check") {
                         context.getBeansOfType(McpSwitchesCheck::class.java).size shouldBe 1
+                    }
+
+                    then("the component scan registers the Slack request verification filter exactly once") {
+                        context.getBeansOfType(SlackRequestVerificationFilter::class.java).size shouldBe 1
                     }
 
                     then("@Scheduled jobs run on a 4-thread ThreadPoolTaskScheduler") {
@@ -283,6 +291,34 @@ class ApplicationContextSmokeTest
                             .findAllTopics()
                             .map { it.topicKey } shouldContain topicKey
                         reminders.reminderExists(meetingId = meeting.id, offsetMinutes = 5) shouldBe true
+                    }
+                }
+            }
+
+            given("the standup repository's lock-reading methods that require the caller's transaction") {
+                `when`("each is called through the context's bean with no transaction active") {
+                    val standupRepository = context.getBean(StandupRepository::class.java)
+                    val sessionUid = UUID.randomUUID()
+
+                    then("findLockedNudgeRecipients is refused by the MANDATORY proxy") {
+                        TransactionSynchronizationManager.isActualTransactionActive() shouldBe false
+                        shouldThrow<IllegalTransactionStateException> {
+                            standupRepository.findLockedNudgeRecipients(sessionUid = sessionUid)
+                        }
+                    }
+
+                    then("findSessionForSummary is refused by the MANDATORY proxy") {
+                        TransactionSynchronizationManager.isActualTransactionActive() shouldBe false
+                        shouldThrow<IllegalTransactionStateException> {
+                            standupRepository.findSessionForSummary(sessionUid = sessionUid)
+                        }
+                    }
+
+                    then("lockActiveRoutinesByChannel is refused by the MANDATORY proxy") {
+                        TransactionSynchronizationManager.isActualTransactionActive() shouldBe false
+                        shouldThrow<IllegalTransactionStateException> {
+                            standupRepository.lockActiveRoutinesByChannel(commandChannel = "C_SMOKE")
+                        }
                     }
                 }
             }

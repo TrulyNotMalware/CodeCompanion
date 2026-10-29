@@ -1,12 +1,12 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # domain/command (test)
 
 ## Purpose
 Specs for the command core's top-level types — `CommandSet`, `SubCommand` / `SubCommandDefinition`,
 `EventQueue` — with one sub-package per concern below. Together with the sub-packages this is the
-largest part of the domain test set (36 of 42 spec files).
+largest part of the domain test set (40 of 48 spec files at 2026-10-27).
 
 ## Key Files
 | File | Description |

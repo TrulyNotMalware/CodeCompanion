@@ -6,15 +6,22 @@ import dev.notypie.domain.command.createInteractionResponseInboundCommand
 import dev.notypie.domain.command.entity.CommandDetailType
 import dev.notypie.domain.command.entity.context.EmptyContext
 import dev.notypie.domain.command.entity.context.IgnoredSubmissionContext
+import dev.notypie.domain.command.entity.context.form.AddParticipantContext
 import dev.notypie.domain.command.entity.context.form.ApprovalCallbackContext
+import dev.notypie.domain.command.entity.context.form.CancelMeetingContext
 import dev.notypie.domain.command.entity.context.form.MeetingApprovalResponseContext
 import dev.notypie.domain.command.entity.context.form.RequestMeetingContext
+import dev.notypie.domain.command.entity.context.form.RescheduleMeetingContext
 import dev.notypie.domain.command.entity.context.form.StandupAnswerSubmissionContext
+import dev.notypie.domain.command.entity.context.form.StandupFillContext
+import dev.notypie.domain.command.entity.context.form.StandupSlashContext
 import dev.notypie.domain.command.entity.parsers.InteractionContextParser
 import dev.notypie.domain.command.inbound.InboundSubmission
 import io.kotest.core.spec.style.BehaviorSpec
+import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import java.util.UUID
+import kotlin.reflect.KClass
 
 class InteractionContextParserTest :
     BehaviorSpec({
@@ -73,6 +80,24 @@ class InteractionContextParserTest :
 
                 then("should return MeetingApprovalResponseContext") {
                     result.shouldBeInstanceOf<MeetingApprovalResponseContext>()
+                }
+            }
+
+            `when`("the five button detail types without a submission are parsed") {
+                val expectedContexts: Map<CommandDetailType, KClass<*>> =
+                    mapOf(
+                        CommandDetailType.CANCEL_MEETING to CancelMeetingContext::class,
+                        CommandDetailType.MEETING_RESCHEDULE_REQUEST to RescheduleMeetingContext::class,
+                        CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST to AddParticipantContext::class,
+                        CommandDetailType.STANDUP_PROMPT to StandupFillContext::class,
+                        CommandDetailType.STANDUP_SETUP_REQUEST to StandupSlashContext::class,
+                    )
+
+                expectedContexts.forEach { (detailType, contextClass) ->
+                    then("$detailType resolves to ${contextClass.simpleName} and nothing else") {
+                        val result = createParser(detailType = detailType).parseContext(idempotencyKey = idempotencyKey)
+                        result::class shouldBe contextClass
+                    }
                 }
             }
 

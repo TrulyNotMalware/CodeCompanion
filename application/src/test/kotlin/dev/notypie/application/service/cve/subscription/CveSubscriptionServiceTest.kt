@@ -2,6 +2,7 @@ package dev.notypie.application.service.cve.subscription
 
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.command.createCveSubscriptionRequestEvent
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.CveSubscriptionAction
 import dev.notypie.domain.command.entity.event.EventPayload
@@ -31,10 +32,12 @@ class CveSubscriptionServiceTest :
             subscriptionRepository: CveSubscriptionRepository,
             topicRepository: CveTopicRepository,
             stagedMessage: CapturingSlot<OutboundMessage>,
+            stagedBasicInfo: CapturingSlot<CommandBasicInfo>,
             enabled: Boolean = true,
         ): Pair<CveSubscriptionService, EventPublisher> {
             val stager = mockk<OutboundMessageStager>()
-            every { stager.stage(message = capture(stagedMessage), basicInfo = any()) } returns stubStagedEvent
+            every { stager.stage(message = capture(stagedMessage), basicInfo = capture(stagedBasicInfo)) } returns
+                stubStagedEvent
             val publisher = mockk<EventPublisher>(relaxed = true)
             val service =
                 CveSubscriptionService(
@@ -47,8 +50,9 @@ class CveSubscriptionServiceTest :
             return service to publisher
         }
 
-        fun CapturingSlot<OutboundMessage>.dmMarkdown(): String =
+        fun CapturingSlot<OutboundMessage>.dmMarkdown(stagedBasicInfo: CapturingSlot<CommandBasicInfo>): String =
             captured
+                .also { stagedBasicInfo.captured.channel shouldBe userId }
                 .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
                 .also { it.target.id shouldBe userId }
                 .content
@@ -61,11 +65,13 @@ class CveSubscriptionServiceTest :
             every { topicRepository.findActiveTopics() } returns
                 listOf(createCveTopic(id = 10L, topicKey = "kotlin", displayName = "Kotlin"))
             val stagedMessage = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, publisher) =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = topicRepository,
                     stagedMessage = stagedMessage,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -85,7 +91,7 @@ class CveSubscriptionServiceTest :
                 }
 
                 then("the DM confirms the known topic and notes the skipped one, then publishes") {
-                    val markdown = stagedMessage.dmMarkdown()
+                    val markdown = stagedMessage.dmMarkdown(stagedBasicInfo = stagedBasicInfo)
                     markdown shouldContain "Subscribed to 1 topic(s): *Kotlin*."
                     markdown shouldContain "Skipped unavailable topics: `ghost`."
                     verify(exactly = 1) { publisher.publishEvent(events = any()) }
@@ -99,11 +105,13 @@ class CveSubscriptionServiceTest :
             every { subscriptionRepository.findSubscribedTopics(userId = userId) } returns
                 listOf(createCveTopic(id = 5L, topicKey = "cve-java", displayName = "Java CVE"))
             val stagedMessage = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = topicRepository,
                     stagedMessage = stagedMessage,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -120,7 +128,8 @@ class CveSubscriptionServiceTest :
                     verify(exactly = 1) {
                         subscriptionRepository.unsubscribe(userId = userId, topicIds = listOf(5L))
                     }
-                    stagedMessage.dmMarkdown() shouldContain "Unsubscribed from 1 topic(s): *Java CVE*."
+                    stagedMessage.dmMarkdown(stagedBasicInfo = stagedBasicInfo) shouldContain
+                        "Unsubscribed from 1 topic(s): *Java CVE*."
                 }
             }
         }
@@ -134,11 +143,13 @@ class CveSubscriptionServiceTest :
                     createCveTopic(id = 6L, topicKey = "kotlin", displayName = "Kotlin"),
                 )
             val stagedMessage = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = topicRepository,
                     stagedMessage = stagedMessage,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -152,7 +163,7 @@ class CveSubscriptionServiceTest :
                 )
 
                 then("every subscribed topic is rendered in the DM") {
-                    val markdown = stagedMessage.dmMarkdown()
+                    val markdown = stagedMessage.dmMarkdown(stagedBasicInfo = stagedBasicInfo)
                     markdown shouldContain "You're subscribed to 2 topic(s):"
                     markdown shouldContain "• *Java CVE* (`cve-java`)"
                     markdown shouldContain "• *Kotlin* (`kotlin`)"
@@ -165,11 +176,13 @@ class CveSubscriptionServiceTest :
             val topicRepository = mockk<CveTopicRepository>()
             every { subscriptionRepository.findSubscribedTopics(userId = userId) } returns emptyList()
             val stagedMessage = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = topicRepository,
                     stagedMessage = stagedMessage,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -183,7 +196,8 @@ class CveSubscriptionServiceTest :
                 )
 
                 then("the DM states there are no subscriptions") {
-                    stagedMessage.dmMarkdown() shouldBe "You have no CVE topic subscriptions."
+                    stagedMessage.dmMarkdown(stagedBasicInfo = stagedBasicInfo) shouldBe
+                        "You have no CVE topic subscriptions."
                 }
             }
         }
@@ -195,11 +209,13 @@ class CveSubscriptionServiceTest :
                     createCveTopic(id = 5L, topicKey = "r&d", displayName = "<!channel> <https://evil.example|Java>"),
                 )
             val stagedMessage = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = topicRepository,
                     stagedMessage = stagedMessage,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("an unsubscribe names the topic and a crafted unknown key") {
@@ -213,7 +229,7 @@ class CveSubscriptionServiceTest :
                 )
 
                 then("the echoed name and keys are escaped") {
-                    stagedMessage.dmMarkdown() shouldBe
+                    stagedMessage.dmMarkdown(stagedBasicInfo = stagedBasicInfo) shouldBe
                         "Unsubscribed from 1 topic(s): *&lt;!channel&gt; &lt;https://evil.example|Java&gt;*. " +
                         "Skipped not subscribed topics: `&lt;!here&gt;`."
                 }
@@ -230,7 +246,7 @@ class CveSubscriptionServiceTest :
                 )
 
                 then("the listed name and key are escaped") {
-                    stagedMessage.dmMarkdown() shouldContain
+                    stagedMessage.dmMarkdown(stagedBasicInfo = stagedBasicInfo) shouldContain
                         "• *&lt;!channel&gt; &lt;https://evil.example|Java&gt;* (`r&amp;d`)"
                 }
             }
@@ -242,11 +258,13 @@ class CveSubscriptionServiceTest :
             every { subscriptionRepository.findSubscribedTopics(userId = userId) } returns
                 listOf(createCveTopic(id = 5L, topicKey = "cve-java", displayName = "Java CVE"))
             val stagedMessage = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, _) =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = topicRepository,
                     stagedMessage = stagedMessage,
+                    stagedBasicInfo = stagedBasicInfo,
                 )
 
             `when`("handled") {
@@ -263,7 +281,7 @@ class CveSubscriptionServiceTest :
                     verify(exactly = 1) {
                         subscriptionRepository.unsubscribe(userId = userId, topicIds = listOf(5L))
                     }
-                    val markdown = stagedMessage.dmMarkdown()
+                    val markdown = stagedMessage.dmMarkdown(stagedBasicInfo = stagedBasicInfo)
                     markdown shouldContain "Unsubscribed from 1 topic(s): *Java CVE*."
                     markdown shouldContain "Skipped not subscribed topics: `ghost`."
                 }
@@ -274,11 +292,13 @@ class CveSubscriptionServiceTest :
             val subscriptionRepository = mockk<CveSubscriptionRepository>()
             val topicRepository = mockk<CveTopicRepository>()
             val stagedMessage = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val (service, publisher) =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = topicRepository,
                     stagedMessage = stagedMessage,
+                    stagedBasicInfo = stagedBasicInfo,
                     enabled = false,
                 )
 

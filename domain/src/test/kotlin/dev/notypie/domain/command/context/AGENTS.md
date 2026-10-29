@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # domain/command/context (test)
 
@@ -16,6 +16,7 @@ All specs are Kotest `BehaviorSpec`s.
 | File | Description |
 |------|-------------|
 | `AbstractCommandContextTest.kt` | Two spec classes (`AbstractCommandContextTest`, `AbstractReactionCommandContextTest`) that pin the base contracts via anonymous subclasses: default `runCommand()` returns `CommandOutput.empty()`, `runCommand` stays `open` (guards against dropping the keyword), `ReactionContext.interactionSuccessResponse` enqueues a `ReplaceMessage` on the reply handle and returns either the default success or the supplied `results`. It is a contract test, not a base class — nothing extends it |
+| `MeetingFormSubmissionTest.kt` | `form.RequestMeetingContext.handleInteraction` on form fields built with `usersField`, `toggleField`, `timePickerField`: notice checkbox selected → one `Approval` (MEETING_APPROVAL_REQUEST, meeting title and reason) per participant, unselected → none; the built `RequestMeetingContextResult.meeting` carries `endAt` from the second TIME field or `startAt + 1h`, default title and reason for blank text, and no host in `memberIdSnapshot()`; a past start → the "*future*" ephemeral; a host-only user list → "Select participants" |
 | `AddParticipantContextTest.kt` | `form.AddParticipantContext`: "Add participant" click → `OpenModal(ModalForm.AddParticipant)` with trigger, `meetingUid` from `routingExtras[0]`, requester, channel and `listHandle` = the click's reply handle; malformed uid → success with no effects |
 | `CancelMeetingContextTest.kt` | `form.CancelMeetingContext`: a list-row Cancel click with a reply handle → exactly one `CancelMeeting(meetingUid, actor, listHandle = that handle)`; a blank reply handle → `listHandle = null`; a malformed uid → no intent; each case answers Slack with success |
 | `AgentChatContextTest.kt` | `AgentChatContext`: `PIPELINE` / `AGENT_CONVERSE`; `CommandIntent.AgentConverse` carries prompt, `threadId` (nullable), requester and channel names; a blank prompt, of spaces, of only a NEL (U+0085) or of only zero-width characters (U+200B, U+FEFF), → failed output plus an `Ephemeral` with `EMPTY_PROMPT_MESSAGE` |

@@ -3,6 +3,7 @@ package dev.notypie.application.service.cve.query
 import dev.notypie.application.configurations.AppConfig
 import dev.notypie.domain.TEST_USER_ID
 import dev.notypie.domain.command.createCveLatestRequestEvent
+import dev.notypie.domain.command.dto.CommandBasicInfo
 import dev.notypie.domain.command.entity.event.CommandEvent
 import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
@@ -35,6 +36,7 @@ class CveLatestQueryServiceTest :
             eventRepository: CveEventRepository,
             stager: OutboundMessageStager,
             enabled: Boolean = true,
+            publisher: EventPublisher = mockk<EventPublisher>(relaxed = true),
         ): CveLatestQueryService =
             CveLatestQueryService(
                 appConfig = AppConfig(cve = AppConfig.Cve(enabled = enabled)),
@@ -42,18 +44,23 @@ class CveLatestQueryServiceTest :
                 cveTopicRepository = topicRepository,
                 cveEventRepository = eventRepository,
                 outboundStager = stager,
-                eventPublisher = mockk<EventPublisher>(relaxed = true),
+                eventPublisher = publisher,
             )
 
-        fun stagerCapturing(stagedMessage: CapturingSlot<OutboundMessage>): OutboundMessageStager {
+        fun stagerCapturing(
+            stagedMessage: CapturingSlot<OutboundMessage>,
+            stagedBasicInfo: CapturingSlot<CommandBasicInfo>,
+            stagedEvent: CommandEvent<EventPayload> = mockk(relaxed = true),
+        ): OutboundMessageStager {
             val stager = mockk<OutboundMessageStager>()
-            every { stager.stage(message = capture(stagedMessage), basicInfo = any()) } returns
-                mockk<CommandEvent<EventPayload>>(relaxed = true)
+            every { stager.stage(message = capture(stagedMessage), basicInfo = capture(stagedBasicInfo)) } returns
+                stagedEvent
             return stager
         }
 
-        fun CapturingSlot<OutboundMessage>.markdown(): String =
+        fun CapturingSlot<OutboundMessage>.markdown(stagedBasicInfo: CapturingSlot<CommandBasicInfo>): String =
             captured
+                .also { stagedBasicInfo.captured.channel shouldBe TEST_USER_ID }
                 .shouldBeInstanceOf<OutboundMessage.ChannelMessage>()
                 .also { it.target.id shouldBe TEST_USER_ID }
                 .content
@@ -84,19 +91,31 @@ class CveLatestQueryServiceTest :
             val subscriptionRepository = mockk<CveSubscriptionRepository>()
             every { subscriptionRepository.findSubscribedTopics(userId = TEST_USER_ID) } returns emptyList()
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
+            val stagedEvent = mockk<CommandEvent<EventPayload>>(relaxed = true)
+            val publisher = mockk<EventPublisher>(relaxed = true)
             val service =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = mockk(),
                     eventRepository = mockk(),
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager =
+                        stagerCapturing(
+                            stagedMessage = staged,
+                            stagedBasicInfo = stagedBasicInfo,
+                            stagedEvent = stagedEvent,
+                        ),
+                    publisher = publisher,
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent())
 
-                then("the DM points the caller at /subscribe") {
-                    staged.markdown() shouldContain "no CVE topic subscriptions"
+                then("the DM points the caller at /subscribe and is published for the outbox") {
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldContain "no CVE topic subscriptions"
+                    verify(
+                        exactly = 1,
+                    ) { publisher.publishEvent(events = match { it.toList() == listOf(stagedEvent) }) }
                 }
             }
         }
@@ -119,19 +138,31 @@ class CveLatestQueryServiceTest :
                     ),
                 )
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
+            val stagedEvent = mockk<CommandEvent<EventPayload>>(relaxed = true)
+            val publisher = mockk<EventPublisher>(relaxed = true)
             val service =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = mockk(),
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager =
+                        stagerCapturing(
+                            stagedMessage = staged,
+                            stagedBasicInfo = stagedBasicInfo,
+                            stagedEvent = stagedEvent,
+                        ),
+                    publisher = publisher,
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent())
 
                 then("the DM lists the recent summaries across the subscribed topics") {
-                    val markdown = staged.markdown()
+                    val markdown = staged.markdown(stagedBasicInfo = stagedBasicInfo)
+                    verify(
+                        exactly = 1,
+                    ) { publisher.publishEvent(events = match { it.toList() == listOf(stagedEvent) }) }
                     markdown shouldContain "*Kotlin* — *v2.3.0*"
                     markdown shouldContain "New release."
                     markdown shouldContain "*Java CVE* — *CVE-2026-1111*"
@@ -146,19 +177,20 @@ class CveLatestQueryServiceTest :
                 listOf(createCveTopic(id = 11L, topicKey = "kotlin", displayName = "Kotlin"))
             every { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) } returns emptyList()
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = mockk(),
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent())
 
                 then("the DM says there is nothing yet") {
-                    staged.markdown() shouldContain "No recent CVE updates"
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldContain "No recent CVE updates"
                 }
             }
         }
@@ -177,19 +209,20 @@ class CveLatestQueryServiceTest :
                     )
                 }
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = mockk(),
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent())
 
                 then("the aggregate body stays under the Slack section limit") {
-                    val markdown = staged.markdown()
+                    val markdown = staged.markdown(stagedBasicInfo = stagedBasicInfo)
                     markdown.length shouldBe 2900 + "\n…(truncated)".length
                     markdown shouldContain "…(truncated)"
                 }
@@ -210,19 +243,20 @@ class CveLatestQueryServiceTest :
                     ),
                 )
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = mockk(),
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent())
 
                 then("the summary is cut before the emoji instead of through it") {
-                    staged.markdown() shouldBe "*Kotlin* — *t*\n${"s".repeat(n = 699)}"
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe "*Kotlin* — *t*\n${"s".repeat(n = 699)}"
                 }
             }
         }
@@ -241,19 +275,20 @@ class CveLatestQueryServiceTest :
                     ),
                 )
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = mockk(),
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent())
 
                 then("display name, title and summary are escaped") {
-                    staged.markdown() shouldBe
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe
                         "*R&amp;D* — *&lt;!here&gt; v2*\n&lt;https://evil.example|Patch here&gt;"
                 }
             }
@@ -267,19 +302,20 @@ class CveLatestQueryServiceTest :
             every { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) } returns
                 List(2) { createCveRecentEvent(topicDisplayName = "Kotlin", title = "t", aiSummary = "<".repeat(700)) }
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = subscriptionRepository,
                     topicRepository = mockk(),
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent())
 
                 then("the cap is measured on the escaped body and never splits an entity") {
-                    val markdown = staged.markdown()
+                    val markdown = staged.markdown(stagedBasicInfo = stagedBasicInfo)
                     markdown.length shouldBeLessThanOrEqual 2900 + "\n…(truncated)".length
                     markdown shouldNotContain "<"
                     markdown shouldEndWith "&lt;\n…(truncated)"
@@ -291,19 +327,21 @@ class CveLatestQueryServiceTest :
             val topicRepository = mockk<CveTopicRepository>()
             every { topicRepository.findActiveTopics() } returns emptyList()
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = mockk(),
                     topicRepository = topicRepository,
                     eventRepository = mockk(),
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled") {
                 service.handleCveLatest(event = createCveLatestRequestEvent(topicKey = "<!channel>"))
 
                 then("the echoed key is escaped") {
-                    staged.markdown() shouldBe "Topic `&lt;!channel&gt;` is not available."
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldBe
+                        "Topic `&lt;!channel&gt;` is not available."
                 }
             }
         }
@@ -316,12 +354,13 @@ class CveLatestQueryServiceTest :
             every { eventRepository.findRecentDoneEvents(topicIds = listOf(21L), limit = 5) } returns
                 listOf(createCveRecentEvent(topicDisplayName = "Spring Boot", title = "v4.1.1", aiSummary = "Patch."))
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = mockk(),
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled with the key as the slash layer normalised it") {
@@ -333,7 +372,7 @@ class CveLatestQueryServiceTest :
                 )
 
                 then("the topic is found regardless of case") {
-                    staged.markdown() shouldContain "*Spring Boot* — *v4.1.1*"
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldContain "*Spring Boot* — *v4.1.1*"
                 }
             }
         }
@@ -343,19 +382,20 @@ class CveLatestQueryServiceTest :
             every { topicRepository.findActiveTopics() } returns
                 listOf(createCveTopic(id = 11L, topicKey = "kotlin", displayName = "Kotlin"))
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = mockk(),
                     topicRepository = topicRepository,
                     eventRepository = mockk(),
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled with an unknown key") {
                 service.handleCveLatest(event = createCveLatestRequestEvent(topicKey = "ghost"))
 
                 then("the DM reports the topic as unavailable") {
-                    staged.markdown() shouldContain "`ghost` is not available"
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldContain "`ghost` is not available"
                 }
             }
         }
@@ -368,19 +408,20 @@ class CveLatestQueryServiceTest :
             every { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) } returns
                 listOf(createCveRecentEvent(topicDisplayName = "Kotlin", title = "v2.3.0", aiSummary = "New release."))
             val staged = slot<OutboundMessage>()
+            val stagedBasicInfo = slot<CommandBasicInfo>()
             val service =
                 serviceWith(
                     subscriptionRepository = mockk(),
                     topicRepository = topicRepository,
                     eventRepository = eventRepository,
-                    stager = stagerCapturing(stagedMessage = staged),
+                    stager = stagerCapturing(stagedMessage = staged, stagedBasicInfo = stagedBasicInfo),
                 )
 
             `when`("handled with the topic key") {
                 service.handleCveLatest(event = createCveLatestRequestEvent(topicKey = "kotlin"))
 
                 then("the read is scoped to that topic only") {
-                    staged.markdown() shouldContain "*Kotlin* — *v2.3.0*"
+                    staged.markdown(stagedBasicInfo = stagedBasicInfo) shouldContain "*Kotlin* — *v2.3.0*"
                     verify(exactly = 1) { eventRepository.findRecentDoneEvents(topicIds = listOf(11L), limit = 5) }
                 }
             }

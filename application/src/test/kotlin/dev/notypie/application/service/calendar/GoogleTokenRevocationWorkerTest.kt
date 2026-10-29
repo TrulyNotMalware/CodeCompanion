@@ -1,6 +1,8 @@
 package dev.notypie.application.service.calendar
 
 import dev.notypie.application.outbox.createStubTransactionManager
+import dev.notypie.domain.command.entity.event.CommandEvent
+import dev.notypie.domain.command.entity.event.EventPayload
 import dev.notypie.domain.command.entity.event.EventPublisher
 import dev.notypie.domain.command.outbound.MessageContent
 import dev.notypie.domain.command.outbound.OutboundMessage
@@ -37,17 +39,19 @@ class GoogleTokenRevocationWorkerTest :
                 mockk<GoogleCalendarConnectionRepository> {
                     every { find(userId = "U_CAL") } returns current
                 }
+            val publisher = mockk<EventPublisher>(relaxed = true)
             val staged = mutableListOf<OutboundMessage>()
+            val stagedEvent = mockk<CommandEvent<EventPayload>>(relaxed = true)
             val stager =
                 mockk<OutboundMessageStager> {
-                    every { stage(message = capture(staged), basicInfo = any()) } returns mockk(relaxed = true)
+                    every { stage(message = capture(staged), basicInfo = any()) } returns stagedEvent
                 }
             val worker =
                 GoogleTokenRevocationWorker(
                     oauthClient = oauth,
                     tokenCipher = cipher,
                     outboundStager = stager,
-                    eventPublisher = mockk<EventPublisher>(relaxed = true),
+                    eventPublisher = publisher,
                     connectionRepository = connections,
                     transactionManager = createStubTransactionManager(),
                     executor = executor,
@@ -80,7 +84,10 @@ class GoogleTokenRevocationWorkerTest :
                 val h = Harness().apply { every { oauth.revoke(token = "1//refresh") } returns false }
                 h.worker.onRevocationRequested(event)
 
-                then("the user gets a DM with the manual-removal hint") {
+                then("the user gets a DM with the manual-removal hint, published for the outbox") {
+                    verify(
+                        exactly = 1,
+                    ) { h.publisher.publishEvent(events = match { it.toList() == listOf(h.stagedEvent) }) }
                     val dm = h.hintDm()
                     dm.target.id shouldBe "U_CAL"
                     dm.content.shouldBeInstanceOf<MessageContent.Text>().markdown shouldBe
