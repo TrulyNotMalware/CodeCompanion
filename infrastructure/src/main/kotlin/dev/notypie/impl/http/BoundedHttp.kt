@@ -79,10 +79,19 @@ internal fun HttpClient.sendWithinDeadline(
 internal fun parseRetryAfter(value: String?): Duration? {
     val trimmed = value?.trim() ?: return null
     trimmed.toBigIntegerOrNull()?.let { seconds ->
-        val bounded = seconds.coerceIn(BigInteger.ZERO, MAX_RETRY_AFTER.seconds.toBigInteger())
+        val bounded =
+            seconds.coerceIn(
+                minimumValue = BigInteger.ZERO,
+                maximumValue = MAX_RETRY_AFTER.seconds.toBigInteger(),
+            )
         return Duration.ofSeconds(bounded.toLong())
     }
     return runCatching { ZonedDateTime.parse(trimmed, DateTimeFormatter.RFC_1123_DATE_TIME) }
-        .map { Duration.between(Instant.now(), it.toInstant()).coerceIn(Duration.ZERO, MAX_RETRY_AFTER) }
-        .getOrNull()
+        .map {
+            Duration
+                .between(
+                    Instant.now(),
+                    it.toInstant(),
+                ).coerceIn(minimumValue = Duration.ZERO, maximumValue = MAX_RETRY_AFTER)
+        }.getOrNull()
 }

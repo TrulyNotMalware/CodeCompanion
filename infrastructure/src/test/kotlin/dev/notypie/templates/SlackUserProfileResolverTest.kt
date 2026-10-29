@@ -179,6 +179,30 @@ class SlackUserProfileResolverTest :
             }
         }
 
+        given("a lookup whose request fails with an exception") {
+            val requester = requesterReturning(Result.failure(RestClientException("429 Too Many Requests")))
+            val resolver =
+                SlackUserProfileResolver(
+                    restRequester = requester,
+                    slackApiToken = TEST_BOT_TOKEN,
+                    clock = Clock.fixed(start, ZoneOffset.UTC),
+                )
+
+            `when`("resolved once") {
+                val (view, logs) =
+                    captureLogs(loggerName = "dev.notypie.templates") { resolver.resolve(userId = TEST_USER_ID) }
+
+                then("it logs exactly one WARN naming the exception class and carrying no throwable") {
+                    view shouldBe PublisherView(displayName = "<@$TEST_USER_ID>", thumbnailUrl = null)
+                    val warnings = logs.eventsAt(level = Level.WARN)
+                    warnings shouldHaveSize 1
+                    warnings.single().formattedMessage shouldContain "RestClientException"
+                    warnings.single().throwableProxy.shouldBeNull()
+                    logs.eventsAt(level = Level.ERROR).shouldBeEmpty()
+                }
+            }
+        }
+
         given("a users.profile.get body Slack sends for an unknown user") {
             val dto =
                 jsonMapper.readValue(

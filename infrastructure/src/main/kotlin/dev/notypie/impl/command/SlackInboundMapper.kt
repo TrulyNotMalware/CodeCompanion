@@ -163,7 +163,17 @@ fun States.toInboundAction(): InboundAction =
                 ActionElementTypes.APPLY_BUTTON -> InboundActionRole.APPROVE
                 ActionElementTypes.REJECT_BUTTON -> InboundActionRole.REJECT
                 ActionElementTypes.BUTTON -> InboundActionRole.ACTIVATE
-                else -> InboundActionRole.PASSIVE
+                ActionElementTypes.MULTI_STATIC_SELECT,
+                ActionElementTypes.STATIC_SELECT,
+                ActionElementTypes.MULTI_USERS_SELECT,
+                ActionElementTypes.CONVERSATIONS_SELECT,
+                ActionElementTypes.DATE_PICKER,
+                ActionElementTypes.TIME_PICKER,
+                ActionElementTypes.CHECKBOX,
+                ActionElementTypes.RADIO_BUTTONS,
+                ActionElementTypes.PLAIN_TEXT_INPUT,
+                ActionElementTypes.UNKNOWN,
+                -> InboundActionRole.PASSIVE
             },
         isSelected = isSelected,
     )
@@ -178,7 +188,11 @@ private fun ActionElementTypes.toInboundFieldKind(): InboundFieldKind =
         ActionElementTypes.DATE_PICKER -> InboundFieldKind.DATE
         ActionElementTypes.TIME_PICKER -> InboundFieldKind.TIME
         ActionElementTypes.CHECKBOX -> InboundFieldKind.TOGGLE
-        else -> InboundFieldKind.UNKNOWN
+        ActionElementTypes.APPLY_BUTTON,
+        ActionElementTypes.REJECT_BUTTON,
+        ActionElementTypes.BUTTON,
+        ActionElementTypes.UNKNOWN,
+        -> InboundFieldKind.UNKNOWN
     }
 
 fun InteractionPayload.toInboundCommand(): InboundCommand =

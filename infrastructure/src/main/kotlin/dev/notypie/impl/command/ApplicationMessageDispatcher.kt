@@ -137,7 +137,9 @@ private enum class RequestProgress { UNTRACKED, NOT_WRITTEN, HEADERS_WRITTEN }
 object RequestProgressListener : EventListener() {
     private val progress = ThreadLocal.withInitial { RequestProgress.UNTRACKED }
 
-    fun reset() = progress.set(RequestProgress.UNTRACKED)
+    fun reset() {
+        progress.set(RequestProgress.UNTRACKED)
+    }
 
     fun requestNeverWritten(): Boolean = progress.get() == RequestProgress.NOT_WRITTEN
 

@@ -37,7 +37,35 @@ internal val CommandDetailType.isSubmissionRoute: Boolean
             CommandDetailType.CVE_UNSUBSCRIBE_SUBMIT,
             -> true
 
-            else -> false
+            CommandDetailType.NOTHING,
+            CommandDetailType.SIMPLE_TEXT,
+            CommandDetailType.REPLACE_TEXT,
+            CommandDetailType.ERROR_RESPONSE,
+            CommandDetailType.APPROVAL_REQUEST,
+            CommandDetailType.MEETING_CREATE_REQUEST,
+            CommandDetailType.GET_MEETING_LIST,
+            CommandDetailType.MEETING_APPROVAL_REQUEST,
+            CommandDetailType.CANCEL_MEETING,
+            CommandDetailType.MEETING_RESCHEDULE_REQUEST,
+            CommandDetailType.MEETING_ADD_PARTICIPANT_REQUEST,
+            CommandDetailType.MEETING_REMINDER,
+            CommandDetailType.DAILY_AGENDA,
+            CommandDetailType.CALENDAR_CONNECTION,
+            CommandDetailType.STATUS_REPORT,
+            CommandDetailType.AGENT_USAGE_REPORT,
+            CommandDetailType.AGENT_CONVERSE,
+            CommandDetailType.AGENT_ASK_QUESTION,
+            CommandDetailType.STANDUP_PROMPT,
+            CommandDetailType.STANDUP_SETUP_REQUEST,
+            CommandDetailType.STANDUP_SUMMARY,
+            CommandDetailType.STANDUP_ROUTINE_LIST,
+            CommandDetailType.STANDUP_ROUTINE_STOP,
+            CommandDetailType.APPROVAL_CALLBACK,
+            CommandDetailType.CVE_SUBSCRIBE_REQUEST,
+            CommandDetailType.CVE_UNSUBSCRIBE_REQUEST,
+            CommandDetailType.CVE_SUBSCRIPTIONS_LIST,
+            CommandDetailType.CVE_LATEST,
+            -> false
         }
 
 internal fun InboundSubmission.detailType(): CommandDetailType =

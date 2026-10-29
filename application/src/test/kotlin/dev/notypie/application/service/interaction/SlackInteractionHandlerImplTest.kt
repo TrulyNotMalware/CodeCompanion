@@ -21,8 +21,8 @@ import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.entity.RejectReason
 import dev.notypie.impl.command.InteractionPayloadParser
-import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.SlackViewOpenDispatcher
+import dev.notypie.impl.command.createSlackOutboundStager
 import dev.notypie.impl.command.event.MessageDispatcher
 import dev.notypie.impl.command.event.createOpenViewEvent
 import dev.notypie.impl.command.slack.ActionElementTypes
@@ -288,7 +288,8 @@ class SlackInteractionHandlerImplTest :
                 MeetingServiceImpl(
                     meetingRepository = meetingRepository,
                     commandExecutor = mockk(),
-                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    outboundStager =
+                        createSlackOutboundStager(),
                     eventPublisher = publisher,
                     transactionManager = transactionManager,
                     calendarMirror = NoopMeetingCalendarMirror,

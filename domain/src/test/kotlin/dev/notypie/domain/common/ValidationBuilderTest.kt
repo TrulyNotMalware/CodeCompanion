@@ -367,6 +367,15 @@ class ValidationBuilderTest :
             }
         }
 
+        given("a non-negative integer checked with shouldBeNegative") {
+            `when`("validated") {
+                val validationResult = validateAndReturn { ("zero" of 0).shouldBeNegative() }
+                then("the reason says it must be negative") {
+                    validationResult.map { it.reason } shouldBe listOf("must be negative")
+                }
+            }
+        }
+
         given("LocalDateTime with validateAndReturn") {
             val now = LocalDateTime.now()
             val future = now.plusHours(1)

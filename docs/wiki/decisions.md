@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-26_
+_type: decision · updated: 2026-10-27_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -656,7 +656,7 @@ _type: decision · updated: 2026-10-26_
       받는 값과 반대로 읽혔다. 이름은 그대로 둔다 — 이제 받는 값이 이름과 맞는다.
     - **`currentStartAt`은 nullable이다 — 이전 버튼 때문에.** 이전 릴리스가 그린 목록 메시지는 배포 뒤에도 눌리고 세 토큰만 싣는다. 그
       부재를 나타내야 하므로 도메인은 `null`을 싣고 `now()`로 메우지 않는다. 파싱할 수 없는 네 번째 토큰도 `null`이다. `null`이면
-      스테이저가 회의 uid를 남기는 WARN 하나와 함께 `LocalDateTime.now()`로 옛 동작을 지킨다(스테이저에는 `Clock`이 없다). 이 폴백은 이전
+      스테이저가 회의 uid를 남기는 WARN 하나와 함께 `LocalDateTime.now(clock)`로 옛 동작을 지킨다(2026-10-27 묶음 5부터 주입된 `Clock`을 쓴다 — 그 전에는 `Clock` 없이 `now()`). 이 폴백은 이전
       버튼만을 위한 것이다 — 새 목록의 버튼은 늘 시작을 싣는다.
     - **값은 목록을 그린 시점의 시작이다.** 목록을 그린 뒤 다른 목록에서 재조정했다면 옛 목록의 버튼은 옛 시작을 채운다. 선택기의
       초기값일 뿐이고 호스트가 보고 고치므로 수용한다.
@@ -1030,7 +1030,7 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
 - Google Calendar(#36·#37): `git show --stat 3c0529bf 6ae0a047`(`archive/gap-closure` 태그 기준), `application/src/main/kotlin/dev/notypie/application/service/calendar/AGENTS.md`,
   `infrastructure/src/main/kotlin/dev/notypie/repository/calendar/AGENTS.md`, `db/migration/V24__…`·`V25__…`, git-ignored
   `.omc/plans/google-calendar-user-oauth.md`(설계와 리뷰 반영 결정 전부)
-- 연결 신원 확인(#41): `application/src/main/kotlin/dev/notypie/application/service/calendar/{CalendarConnectionService,CalendarConnectionCallback}.kt`,
+- 연결 신원 확인(#41): `application/src/main/kotlin/dev/notypie/application/service/calendar/CalendarConnectionService.kt`(`CalendarConnectionCallback`은 2026-10-27부터 같은 파일),
   `controllers/GoogleOAuthCallbackController.kt`, `configurations/CalendarConfiguration.kt`,
   `infrastructure/src/main/kotlin/dev/notypie/impl/calendar/GoogleOAuthClient.kt`, `templates/SlackUserProfileResolver.kt`
   (`SlackUserEmailResolver`), `impl/command/dto/SlackUserInfoDto.kt`, 스펙 `CalendarConnectionServiceTest`·
@@ -1042,14 +1042,14 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
   `application/src/main/kotlin/dev/notypie/application/service/relay/{OutboxPayloadRenderer,SlackMessageRelayServiceImpl}.kt`,
   `service/standup/{StandupRoutineOpsService,StandupAnswerService}.kt`, `service/meeting/MeetingServiceImpl.kt`, `service/calendar/CalendarReplies.kt`,
   `infrastructure/src/main/kotlin/dev/notypie/impl/command/ApplicationMessageDispatcher.kt`(`isChannelRefused`),
-  `repository/outbox/{OutboundMessagePort,OutboundMessageCodec}.kt`, `repository/outbox/schema/OutboxSchemaVersion.kt`(V6),
+  `repository/outbox/{OutboundMessagePort,OutboundMessageCodec}.kt`, `repository/outbox/schema/OutboxMessage.kt`(`OutboxSchemaVersion`, 2026-10-27부터 같은 파일; V6),
   git-ignored `.omc/plans/b2-not-in-channel-slash-replies.md`(선택지 A~D와 아키텍트 검토 반영)
 - 에이전트 보존 정리와 스윕 look-ahead(#43·#40 ⑤): `application/src/main/kotlin/dev/notypie/application/service/agent/{AgentRetentionScheduler,AgentAskThreadStarter}.kt`,
   `configurations/AppConfig.kt`(`Agent.Retention`, 루트 `init`), `application-prod.yaml`(`slack.app.agent.retention`),
   `infrastructure/src/main/kotlin/dev/notypie/repository/agent/{AgentAskTurnRepository,JpaAgentTurnHistoryRepository,AgentTurnHistoryRepository}.kt`,
   `repository/mcp/{JpaMcpToolCallHistoryRepository,McpToolCallHistoryRepository}.kt`, `db/migration/V10__…`·`V13__…`·`V26__…`(인덱스),
   `domain/.../command/intent/CommandIntent.kt`(`AgentUsageReport.MAX_DAYS`), `application/src/main/resources/k8s/deployment.yaml`(`Recreate`),
-  `repository/outbox/schema/OutboxSchemaVersion.kt`(`SUPPORTED`), 스펙 `AgentRetentionSchedulerTest`·`AgentAskThreadStarterTest`·
+  `repository/outbox/schema/OutboxMessage.kt`(`OutboxSchemaVersion.SUPPORTED`), 스펙 `AgentRetentionSchedulerTest`·`AgentAskThreadStarterTest`·
   `AppConfigBindingTest`·`ApplicationContextSmokeTest`·`AgentAskTurnRepositoryTest`·`AgentTurnHistoryRepositoryImplTest`·
   `McpToolCallHistoryRepositoryImplTest`(2026-10-15, 미커밋 작업 트리 `feature/agent-retention-sweep`); H2 2.4.240 `DELETE … LIMIT`의 갱신 수는
   `AgentAskTurnRepositoryTest`에 정확한 수를 단언해 돌린 실행의 실패 출력과 Hibernate SQL·바인딩 로그로 확인(2026-10-17); 리뷰 반영(지터,
@@ -1095,7 +1095,7 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
 - 남은 응답 핸들 노출·verification token 삭제·아웃박스 V7(#50): `domain/src/main/kotlin/dev/notypie/domain/command/inbound/{InboundCommand,InboundInteraction}.kt`,
   `dto/CommandBasicInfo.kt`, `dto/response/CommandOutput.kt`, `entity/context/form/ParsedSubmissions.kt`, `infrastructure/.../impl/command/SlackInboundMapper.kt`
   (`listHandle()`, `carriesListHandle()`), `SlackInteractionRequestParser.kt`, `impl/command/slack/{InteractionPayload,SlashCommandRequestBody,SlackEventCallBackRequest,SlackMentionMapper}.kt`,
-  `impl/command/event/SlackEventPayloads.kt`, `repository/outbox/{OutboundMessagePort,schema/OutboxSchemaVersion}.kt`, `application/.../common/SlackRequestParser.kt`
+  `impl/command/event/SlackEventPayloads.kt`, `repository/outbox/OutboundMessagePort.kt`, `repository/outbox/schema/OutboxMessage.kt`(`OutboxSchemaVersion`), `application/.../common/SlackRequestParser.kt`
   (`jsonMapper.convertValue`), Debezium 커넥터 설정 `resources/cdc/docker-compose/debezium/connect_mariadb.sh`(열 필터 없음), 스펙
   `OutboundMessageCodecTest`(고정 V6 행)·`OutboxMessageTest`·`ViewSubmissionChannelRoutingRegressionTest`·`SlackInteractionRequestParserTest`·
   `SlackApiEventConstructorTest`·`SlackControllersTest`·`SlackMentionEventHandlerImplTest`·`OutboxChainJpaTransactionTest`, 미지원 버전 보류는

@@ -4,7 +4,7 @@
 # infrastructure/src/testFixtures/kotlin/dev/notypie/impl/command
 
 ## Purpose
-Raw Slack interaction JSON builders for the parser specs. Every string here is shaped like what Slack posts
+Raw Slack interaction JSON builders for the parser specs, plus the `SlackOutboundStager` factory. Every string here is shaped like what Slack posts
 to the interactions endpoint (`block_actions` and `view_submission`), assembled from the same
 `ActionElementTypes` / `InteractionTypes` / `*ModalIds` constants main uses, so a renamed constant breaks the
 fixture instead of silently drifting.
@@ -12,6 +12,7 @@ fixture instead of silently drifting.
 ## Key Files
 | File | Description |
 |------|-------------|
+| `SlackOutboundStagerCreator.kt` | `createSlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk(), clock = Clock.systemDefaultZone())` — the one construction path for `SlackOutboundStager` in specs (`MeetingWriteJpaTransactionTest` passes its fixed clock; `ViewSubmissionChannelRoutingRegressionTest` passes a real `SlackApiEventConstructor`; the meeting, reschedule and interaction-handler specs take the defaults); `SlackOutboundStagerTest` builds the class directly because it pins that constructor |
 | `BlockActionPayloadCreator.kt` | **Action arrays**: `buttonActionJson(buttonType = PRIMARY, value, actionId)`, `buttonActionJsonWithoutStyle(value, actionId)`, `multiStaticSelectActionJson(selectedValues, actionId)`, `multiUsersSelectActionJson(selectedUsers, actionId)`, `unknownActionJson(type, actionId)`. **State values**: `stateValuesJson(blockId, actionId, stateEntry)` and the multi-block `stateValuesJson(vararg blockId to stateEntry)` (action id = `"<blockId>_action"`), `multiStaticSelectStateJson(selectedOptions: List<Pair<text, value>>)`, `multiUsersSelectStateJson(selectedUsers)`, `plainTextInputStateJson(value)`, `datepickerStateJson(selectedDate)`, `timepickerStateJson(selectedTime)`, `checkboxesStateJson(selectedOptions)`, `unknownStateJson(type)`. **View submissions**: `createDeclineReasonViewSubmissionJson(meetingIdempotencyKey, participantUserId, selectedReason, noticeChannel = "", noticeMessageTs = "", ...)` — 3-token `private_metadata` when channel / ts are blank, 5-token otherwise; `createStandupAnswerViewSubmissionJson(sessionUid, userId, responses, noticeChannel = "D_NOTICE", noticeMessageTs = "1700000000.000500", ...)` — one `standup_q_<i>` block per response; `createRoutingOnlyViewSubmissionJson(callbackId, privateMetadata, stateValues = "{}", ...)`. **Full payload**: `createBlockActionPayloadJson(idempotencyKey, commandDetailType = APPROVAL_REQUEST, isEphemeral = false, buttonType, buttonValue?, messageText?, stateValues = "{}", actions?, appId, token, responseUrl, teamId, teamDomain, userId, userName, channelId, channelName, botId)` — omits the `message` section when ephemeral, defaults `message.text` and the button value to `"<key>, <TYPE>"`, fixed `container.message_ts = "1234567890.123"`; `conversationsSelectStateJson(selectedConversation?)`, `staticSelectStateJson(value, text)` and `inputBlockStateValuesJson(entries: List<StateValueEntry>)` for state built from real action ids (2026-10-27) |
 
 ## Subdirectories

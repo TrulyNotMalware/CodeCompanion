@@ -2,8 +2,10 @@ package dev.notypie.exception
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 
-private val logger = KotlinLogging.logger { }
+private val log = KotlinLogging.logger {}
 
 class StdoutErrorBroadcaster : ErrorBroadcaster {
-    override fun broadcastError(message: String) = logger.error { message }
+    override fun broadcastError(message: String) {
+        log.error { message }
+    }
 }

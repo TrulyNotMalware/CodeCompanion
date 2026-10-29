@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-07 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/command/dto/modals
 
@@ -12,8 +12,7 @@ infrastructure template builders turn them into Block Kit.
 | File | Description |
 |------|-------------|
 | `ApprovalContents.kt` | `ApprovalContents(headLineText = "Approval Requests", type = SIMPLE_REQUEST_FORM, reason, subTitle = "", publisherId, approvalButtonName = "Approval", rejectButtonName = "Deny", idempotencyKey, commandDetailType, time = now())`; `ApprovalContentType` (`SIMPLE_REQUEST_FORM`, `FINAL_CONFIRM_FORM` — the latter unused) |
-| `MultiUserSelectContents.kt` | `MultiUserSelectContents(title, placeholderText)` — used only by infrastructure templates |
-| `TextInputContents.kt` | `TextInputContents(title, placeholderText)` |
+| `InputContents.kt` | `MultiUserSelectContents(title, placeholderText)` — used only by infrastructure templates; `TextInputContents(title, placeholderText)` |
 | `TimeScheduleInfo.kt` | `TimeScheduleInfo(scheduleName, startTime, endTime, timeZone = Asia/Seoul, timeFormatter = "yyyy-MM-dd HH:mm")`; `toString()` renders `"name\nstart ~ end"` |
 
 ## For AI Agents

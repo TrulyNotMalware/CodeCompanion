@@ -27,7 +27,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             meetingService.handleMeeting(
                 headers = headers,
@@ -42,7 +42,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             standupSlashService.handleStandup(
                 headers = headers,
@@ -57,7 +57,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             calendarSlashService.handleCalendar(
                 headers = headers,
@@ -72,7 +72,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             askSlashService.handleAsk(
                 headers = headers,
@@ -87,7 +87,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             cveSubscriptionSlashService.handleSubscribe(
                 headers = headers,
@@ -102,7 +102,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             cveSubscriptionSlashService.handleUnsubscribe(
                 headers = headers,
@@ -117,7 +117,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             cveSubscriptionSlashService.handleSubscriptions(
                 headers = headers,
@@ -132,7 +132,7 @@ class SlashCommandController(
         @RequestHeader headers: MultiValueMap<String, String>,
         @RequestParam data: Map<String, String>,
     ) {
-        val (payload, commandData) = parseRequestBodyData(headers = headers, data = data)
+        val (payload, commandData) = parseRequestBodyData(data = data)
         ViewOpenDeferral.afterBoundary {
             cveQuerySlashService.handleLatest(
                 headers = headers,

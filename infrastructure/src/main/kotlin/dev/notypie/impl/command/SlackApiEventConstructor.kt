@@ -680,8 +680,13 @@ class SlackApiEventConstructor(
     ) = ChatPostMessageRequest
         .builder()
         .channel(targetUserId ?: channel)
-        .text(buildRoutingText(idempotencyKey, commandDetailType, routingExtras))
-        .token(botToken)
+        .text(
+            buildRoutingText(
+                idempotencyKey = idempotencyKey,
+                commandDetailType = commandDetailType,
+                routingExtras = routingExtras,
+            ),
+        ).token(botToken)
         .blocks(blocks)
         .threadTs(threadTs)
         .build()
@@ -701,7 +706,6 @@ class SlackApiEventConstructor(
         return "$prefix,$encoded"
     }
 
-    // FIXME Ephemeral message cannot include any texts with blocks field
     private fun chatPostEphemeralBuilder(
         commandDetailType: CommandDetailType,
         idempotencyKey: UUID,

@@ -47,7 +47,7 @@ class StandupSchedulingService(
     private val outboxRepository: MessageOutboxRepository,
     private val outboundMessagePort: OutboundMessagePort,
     transactionManager: PlatformTransactionManager,
-    private val applicationEventPublisher: ApplicationEventPublisher = ApplicationEventPublisher { },
+    private val applicationEventPublisher: ApplicationEventPublisher,
     private val clock: Clock,
     appConfig: AppConfig,
 ) {

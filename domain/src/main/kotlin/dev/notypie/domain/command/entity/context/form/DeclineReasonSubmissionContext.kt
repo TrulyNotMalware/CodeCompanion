@@ -23,30 +23,32 @@ internal class DeclineReasonSubmissionContext(
 
     override fun accept(model: DeclineReasonParsed) {
         addIntent(
-            CommandIntent.MeetingAttendanceUpdate(
-                meetingIdempotencyKey = model.meetingIdempotencyKey,
-                participantUserId = model.participantUserId,
-                isAttending = false,
-                absentReason = model.reason,
-                absentReasonDetail = model.reasonDetail,
-            ),
+            intent =
+                CommandIntent.MeetingAttendanceUpdate(
+                    meetingIdempotencyKey = model.meetingIdempotencyKey,
+                    participantUserId = model.participantUserId,
+                    isAttending = false,
+                    absentReason = model.reason,
+                    absentReasonDetail = model.reasonDetail,
+                ),
         )
         when (val notice = model.notice) {
             is NoticeTarget.Update ->
                 addOutbound(
-                    OutboundMessage.UpdateMessage(
-                        ref =
-                            MessageRef(
-                                conversation = ConversationTarget(id = notice.channel),
-                                messageId = notice.messageTs,
-                            ),
-                        content =
-                            MessageContent.Text(
-                                headline = null,
-                                markdown = model.noticeSummaryMarkdown(),
-                            ),
-                        detailType = CommandDetailType.MEETING_DECLINE_REASON,
-                    ),
+                    message =
+                        OutboundMessage.UpdateMessage(
+                            ref =
+                                MessageRef(
+                                    conversation = ConversationTarget(id = notice.channel),
+                                    messageId = notice.messageTs,
+                                ),
+                            content =
+                                MessageContent.Text(
+                                    headline = null,
+                                    markdown = model.noticeSummaryMarkdown(),
+                                ),
+                            detailType = CommandDetailType.MEETING_DECLINE_REASON,
+                        ),
                 )
 
             NoticeTarget.None -> Unit

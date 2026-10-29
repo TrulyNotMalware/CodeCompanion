@@ -26,10 +26,11 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
         mkdMessage: String = "Successfully processed.",
     ): CommandOutput {
         addOutbound(
-            OutboundMessage.ReplaceMessage(
-                handle = ResponseReplaceHandle(raw = replyHandle),
-                content = MessageContent.Text(headline = null, markdown = mkdMessage),
-            ),
+            message =
+                OutboundMessage.ReplaceMessage(
+                    handle = ResponseReplaceHandle(raw = replyHandle),
+                    content = MessageContent.Text(headline = null, markdown = mkdMessage),
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,
@@ -44,10 +45,11 @@ internal abstract class ReactionContext<T : SubCommandDefinition>(
         results: CommandOutput,
     ): CommandOutput {
         addOutbound(
-            OutboundMessage.ReplaceMessage(
-                handle = ResponseReplaceHandle(raw = replyHandle),
-                content = MessageContent.Text(headline = null, markdown = mkdMessage),
-            ),
+            message =
+                OutboundMessage.ReplaceMessage(
+                    handle = ResponseReplaceHandle(raw = replyHandle),
+                    content = MessageContent.Text(headline = null, markdown = mkdMessage),
+                ),
         )
         return results
     }

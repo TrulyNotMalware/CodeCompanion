@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-10-27 -->
 
 # domain/standup
 
@@ -11,15 +11,14 @@ dispatches, and the collected answers. Pure Kotlin; JPA schemas mirroring these 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `entity/Routine.kt` | Recurring standup config bound to one `commandChannel`: questions, `triggerLocalTime`, `cutoffOffset`, active weekdays, `routineTimezone`, separate `summaryChannel` |
-| `entity/RoutineMember.kt` | A routine participant with their own `userTimezone` (drives per-member DM time) |
+| `entity/Routine.kt` | Recurring standup config bound to one `commandChannel`: questions, `triggerLocalTime`, `cutoffOffset`, active weekdays, `routineTimezone`, separate `summaryChannel`; the same file declares `RoutineMember`, a participant with their own `userTimezone` (drives per-member DM time) |
 | `entity/StandupSession.kt` | One day's bucket, unique on `(routineUid, sessionDate)`; holds `cutoffAt`, dispatches, answers, `summaryMessageTs` |
 | `entity/SessionDispatch.kt` | Per-member DM record with `dmTriggerAt`; keyed by Slack `userId` |
 | `entity/StandupAnswer.kt` | A member's submitted answers for a session |
 | `entity/enums/SessionStatus.kt` | `COLLECTING` → `SUMMARIZED` (and terminal states) |
 | `entity/enums/DispatchStatus.kt` | Lifecycle of one member's DM dispatch |
 | `dto/RoutineDto.kt` | Routine read-model crossing the repository boundary |
-| `dto/StandupSessionDto.kt` | Session read-model used by the scheduler and summary service |
+| `dto/StandupSessionDto.kt` | Session read-model used by the scheduler and summary service, plus `StandupAnswerCandidate` |
 
 ## Subdirectories
 | Directory | Purpose |

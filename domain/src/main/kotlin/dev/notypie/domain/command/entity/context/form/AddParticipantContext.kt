@@ -36,16 +36,17 @@ internal class AddParticipantContext(
                 ?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: return successOutput()
         addOutbound(
-            OutboundMessage.OpenModal(
-                handle = ModalOpenHandle(raw = interaction.trigger.raw),
-                form =
-                    ModalForm.AddParticipant(
-                        meetingUid = meetingUid,
-                        requesterId = interaction.actor.id,
-                        channel = ConversationTarget(id = interaction.channelId),
-                        listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
-                    ),
-            ),
+            message =
+                OutboundMessage.OpenModal(
+                    handle = ModalOpenHandle(raw = interaction.trigger.raw),
+                    form =
+                        ModalForm.AddParticipant(
+                            meetingUid = meetingUid,
+                            requesterId = interaction.actor.id,
+                            channel = ConversationTarget(id = interaction.channelId),
+                            listHandle = replaceHandleOrNull(raw = interaction.reply.raw),
+                        ),
+                ),
         )
         return successOutput()
     }

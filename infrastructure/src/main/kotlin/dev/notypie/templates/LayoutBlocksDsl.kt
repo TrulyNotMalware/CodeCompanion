@@ -24,7 +24,9 @@ class LayoutBlocksBuilder {
         states.addAll(layout.interactiveObjects)
     }
 
-    fun addAll(layouts: Iterable<InteractionLayoutBlock>) = layouts.forEach { add(layout = it) }
+    fun addAll(layouts: Iterable<InteractionLayoutBlock>) {
+        layouts.forEach { add(layout = it) }
+    }
 
     internal fun build(): LayoutBlocks =
         LayoutBlocks(

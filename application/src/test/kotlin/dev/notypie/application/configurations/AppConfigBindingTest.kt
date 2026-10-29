@@ -216,6 +216,30 @@ class AppConfigBindingTest :
             }
         }
 
+        given("meeting.reminder.offsets-minutes") {
+            `when`("every offset is positive") {
+                val reminder =
+                    bind(properties = mapOf("slack.app.meeting.reminder.offsets-minutes" to "30,10,1")).meeting.reminder
+
+                then("they bind in order") {
+                    reminder.offsetsMinutes shouldBe listOf(30, 10, 1)
+                }
+            }
+
+            listOf("0", "15,0", "-5").forEach { value ->
+                `when`("the offsets are $value") {
+                    then("binding fails and names the property") {
+                        val failure =
+                            shouldThrow<BindException> {
+                                bind(properties = mapOf("slack.app.meeting.reminder.offsets-minutes" to value))
+                            }
+                        val rootCause = checkNotNull(generateSequence<Throwable>(failure) { it.cause }.last().message)
+                        rootCause shouldContain "meeting.reminder.offsets-minutes must be positive"
+                    }
+                }
+            }
+        }
+
         given("agent.retention properties") {
             fun rootCauseOf(properties: Map<String, String>): String {
                 val failure = shouldThrow<BindException> { bind(properties = properties) }

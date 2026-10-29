@@ -26,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 import java.util.UUID
 
+private val log = KotlinLogging.logger {}
+
 @Service
 class CveSubscriptionSlashServiceImpl(
     private val appConfig: AppConfig,
@@ -35,8 +37,6 @@ class CveSubscriptionSlashServiceImpl(
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
 ) : CveSubscriptionSlashService {
-    private val log = KotlinLogging.logger {}
-
     @Transactional
     override fun handleSubscribe(
         headers: MultiValueMap<String, String>,

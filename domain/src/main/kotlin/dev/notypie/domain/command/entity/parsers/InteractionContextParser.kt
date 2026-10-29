@@ -11,6 +11,10 @@ import dev.notypie.domain.command.inbound.SubmissionParseObserver
 import dev.notypie.domain.command.intent.IntentQueue
 import java.util.UUID
 
+internal interface ContextParser {
+    fun parseContext(idempotencyKey: UUID): CommandContext<out SubCommandDefinition>
+}
+
 internal class InteractionContextParser(
     private val commandData: InboundCommand,
     private val interaction: InboundInteraction,

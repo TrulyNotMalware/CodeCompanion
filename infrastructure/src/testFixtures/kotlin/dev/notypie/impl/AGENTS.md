@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-13 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # infrastructure/src/testFixtures/kotlin/dev/notypie/impl
 
@@ -10,7 +10,7 @@ Package segment mirroring main `impl/`; no files. Only the `command/` and `calen
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `command/` | Raw Slack interaction JSON builders, plus `event/` and `slack/` typed creators (see `command/AGENTS.md`) |
+| `command/` | Raw Slack interaction JSON builders, the `SlackOutboundStager` factory, plus `event/` and `slack/` typed creators (see `command/AGENTS.md`) |
 | `calendar/` | `CalendarEventBody` builder and Google API error JSON for `GoogleCalendarClientTest`, and the OAuth token-response JSON and `id_token` builders for `GoogleOAuthClientTest` (see `calendar/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

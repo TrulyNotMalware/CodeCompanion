@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/meet/dto
 
@@ -11,8 +11,7 @@ entity invariants and no mutable collections.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `MeetingDto.kt` | `MeetingDto(meetingId, meetingUid, idempotencyKey, creator, title, reason, startAt, endAt?, participants, isCanceled)`; `MeetingParticipantDto(userId, isAttending, absentReason = RejectReason.ATTENDING, absentReasonDetail?)`; `internal data class MeetingListDto(meetings)` — unreferenced anywhere in the repo |
-| `MeetingReminderDto.kt` | `MeetingReminderDto(id, meetingId, offsetMinutes, scheduledAt: Instant, sentAt?, status: MeetingReminderStatus, failureReason?)` — the scheduler's view of one reminder batch |
+| `MeetingDto.kt` | `MeetingDto(meetingId, meetingUid, idempotencyKey, creator, title, reason, startAt, endAt?, participants, isCanceled)`; `MeetingParticipantDto(userId, isAttending, absentReason = RejectReason.ATTENDING, absentReasonDetail?)`; `internal data class MeetingListDto(meetings)` — unreferenced anywhere in the repo; `MeetingReminderDto(id, meetingId, offsetMinutes, scheduledAt: Instant, sentAt?, status: MeetingReminderStatus, failureReason?)` — the scheduler's view of one reminder batch (declared in this file since 2026-10-27) |
 
 ## For AI Agents
 

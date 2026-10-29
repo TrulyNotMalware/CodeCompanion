@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/command/entity
 
@@ -30,7 +30,9 @@ is the mention vocabulary.
 ## For AI Agents
 
 ### Working In This Directory
-- Routing a new interaction: add a `CommandDetailType` constant **and** a `createContext` branch.
+- Routing a new interaction: add a `CommandDetailType` constant **and** a `createContext` branch, plus a slot in
+  `InteractionCommand.findSubCommandDefinition` and, for a modal submission, in `isSubmissionRoute`
+  (`SubmissionRouting.kt`).
   `createContext` has no `else`, so a new constant is a compile error until it is placed. Placing it in the
   `EmptyContext` group compiles, but an interaction of that type then fails at runtime with
   `ERROR_RESPONSE`, because `EmptyContext` is not a `ReactionContext`; that group is only for values that

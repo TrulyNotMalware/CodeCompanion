@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/src/testFixtures/kotlin/dev/notypie/domain/standup
 
@@ -12,7 +12,7 @@ application services and infrastructure renderers.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `StandupTestFixtures.kt` | Entities: `createRoutine(name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime = 10:00, cutoffOffset = Routine.DEFAULT_CUTOFF_OFFSET, weekdays = Routine.DEFAULT_WEEKDAYS, routineTimezone = Asia/Seoul, isActive, routineUid, members)`, `createRoutineMember(userId, userTimezone)`, `createStandupSession(routineUid, sessionDate = 2026-05-01, cutoffAt = 02:00Z, status = COLLECTING, summaryMessageTs, sessionUid, dispatches, answers)`, `createSessionDispatch(userId, dmTriggerAt = 01:00Z, dmSentAt, dmStatus = PENDING, failureReason, skippedAt)`, `createStandupAnswer(userId, responses, submittedAt = 01:30Z)`. DTOs: `createRoutineDto(..., cutoffOffset = 1h, weekdays = Mon–Fri, members)`, `createRoutineMemberDto(userId, userTimezone)`, `createStandupSessionDto(sessionId, sessionUid, routineUid, sessionDate, cutoffAt, status, summaryMessageTs, dispatches, answers)`, `createSessionDispatchDto(id, userId, dmTriggerAt, dmSentAt, dmStatus, failureReason, skippedAt)`, `createStandupAnswerDto(userId, responses, submittedAt)`; `createStandupAnswerCandidate(sessionUid, routineUid, routineName = "Daily Standup")` |
+| `StandupTestFixtures.kt` | Entities: `createRoutine(name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime = 10:00, cutoffOffset = 1h, weekdays = Mon–Fri, routineTimezone = Asia/Seoul, isActive, routineUid, members)`, `createRoutineMember(userId, userTimezone)`, `createStandupSession(routineUid, sessionDate = 2026-05-01, cutoffAt = 02:00Z, status = COLLECTING, summaryMessageTs, sessionUid, dispatches, answers)`, `createSessionDispatch(userId, dmTriggerAt = 01:00Z, dmSentAt, dmStatus = PENDING, failureReason, skippedAt)`, `createStandupAnswer(userId, responses, submittedAt = 01:30Z)`. DTOs: `createRoutineDto(..., cutoffOffset = 1h, weekdays = Mon–Fri, members)`, `createRoutineMemberDto(userId, userTimezone)`, `createStandupSessionDto(sessionId, sessionUid, routineUid, sessionDate, cutoffAt, status, summaryMessageTs, dispatches, answers)`, `createSessionDispatchDto(id, userId, dmTriggerAt, dmSentAt, dmStatus, failureReason, skippedAt)`, `createStandupAnswerDto(userId, responses, submittedAt)`; `createStandupAnswerCandidate(sessionUid, routineUid, routineName = "Daily Standup")` |
 
 ## For AI Agents
 
@@ -26,9 +26,9 @@ application services and infrastructure renderers.
   `createSessionDispatchDto` → application `StandupSchedulingServiceTest`, `StandupSummaryServiceTest`;
   infrastructure `SlackOutboundStagerTest` (routine + session), `SlackOutboundRendererTest` (member),
   `OutboundMessageCodecTest` (member + `createStandupAnswerDto`).
-- Entity and DTO defaults deliberately differ: `createRoutine` takes `Routine.DEFAULT_CUTOFF_OFFSET` /
-  `DEFAULT_WEEKDAYS` from the aggregate, while `createRoutineDto` hardcodes 1 h and Mon–Fri; the two answer
-  builders use different response texts. A third set of defaults lives in
+- Entity and DTO routine factories share the private `DEFAULT_CUTOFF_OFFSET` (1 h) and `DEFAULT_WEEKDAYS`
+  (Mon–Fri) from this file (not the production 120-minute default, `StandupSetupParsed.DEFAULT_CUTOFF_MINUTES`);
+  only the answer texts of the two answer builders differ. A third set of defaults lives in
   `../command/createCreateStandupRoutineEvent`. Check consumers before unifying.
 - Session timestamps (`2026-05-01`, cutoff `02:00Z`, DM trigger `01:00Z`, answer `01:30Z`) line up with
   application's `createNudgeCandidateSession`; keep them in step if you move the day.

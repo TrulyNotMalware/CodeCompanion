@@ -18,3 +18,8 @@ data class InteractiveObject(
     val state: States,
     val element: BlockElement,
 )
+
+data class CheckBoxOptions(
+    val text: String,
+    val description: String = "",
+)

@@ -34,3 +34,5 @@ internal class DefaultIntentQueue : IntentQueue {
     override val size: Int
         get() = queue.size
 }
+
+interface CommandEffect

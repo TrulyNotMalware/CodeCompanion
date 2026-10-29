@@ -25,11 +25,12 @@ internal class EphemeralTextResponseContext(
 
     override fun runCommand(commandDetailType: CommandDetailType): CommandOutput {
         addOutbound(
-            OutboundMessage.Ephemeral(
-                target = ConversationTarget(id = commandBasicInfo.channel),
-                recipient = null,
-                content = MessageContent.Text(headline = null, markdown = textMessage),
-            ),
+            message =
+                OutboundMessage.Ephemeral(
+                    target = ConversationTarget(id = commandBasicInfo.channel),
+                    recipient = null,
+                    content = MessageContent.Text(headline = null, markdown = textMessage),
+                ),
         )
         return if (isOk) {
             CommandOutput.success(

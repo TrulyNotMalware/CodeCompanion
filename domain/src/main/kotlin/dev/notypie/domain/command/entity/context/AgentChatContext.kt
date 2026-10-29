@@ -34,12 +34,13 @@ internal class AgentChatContext(
     override fun runCommand(): CommandOutput {
         if (prompt.isVisiblyBlank()) return createErrorResponse(errMessage = EMPTY_PROMPT_MESSAGE)
         addIntent(
-            CommandIntent.AgentConverse(
-                prompt = prompt,
-                threadId = threadId,
-                requesterName = requesterName,
-                channelName = channelName,
-            ),
+            intent =
+                CommandIntent.AgentConverse(
+                    prompt = prompt,
+                    threadId = threadId,
+                    requesterName = requesterName,
+                    channelName = channelName,
+                ),
         )
         return CommandOutput.success(
             basicInfo = commandBasicInfo,

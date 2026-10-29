@@ -16,13 +16,13 @@ import dev.notypie.domain.command.outbound.OutboundMessageStager
 import dev.notypie.impl.command.SlackIntentResolver
 import io.github.oshai.kotlinlogging.KotlinLogging
 
+private val log = KotlinLogging.logger {}
+
 class CommandExecutor(
     private val intentResolver: SlackIntentResolver,
     private val outboundStager: OutboundMessageStager,
     private val eventPublisher: EventPublisher,
 ) {
-    private val log = KotlinLogging.logger {}
-
     fun <T : SubCommandDefinition> execute(command: Command<T>): CommandOutput {
         val output = command.handleEvent()
         if (!output.ok && output.commandDetailType == CommandDetailType.ERROR_RESPONSE) {

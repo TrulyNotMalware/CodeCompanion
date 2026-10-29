@@ -120,7 +120,13 @@ data class AppConfig(
             val stuckSendingThresholdMinutes: Long = 5L,
             val dispatchBatchSize: Int = 50,
             val materializeLookbackMinutes: Long = 2L,
-        )
+        ) {
+            init {
+                require(offsetsMinutes.all { it > 0 }) {
+                    "meeting.reminder.offsets-minutes must be positive: $offsetsMinutes"
+                }
+            }
+        }
 
         data class Agenda(
             val enabled: Boolean = true,

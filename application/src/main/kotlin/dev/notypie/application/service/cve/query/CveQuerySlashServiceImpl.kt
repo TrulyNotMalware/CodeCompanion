@@ -11,13 +11,13 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.MultiValueMap
 
+private val log = KotlinLogging.logger {}
+
 @Service
 class CveQuerySlashServiceImpl(
     private val appConfig: AppConfig,
     private val commandExecutor: CommandExecutor,
 ) : CveQuerySlashService {
-    private val log = KotlinLogging.logger {}
-
     @Transactional
     override fun handleLatest(
         headers: MultiValueMap<String, String>,

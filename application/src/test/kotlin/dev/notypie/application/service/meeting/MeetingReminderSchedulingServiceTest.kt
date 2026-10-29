@@ -429,6 +429,46 @@ class MeetingReminderSchedulingServiceTest :
                 }
             }
 
+            `when`("the repository throws while discarding the first due reminder") {
+                val repo = mockk<MeetingReminderRepository>()
+                val outboxRepo = mockk<MessageOutboxRepository>()
+                val service = buildService(repo = repo, outboxRepo = outboxRepo)
+                val movedLater =
+                    readyReminderOf(
+                        reminderId = 47L,
+                        offsetMinutes = 15,
+                        attendingUserIds = listOf("U_A"),
+                        startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusHours(2L),
+                    )
+                val healthy =
+                    readyReminderOf(
+                        reminderId = 48L,
+                        offsetMinutes = 15,
+                        attendingUserIds = listOf("U_A"),
+                        startAt = LocalDateTime.ofInstant(nowInstant, seoul).plusMinutes(15L),
+                    )
+                every { repo.resetStuckReminders(olderThan = any(), now = any()) } returns 0
+                every { repo.findDueBefore(before = any(), limit = any()) } returns listOf(movedLater, healthy)
+                every {
+                    repo.discardReminder(reminderId = 47L, scheduledAt = nowInstant)
+                } throws IllegalStateException("database down")
+                every { repo.claimReminder(reminderId = 48L, claimToken = any(), now = any()) } returns true
+                every { repo.markReminderSent(reminderId = 48L, claimToken = any(), sentAt = any()) } returns true
+                every { outboxRepo.save(any()) } answers { firstArg() }
+
+                val errors =
+                    captureLogs(loggerName = MeetingReminderSchedulingService::class.java.name) {
+                        service.sendDueReminders()
+                    }.messagesAt(level = Level.ERROR)
+
+                then("the failure is logged with the reminder id and the second reminder is still sent") {
+                    errors shouldBe listOf("Meeting reminder dispatch failed: reminderId=47")
+                    verify(exactly = 1) { repo.claimReminder(reminderId = 48L, claimToken = any(), now = any()) }
+                    verify(exactly = 1) { outboxRepo.save(any()) }
+                    verify(exactly = 1) { repo.markReminderSent(reminderId = 48L, claimToken = any(), sentAt = any()) }
+                }
+            }
+
             `when`("a reminder is due and claim succeeds") {
                 val repo = mockk<MeetingReminderRepository>()
                 val outboxRepo = mockk<MessageOutboxRepository>()

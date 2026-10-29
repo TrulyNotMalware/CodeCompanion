@@ -14,7 +14,7 @@ import java.time.Clock
 import java.time.LocalDateTime
 import java.util.UUID
 
-private val logger = KotlinLogging.logger {}
+private val log = KotlinLogging.logger {}
 
 class CdcRecordParseException(
     message: String,
@@ -46,7 +46,7 @@ class DebeziumLogTailingProcessor(
         try {
             process(envelope = envelope)
         } catch (error: Error) {
-            logger.error(error) {
+            log.error(error) {
                 "CDC record partition=${partition ?: "unknown"} offset=${offset ?: "unknown"} " +
                     "eventId=${envelope?.payload?.after?.get("event_id") ?: "unknown"} hit " +
                     "${error::class.java.name}; handing it to the container's error handler"
@@ -57,7 +57,7 @@ class DebeziumLogTailingProcessor(
 
     private fun process(envelope: Envelope?) {
         if (envelope == null) {
-            logger.debug { "Skipping CDC tombstone record." }
+            log.debug { "Skipping CDC tombstone record." }
             return
         }
         val afterImage = envelope.payload.after ?: return
@@ -79,13 +79,13 @@ class DebeziumLogTailingProcessor(
                 )
             }
 
-        val current = outboxRepository.findByIdOrNull(eventId.toString())
+        val current = outboxRepository.findByIdOrNull(id = eventId.toString())
         if (current == null) {
-            logger.warn { "Outbox row missing for eventId=$eventId idempotencyKey=${snapshot.idempotencyKey}" }
+            log.warn { "Outbox row missing for eventId=$eventId idempotencyKey=${snapshot.idempotencyKey}" }
             return
         }
         if (current.status != MessageStatus.PENDING.name) {
-            logger.info { "Skipping eventId=$eventId already ${current.status}; only a PENDING row is claimed here" }
+            log.info { "Skipping eventId=$eventId already ${current.status}; only a PENDING row is claimed here" }
             return
         }
         val claim = outboxRepository.claim(row = current, now = LocalDateTime.now(clock)) ?: return

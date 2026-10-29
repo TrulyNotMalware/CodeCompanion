@@ -4,7 +4,7 @@ import dev.notypie.domain.command.dto.response.CommandOutput
 import dev.notypie.domain.command.dto.response.Status
 import dev.notypie.domain.command.entity.CommandType
 
-fun failOutput(event: SlackEventPayload, reason: String) =
+fun failOutput(event: SlackEventPayload, reason: String): CommandOutput =
     CommandOutput(
         ok = false,
         apiAppId = event.apiAppId,
@@ -17,7 +17,7 @@ fun failOutput(event: SlackEventPayload, reason: String) =
         errorReason = reason,
     )
 
-fun successOutput(payload: SlackEventPayload, commandType: CommandType, messageTs: String = "") =
+fun successOutput(payload: SlackEventPayload, commandType: CommandType, messageTs: String = ""): CommandOutput =
     CommandOutput(
         ok = true,
         apiAppId = payload.apiAppId,

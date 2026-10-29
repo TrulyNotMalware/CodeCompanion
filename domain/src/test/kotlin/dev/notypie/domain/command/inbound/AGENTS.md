@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-19 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-10-27 -->
 
 # domain/command/inbound (test)
 
@@ -14,7 +14,7 @@ that the typed `reply` property never prints its URL; raw submission and routing
 | File | Description |
 |------|-------------|
 | `InboundFormTest.kt` | `InboundForm` accessors: `all(kind)` preserves inbound positional order (two `TEXT` fields → title then reason; two `TIME` fields → start then end), `firstValue(kind)`, `value(key)` / `isSelected(key)` with empty-string / `false` for missing keys; documents that standup answers arriving out of block-id order must be re-sorted by the `standup_q_<index>` key by the caller. `BehaviorSpec`; builds `InboundField` inline rather than via `inboundField` |
-| `InboundInteractionTest.kt` | `isComplete()`: primary action selected and every field selected → `true`; an unselected field → `false`; non-primary or unselected action → `false`; unselected `TOGGLE` or `TEXT` fields still count as complete. `isPrimary()`: `APPROVE` and `REJECT` are both primary (a reject still triggers its own event), `PASSIVE` is not. `isCanceled()`: `REJECT` only. An interaction whose `ReplyHandle` holds `TEST_SLACK_RESPONSE_URL` prints `reply=ReplyHandle(redacted)` and no `hooks.slack.com`. `BehaviorSpec`; uses `createInboundInteraction`, `inboundField`, `approveAction`, `rejectAction`, `passiveAction`, `TEST_SLACK_RESPONSE_URL` |
+| `InboundInteractionTest.kt` | `isPrimary()`: `APPROVE` and `REJECT` are both primary (a reject still triggers its own event), `PASSIVE` is not. `isCanceled()`: `REJECT` only. An interaction whose `ReplyHandle` holds `TEST_SLACK_RESPONSE_URL` prints `reply=ReplyHandle(redacted)` and no `hooks.slack.com`. `BehaviorSpec`; uses `createInboundInteraction`, `approveAction`, `rejectAction`, `passiveAction`, `TEST_SLACK_RESPONSE_URL` |
 
 ## For AI Agents
 

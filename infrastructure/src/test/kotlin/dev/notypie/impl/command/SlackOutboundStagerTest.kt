@@ -25,8 +25,6 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.BehaviorSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
-import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
-import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.clearMocks
@@ -34,11 +32,14 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 
 private const val LIST_RESPONSE_URL = "https://hooks.slack.com/actions/T1/1/list"
+private val FIXED_NOW = LocalDateTime.of(2026, 10, 27, 9, 30, 15)
 
 class SlackOutboundStagerTest :
     BehaviorSpec({
@@ -48,6 +49,7 @@ class SlackOutboundStagerTest :
             SlackOutboundStager(
                 slackEventBuilder = slackEventBuilder,
                 standupRepository = standupRepository,
+                clock = Clock.fixed(FIXED_NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC),
             )
 
         beforeContainer { testCase -> if (testCase.parent == null) clearMocks(slackEventBuilder, standupRepository) }
@@ -245,14 +247,12 @@ class SlackOutboundStagerTest :
                     )
                 } returns createOpenViewEvent(commandDetailType = CommandDetailType.MEETING_RESCHEDULE_REQUEST)
 
-                val before = LocalDateTime.now()
                 val (event, logs) =
                     captureLogs(loggerName = SlackOutboundStager::class.java.name) {
                         stager.stage(message = message, basicInfo = basicInfo)
                     }
-                val after = LocalDateTime.now()
 
-                then("the modal still opens, pre-filled with the current time as before") {
+                then("the modal still opens, pre-filled with the injected clock's time") {
                     event.shouldBeInstanceOf<OpenViewEvent>()
                     verify(exactly = 1) {
                         slackEventBuilder.openRescheduleMeetingModalRequest(
@@ -266,8 +266,7 @@ class SlackOutboundStagerTest :
                             listResponseUrl = "",
                         )
                     }
-                    startSlot.captured shouldBeGreaterThanOrEqualTo before
-                    startSlot.captured shouldBeLessThanOrEqualTo after
+                    startSlot.captured shouldBe FIXED_NOW
                 }
 
                 then("one WARN names the meeting uid") {

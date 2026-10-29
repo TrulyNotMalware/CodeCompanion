@@ -52,7 +52,7 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-private val logger = KotlinLogging.logger {}
+private val log = KotlinLogging.logger {}
 
 private val DEFAULT_RATE_LIMIT_WAIT: Duration = Duration.ofSeconds(60L)
 internal val RATE_LIMIT_SPREAD: Duration = Duration.ofMinutes(2L)
@@ -113,7 +113,7 @@ class SlackMessageRelayServiceImpl(
         val dropped = ArrayList<Runnable>()
         (relayTaskExecutor as? ThreadPoolTaskExecutor)?.threadPoolExecutor?.queue?.drainTo(dropped)
         releaseDispatchSlots(count = dropped.size)
-        logger.info {
+        log.info {
             "Relay stopping: ${dropped.size} queued claims left IN_PROGRESS unsent for the recovery sweep; " +
                 "only dispatches already running are waited for"
         }
@@ -132,7 +132,7 @@ class SlackMessageRelayServiceImpl(
     override fun batchPendingMessages(claims: List<OutboxClaim>) {
         if (stopping) {
             releaseDispatchSlots(count = claims.size)
-            logger.info {
+            log.info {
                 "Relay stopping; leaving eventIds=${claims.map { it.row.eventId }} IN_PROGRESS for the recovery sweep"
             }
             return
@@ -146,7 +146,7 @@ class SlackMessageRelayServiceImpl(
             } catch (rejected: RejectedExecutionException) {
                 val left = claims.drop(index)
                 releaseDispatchSlots(count = left.size)
-                logger.warn(rejected) {
+                log.warn(rejected) {
                     "Relay executor rejected ${left.size} of ${claims.size} claims; leaving eventIds=" +
                         "${left.map { it.row.eventId }} IN_PROGRESS for the recovery sweep"
                 }
@@ -158,21 +158,21 @@ class SlackMessageRelayServiceImpl(
     override fun dispatchClaimed(claim: OutboxClaim) {
         val row = claim.row
         if (stopping) {
-            logger.info { "Relay stopping; leaving eventId=${row.eventId} IN_PROGRESS unsent for the recovery sweep" }
+            log.info { "Relay stopping; leaving eventId=${row.eventId} IN_PROGRESS unsent for the recovery sweep" }
             return
         }
         val eventId =
             try {
                 UUID.fromString(row.eventId)
             } catch (malformed: IllegalArgumentException) {
-                logger.error(malformed) {
+                log.error(malformed) {
                     "Failing outbox row with malformed eventId='${row.eventId}' idempotencyKey=${row.idempotencyKey}"
                 }
                 writeTerminal(claim = claim, status = MessageStatus.FAILURE)
                 return
             }
         if (row.createdAt < now().minus(giveUpAfter)) {
-            logger.error {
+            log.error {
                 "Failing outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} unsent: created at " +
                     "${row.createdAt}, past the ${giveUpAfter.toHours()} h give-up window"
             }
@@ -184,7 +184,7 @@ class SlackMessageRelayServiceImpl(
             return
         }
         if (row.schemaVersion !in OutboxSchemaVersion.SUPPORTED) {
-            logger.error {
+            log.error {
                 "Outbox row eventId=$eventId idempotencyKey=${row.idempotencyKey} has schemaVersion=" +
                     "${row.schemaVersion}, not in ${OutboxSchemaVersion.SUPPORTED}; leaving it IN_PROGRESS unsent"
             }
@@ -196,7 +196,7 @@ class SlackMessageRelayServiceImpl(
             try {
                 payloadRenderer.render(row = row)
             } catch (exception: Exception) {
-                logger.error(exception) { "Render failed for eventId=$eventId idempotencyKey=${row.idempotencyKey}" }
+                log.error(exception) { "Render failed for eventId=$eventId idempotencyKey=${row.idempotencyKey}" }
                 complete(
                     claim = claim,
                     updateEvent = MessagePublishFailedEvent(eventId = eventId, reason = exception.toString()),
@@ -207,7 +207,7 @@ class SlackMessageRelayServiceImpl(
             try {
                 messageDispatcher.dispatch(event = rendered.payload)
             } catch (exception: Exception) {
-                logger.error(exception) {
+                log.error(exception) {
                     "Dispatch threw for eventId=$eventId idempotencyKey=${row.idempotencyKey}; " +
                         "leaving it IN_PROGRESS for the recovery sweep"
                 }
@@ -221,12 +221,12 @@ class SlackMessageRelayServiceImpl(
                     reason = "Slack rate limit (Retry-After=${result.retryAfter().retryAfterLabel()})",
                 )
             result.isAccessBlocked() -> {
-                logger.error { "Slack refused the bot's access; holding eventId=$eventId until it is fixed" }
+                log.error { "Slack refused the bot's access; holding eventId=$eventId until it is fixed" }
                 accessBlockedTracker.record(at = clock.instant())
                 defer(claim = claim, retryAfter = ACCESS_BLOCKED_DEFER, reason = "Slack access blocked")
             }
             result.isTransientExhausted() ->
-                logger.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
+                log.warn { "Slack transient failure; leaving eventId=$eventId IN_PROGRESS for the recovery sweep" }
             result.ok || result.isOutcomeUnknown() -> {
                 if (result.ok) publishDelivered(eventId = eventId, result = result)
                 complete(
@@ -257,7 +257,7 @@ class SlackMessageRelayServiceImpl(
         result: CommandOutput,
         plan: FallbackPlan,
     ) {
-        logger.warn {
+        log.warn {
             when (plan.trigger) {
                 FallbackTrigger.ANY_DEFINITIVE_FAILURE ->
                     "Replacing the original message failed for eventId=$eventId " +
@@ -275,13 +275,13 @@ class SlackMessageRelayServiceImpl(
             runCatchingExceptions {
                 outboxRepository.renewClaim(eventId = claim.row.eventId, attemptCount = claim.attempt, now = now())
             }.getOrElse { exception ->
-                logger.error(exception) {
+                log.error(exception) {
                     "Claim renewal failed for eventId=${claim.row.eventId}; leaving it to the recovery sweep"
                 }
                 return false
             }
         if (renewed != 1) {
-            logger.warn {
+            log.warn {
                 "Claim attempt=${claim.attempt} on eventId=${claim.row.eventId} was taken over; not dispatching"
             }
         }
@@ -299,13 +299,13 @@ class SlackMessageRelayServiceImpl(
                     updatedAt = eligibleAt.minus(stuckThreshold),
                 )
             }.getOrElse { exception ->
-                logger.error(exception) {
+                log.error(exception) {
                     "Deferring eventId=${claim.row.eventId} after \"$reason\" failed; " +
                         "the sweep retries it on its own clock"
                 }
                 return
             }
-        logger.warn {
+        log.warn {
             "$reason; eventId=${claim.row.eventId} " +
                 (if (deferred == 1) "deferred until $eligibleAt" else "was taken over while deferring")
         }
@@ -326,7 +326,7 @@ class SlackMessageRelayServiceImpl(
                 ),
             )
         } catch (exception: Exception) {
-            logger.error(exception) {
+            log.error(exception) {
                 "Listener of the delivery failed for eventId=$eventId; its outcome is recorded all the same"
             }
         }
@@ -343,7 +343,7 @@ class SlackMessageRelayServiceImpl(
         try {
             applicationEventPublisher.publishEvent(updateEvent)
         } catch (exception: Exception) {
-            logger.error(exception) {
+            log.error(exception) {
                 "Listener of ${updateEvent.status} failed for eventId=${updateEvent.eventId}; the row is already " +
                     "${updateEvent.status}"
             }
@@ -365,14 +365,14 @@ class SlackMessageRelayServiceImpl(
                     maxAttempts = STATUS_WRITE_ATTEMPTS,
                 )
             } catch (exception: Exception) {
-                logger.error(exception) {
+                log.error(exception) {
                     "Recording $status failed for eventId=${claim.row.eventId} " +
                         "idempotencyKey=${claim.row.idempotencyKey}; row stays IN_PROGRESS for the recovery sweep"
                 }
                 return false
             }
         if (completed != 1) {
-            logger.warn {
+            log.warn {
                 "Claim attempt=${claim.attempt} on eventId=${claim.row.eventId} was taken over; $status not recorded"
             }
         }
@@ -409,7 +409,7 @@ class SlackMessageRelayServiceImpl(
     private fun logDroppedChain(row: OutboxMessage) {
         val dropped = row.chainedParts()
         if (dropped > 0) {
-            logger.error {
+            log.error {
                 "Dropping $dropped chained parts after eventId=${row.eventId} idempotencyKey=${row.idempotencyKey} " +
                     "ended FAILURE"
             }

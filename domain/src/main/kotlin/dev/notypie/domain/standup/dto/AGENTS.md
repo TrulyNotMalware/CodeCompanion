@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-26 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/standup/dto
 
@@ -12,8 +12,7 @@ single repository round-trip.
 | File | Description |
 |------|-------------|
 | `RoutineDto.kt` | `RoutineDto(routineId, routineUid, name, creatorId, commandChannel, summaryChannel, questions, triggerLocalTime, cutoffOffset, weekdays, routineTimezone, isActive, members)`; `RoutineMemberDto(userId, userTimezone: ZoneId)` |
-| `StandupSessionDto.kt` | `StandupSessionDto(sessionId, sessionUid, routineUid, sessionDate, cutoffAt, status, summaryMessageTs?, dispatches, answers)`; `SessionDispatchDto(id, userId, dmTriggerAt, dmSentAt?, dmStatus, failureReason?, skippedAt? = null)`; `StandupAnswerDto(userId, responses, submittedAt)` |
-| `StandupAnswerCandidate.kt` | `StandupAnswerCandidate(sessionUid, routineUid, routineName)` — a routine whose session is `COLLECTING` for the actor, preloaded by `StandupSlashServiceImpl` and consumed by `StandupSlashContext` for `/standup answer` |
+| `StandupSessionDto.kt` | `StandupSessionDto(sessionId, sessionUid, routineUid, sessionDate, cutoffAt, status, summaryMessageTs?, dispatches, answers)`; `SessionDispatchDto(id, userId, dmTriggerAt, dmSentAt?, dmStatus, failureReason?, skippedAt? = null)`; `StandupAnswerDto(userId, responses, submittedAt)`; `StandupAnswerCandidate(sessionUid, routineUid, routineName)` (declared in this file) — a routine whose session is `COLLECTING` for the actor, preloaded by `StandupSlashServiceImpl` and consumed by `StandupSlashContext` for `/standup answer` |
 
 ## For AI Agents
 

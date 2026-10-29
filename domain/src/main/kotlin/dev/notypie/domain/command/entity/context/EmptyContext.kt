@@ -17,5 +17,5 @@ internal class EmptyContext(
     ) {
     override fun parseCommandType(): CommandType = CommandType.SIMPLE
 
-    override fun parseCommandDetailType() = CommandDetailType.NOTHING
+    override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.NOTHING
 }

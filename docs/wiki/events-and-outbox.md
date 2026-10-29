@@ -1,6 +1,6 @@
 # 이벤트와 아웃박스
 
-_type: architecture · updated: 2026-10-26_
+_type: architecture · updated: 2026-10-27_
 
 > Slack API 호출과 DB 쓰기는 한 트랜잭션으로 묶을 수 없으므로, 아웃바운드 효과는 중립 봉투로 `outbox_message`에
 > 먼저 커밋되고 릴레이(폴링 또는 Debezium CDC)가 배송 시점에 렌더·전송한다. 보장은 at-least-once + 멱등 소비자다.
@@ -244,7 +244,7 @@ _type: architecture · updated: 2026-10-26_
 - Debezium 커넥터 설정에 `message.key.columns`가 없으므로 레코드 키는 기본값인 PK(`event_id`)다. 즉 채널이나
   커맨드 단위 순서는 파티션 간에 보장되지 않는다. 토픽 파티션 수는 저장소에 없다(미확인).
 - 폴링은 `created_at ASC`로 읽지만 dispatch는 executor 병렬이라 배치 안에서도 순서가 없다.
-  `PartitionKeyUtil`(6 버킷)은 테스트 외 호출자가 없다.
+  예전의 `PartitionKeyUtil`(6 버킷)은 호출자가 없어 2026-10-27(묶음 5)에 지웠다.
 - **여러 메시지로 나뉘는 응답은 연쇄로 보낸다(2026-10-02).** AI 답변·스탠드업 요약·CVE digest처럼 메시지 하나의
   블록 텍스트 예산(12,000자)을 넘어 나뉘는 응답은 첫 조각만 행으로 스테이징하고 나머지는 envelope의
   `continuation`에 싣는다. relay가 그 행의 결과를 기록하는 트랜잭션에서, `completeClaim`이 1일 때만 다음 조각을

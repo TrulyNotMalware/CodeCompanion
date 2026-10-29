@@ -17,19 +17,20 @@ internal class StandupSetupSubmissionContext(
     ) {
     override fun parseCommandDetailType(): CommandDetailType = CommandDetailType.STANDUP_SETUP_SUBMIT
 
-    override fun accept(model: StandupSetupParsed) =
+    override fun accept(model: StandupSetupParsed): Unit =
         addIntent(
-            CommandIntent.CreateStandupRoutine(
-                name = model.name,
-                creatorId = model.creatorId,
-                commandChannel = model.commandChannel,
-                summaryChannel = model.summaryChannel,
-                questions = model.questions,
-                memberIds = model.memberIds,
-                weekdays = model.weekdays,
-                triggerLocalTime = model.triggerLocalTime,
-                cutoffMinutes = model.cutoffMinutes,
-                timezone = model.timezone,
-            ),
+            intent =
+                CommandIntent.CreateStandupRoutine(
+                    name = model.name,
+                    creatorId = model.creatorId,
+                    commandChannel = model.commandChannel,
+                    summaryChannel = model.summaryChannel,
+                    questions = model.questions,
+                    memberIds = model.memberIds,
+                    weekdays = model.weekdays,
+                    triggerLocalTime = model.triggerLocalTime,
+                    cutoffMinutes = model.cutoffMinutes,
+                    timezone = model.timezone,
+                ),
         )
 }

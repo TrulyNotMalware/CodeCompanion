@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # application/service/mention
 
@@ -42,8 +42,7 @@ domain context sees it.
   `AgentConverseService.contextPrompt` fall back to `<@id>` / `<#id>` mentions on blank. Never use
   `.toString()` on a nullable payload lookup here; that once produced the literal `"null"`.
 - `resolveCommandType` only rejects unknown transport types; the resulting `SlackEventType` is discarded
-  and `toMentionInboundCommand` does the actual mapping. The `FIXME Remove AppMention Events` note means
-  this handler is slated to shrink — do not grow it with new parsing.
+  and `toMentionInboundCommand` does the actual mapping. Do not grow this handler with new parsing.
 - The non-`app_mention` filter lives upstream: `SlackEventController` ACKs other event types with an empty
   200, `SocketModeReceiver.handleEvent` forwards only `event.type == "app_mention"`.
 

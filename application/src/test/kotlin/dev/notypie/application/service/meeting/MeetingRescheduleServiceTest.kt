@@ -16,7 +16,7 @@ import dev.notypie.domain.command.outbound.UserRef
 import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createMeetingParticipantDto
 import dev.notypie.domain.meet.createRescheduleMeetingEvent
-import dev.notypie.impl.command.SlackOutboundStager
+import dev.notypie.impl.command.createSlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.logging.captureLogs
@@ -170,7 +170,8 @@ class MeetingRescheduleServiceTest :
                     MeetingRescheduleService(
                         meetingRepository = localMeetingRepository,
                         reminderRepository = localReminderRepository,
-                        outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                        outboundStager =
+                            createSlackOutboundStager(),
                         eventPublisher = recordingPublisher,
                         transactionManager = transactionManager,
                         clock = clock,
@@ -208,7 +209,8 @@ class MeetingRescheduleServiceTest :
             `when`("the write conflicts after the participant DMs were staged and the retry wins") {
                 val transactionManager = createH2TransactionManager()
                 val recordingPublisher = CommitRecordingEventPublisher()
-                val slackStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk())
+                val slackStager =
+                    createSlackOutboundStager()
                 var hostReplies = 0
                 val conflictingOnFirstReply =
                     object : OutboundMessageStager by slackStager {
@@ -294,7 +296,7 @@ class MeetingRescheduleServiceTest :
                             meetingRepository = localMeetingRepository,
                             reminderRepository = mockk(relaxed = true),
                             outboundStager =
-                                SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                                createSlackOutboundStager(),
                             eventPublisher = recordingPublisher,
                             transactionManager = transactionManager,
                             clock = clock,

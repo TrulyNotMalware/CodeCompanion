@@ -24,6 +24,17 @@ private val DEFAULT_QUESTIONS: List<String> =
         "Any blockers?",
     )
 
+private val DEFAULT_CUTOFF_OFFSET: Duration = Duration.ofHours(1L)
+
+private val DEFAULT_WEEKDAYS: Set<DayOfWeek> =
+    setOf(
+        DayOfWeek.MONDAY,
+        DayOfWeek.TUESDAY,
+        DayOfWeek.WEDNESDAY,
+        DayOfWeek.THURSDAY,
+        DayOfWeek.FRIDAY,
+    )
+
 fun createRoutine(
     name: String = "Daily Standup",
     creatorId: String = TEST_USER_ID,
@@ -31,8 +42,8 @@ fun createRoutine(
     summaryChannel: String = TEST_CHANNEL_ID,
     questions: List<String> = DEFAULT_QUESTIONS,
     triggerLocalTime: LocalTime = LocalTime.of(10, 0),
-    cutoffOffset: Duration = Routine.DEFAULT_CUTOFF_OFFSET,
-    weekdays: Set<DayOfWeek> = Routine.DEFAULT_WEEKDAYS,
+    cutoffOffset: Duration = DEFAULT_CUTOFF_OFFSET,
+    weekdays: Set<DayOfWeek> = DEFAULT_WEEKDAYS,
     routineTimezone: ZoneId = ZoneId.of("Asia/Seoul"),
     isActive: Boolean = true,
     routineUid: UUID = UUID.randomUUID(),
@@ -114,15 +125,8 @@ fun createRoutineDto(
     summaryChannel: String = TEST_CHANNEL_ID,
     questions: List<String> = DEFAULT_QUESTIONS,
     triggerLocalTime: LocalTime = LocalTime.of(10, 0),
-    cutoffOffset: Duration = Duration.ofHours(1L),
-    weekdays: Set<DayOfWeek> =
-        setOf(
-            DayOfWeek.MONDAY,
-            DayOfWeek.TUESDAY,
-            DayOfWeek.WEDNESDAY,
-            DayOfWeek.THURSDAY,
-            DayOfWeek.FRIDAY,
-        ),
+    cutoffOffset: Duration = DEFAULT_CUTOFF_OFFSET,
+    weekdays: Set<DayOfWeek> = DEFAULT_WEEKDAYS,
     routineTimezone: ZoneId = ZoneId.of("Asia/Seoul"),
     isActive: Boolean = true,
     members: List<dev.notypie.domain.standup.dto.RoutineMemberDto> = emptyList(),

@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/command/exceptions
 
@@ -10,8 +10,7 @@ sealed exception hierarchy thrown while parsing sub-commands or routing an unsup
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CommandErrorCode.kt` | `internal enum CommandErrorCode : ErrorCode` — `SUBCOMMAND_NOT_VALID`, `SUBCOMMAND_NOT_FOUND`, `UNSUPPORTED_COMMAND_TYPE` (message only) |
-| `CommandException.kt` | `internal sealed class CommandException : CodeCompanionRuntimeException`; `SubCommandParseException(commandName, subCommandName, errorCode, details)`; `UnSupportedCommandException(commandType, errorCode, details)` |
+| `CommandException.kt` | `internal enum CommandErrorCode : ErrorCode` — `SUBCOMMAND_NOT_VALID`, `SUBCOMMAND_NOT_FOUND`, `UNSUPPORTED_COMMAND_TYPE` (message only); `internal sealed class CommandException : CodeCompanionRuntimeException`; `SubCommandParseException(commandName, subCommandName, errorCode, details)`; `UnSupportedCommandException(commandType, errorCode, details)` |
 
 ## For AI Agents
 

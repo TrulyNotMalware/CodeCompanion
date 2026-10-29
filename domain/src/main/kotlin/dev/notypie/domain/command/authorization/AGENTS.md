@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-30 | Updated: 2026-08-30 -->
+<!-- Generated: 2026-08-30 | Updated: 2026-10-27 -->
 
 # domain/command/authorization
 
@@ -11,8 +11,7 @@ application layer.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `CommandPermission.kt` | `BASIC` (help, forms, modals, slash commands), `AI` (`ask` and the free-text fallback), `OPERATIONS` (`status`, `notice`), `ADMINISTRATION` (`grant`, `revoke`, `roles`, `cve ...`) |
-| `UserRole.kt` | `USER` ⊂ `AI_USER` ⊂ `DEVELOPER` ⊂ `ADMIN`; `ADMIN` is `CommandPermission.entries.toSet()`; `grants(permission)` is the only query |
+| `UserRole.kt` | `CommandPermission` (declared first in this file): `BASIC` (help, forms, modals, slash commands), `AI` (`ask` and the free-text fallback), `OPERATIONS` (`status`, `notice`), `ADMINISTRATION` (`grant`, `revoke`, `roles`, `cve ...`). `UserRole`: `USER` ⊂ `AI_USER` ⊂ `DEVELOPER` ⊂ `ADMIN`; `ADMIN` is `CommandPermission.entries.toSet()`; `grants(permission)` is the only query |
 
 ## For AI Agents
 

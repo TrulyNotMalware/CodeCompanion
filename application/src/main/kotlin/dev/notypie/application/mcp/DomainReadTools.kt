@@ -88,7 +88,7 @@ class DomainReadTools(
         ) daysAhead: Int?,
         context: McpSyncRequestContext,
     ): CallToolResult {
-        val window = (daysAhead ?: DEFAULT_DAYS_AHEAD).coerceIn(1, 31)
+        val window = (daysAhead ?: DEFAULT_DAYS_AHEAD).coerceIn(minimumValue = 1, maximumValue = 31)
         return mcpToolGate.execute(
             transportContext = context.transportContext(),
             toolName = "list_meetings",

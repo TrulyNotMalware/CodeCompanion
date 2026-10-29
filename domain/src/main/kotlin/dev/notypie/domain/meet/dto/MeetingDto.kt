@@ -1,6 +1,8 @@
 package dev.notypie.domain.meet.dto
 
 import dev.notypie.domain.meet.entity.RejectReason
+import dev.notypie.domain.meet.entity.enums.MeetingReminderStatus
+import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -26,4 +28,14 @@ data class MeetingParticipantDto(
     val isAttending: Boolean,
     val absentReason: RejectReason = RejectReason.ATTENDING,
     val absentReasonDetail: String? = null,
+)
+
+data class MeetingReminderDto(
+    val id: Long,
+    val meetingId: Long,
+    val offsetMinutes: Int,
+    val scheduledAt: Instant,
+    val sentAt: Instant?,
+    val status: MeetingReminderStatus,
+    val failureReason: String?,
 )

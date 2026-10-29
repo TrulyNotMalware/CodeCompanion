@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
-private val logger = KotlinLogging.logger {}
+private val log = KotlinLogging.logger {}
 
 @RestController
 @RequestMapping("/api/slack")
@@ -40,15 +40,15 @@ class SlackEventController(
 
         val eventType = extractEventType(payload = payload)
         if (eventType != APP_MENTION_EVENT_TYPE) {
-            logger.debug { "Ignoring non-app_mention Slack event: type=$eventType" }
+            log.debug { "Ignoring non-app_mention Slack event: type=$eventType" }
             return ResponseEntity.ok().build()
         }
 
         val output = eventHandler.handleEvent(headers = headers, payload = payload)
         when {
             output.ok -> Unit
-            output.status == Status.DO_NOTHING -> logger.debug { "app_mention ignored: nothing to do" }
-            else -> logger.warn { "app_mention command failed: ${output.errorReason.neutralizeControlCharacters()}" }
+            output.status == Status.DO_NOTHING -> log.debug { "app_mention ignored: nothing to do" }
+            else -> log.warn { "app_mention command failed: ${output.errorReason.neutralizeControlCharacters()}" }
         }
         return ResponseEntity.ok().build()
     }

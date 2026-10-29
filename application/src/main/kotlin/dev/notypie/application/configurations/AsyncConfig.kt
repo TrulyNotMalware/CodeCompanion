@@ -31,8 +31,7 @@ internal val RELAY_UNCAUGHT_ERROR_LOGGER: Thread.UncaughtExceptionHandler =
 
 @Configuration
 @EnableAsync
-class AsyncConfig : AsyncConfigurer { // TODO REPLACE COROUTINE
-
+class AsyncConfig : AsyncConfigurer {
     @Bean(name = ["threadPoolTaskExecutor"])
     @Primary
     override fun getAsyncExecutor(): Executor =

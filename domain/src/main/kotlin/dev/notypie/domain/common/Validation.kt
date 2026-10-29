@@ -286,7 +286,7 @@ class ValidationBuilder {
                     ExceptionArgument(
                         fieldName = name,
                         value = value.toString(),
-                        reason = "must be positive",
+                        reason = "must be negative",
                     ),
             )
         }

@@ -1,5 +1,6 @@
 package dev.notypie.templates
 
+import dev.notypie.domain.common.escapeMarkup
 import dev.notypie.domain.common.takeEntitySafe
 
 object SlackBlockLimits {
@@ -122,3 +123,10 @@ private fun String.countFences(): Int {
 }
 
 private fun String.takeSafely(limit: Int): String = takeEntitySafe(maxLength = limit)
+
+fun String.escapeMrkdwn(): String = escapeMarkup()
+
+private val SPECIAL_MENTION = Regex("<!(?!date\\^)([^<>]*)>")
+
+fun String.neutralizeBroadcastMentions(): String =
+    replace(regex = SPECIAL_MENTION) { match -> "&lt;!${match.groupValues[1]}&gt;" }

@@ -35,6 +35,21 @@ import java.util.Base64
 
 private val log = KotlinLogging.logger {}
 
+enum class CalendarConnectionOutcome {
+    CONNECTED,
+    DENIED,
+    SCOPE_DENIED,
+    INVALID_STATE,
+    EXCHANGE_FAILED,
+    STORE_FAILED,
+    ACCOUNT_MISMATCH,
+    IDENTITY_UNAVAILABLE,
+}
+
+interface CalendarConnectionCallback {
+    fun completeConnection(code: String?, state: String?, error: String?): CalendarConnectionOutcome
+}
+
 class CalendarConnectionService(
     private val connectionRepository: GoogleCalendarConnectionRepository,
     private val stateRepository: GoogleOAuthStateRepository,

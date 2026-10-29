@@ -117,3 +117,8 @@ data class CalendarConnection(
         "CalendarConnection(slackUserId=$slackUserId, googleSubject=$googleSubject, googleEmail=$googleEmail, " +
             "status=$status, connectedAt=$connectedAt, revokedAt=$revokedAt, lastError=$lastError)"
 }
+
+enum class CalendarConnectionStatus {
+    ACTIVE,
+    REVOKED,
+}

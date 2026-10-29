@@ -11,7 +11,7 @@ import java.util.concurrent.CompletionException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 
-private val logger = KotlinLogging.logger {}
+private val log = KotlinLogging.logger {}
 
 data class PublisherView(
     val displayName: String,
@@ -86,7 +86,7 @@ class SlackUserProfileResolver(
         if (overflow > 0) {
             cache.entries
                 .sortedBy { it.value.cachedAt }
-                .take(overflow.coerceAtLeast(maxEntries / 10))
+                .take(n = overflow.coerceAtLeast(minimumValue = maxEntries / 10))
                 .forEach { cache.remove(it.key, it.value) }
         }
     }
@@ -99,13 +99,16 @@ class SlackUserProfileResolver(
                 responseType = SlackUserProfileDto::class.java,
                 uriVariables = mapOf("user" to userId),
             ).map { response -> response.body }
-            .onFailure { logger.warn(it) { "users.profile.get failed for $userId; rendering the bare mention" } }
-            .getOrNull()
+            .onFailure {
+                log.warn {
+                    "users.profile.get failed for $userId: ${it.javaClass.simpleName}; rendering the bare mention"
+                }
+            }.getOrNull()
             ?.let { dto ->
                 if (dto.ok) {
                     dto.profile
                 } else {
-                    logger.warn { "users.profile.get answered ok=false for $userId: error=${dto.error}" }
+                    log.warn { "users.profile.get answered ok=false for $userId: error=${dto.error}" }
                     null
                 }
             }?.let { profile ->
@@ -130,11 +133,11 @@ class SlackUserEmailResolver(
                     responseType = SlackUserInfoDto::class.java,
                     uriVariables = mapOf("user" to userId),
                 ).getOrElse { exception ->
-                    logger.warn { "users.info failed for $userId: ${exception.javaClass.simpleName}" }
+                    log.warn { "users.info failed for $userId: ${exception.javaClass.simpleName}" }
                     return null
                 }.body
         if (response == null || !response.ok) {
-            logger.warn { "users.info answered ok=false for $userId: error=${response?.error}" }
+            log.warn { "users.info answered ok=false for $userId: error=${response?.error}" }
             return null
         }
         return response.user

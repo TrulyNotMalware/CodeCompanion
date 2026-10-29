@@ -20,14 +20,10 @@ object IdempotencyCreator {
         create(data = DefaultIdempotencyDataSerializer.serialize(data = data), currentTimeMillis = currentTimeMillis)
 }
 
-interface IdempotencyDataSerializer {
-    fun serialize(data: IdempotencyData): String
-}
-
-object DefaultIdempotencyDataSerializer : IdempotencyDataSerializer {
+object DefaultIdempotencyDataSerializer {
     private val mapper: JsonMapper = jsonMapper
 
-    override fun serialize(data: IdempotencyData): String {
+    fun serialize(data: IdempotencyData): String {
         val bytes = mapper.writeValueAsBytes(data)
         val digest = MessageDigest.getInstance("SHA-256")
         val hashBytes = digest.digest(bytes)

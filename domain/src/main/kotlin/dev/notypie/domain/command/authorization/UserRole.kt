@@ -1,5 +1,12 @@
 package dev.notypie.domain.command.authorization
 
+enum class CommandPermission {
+    BASIC,
+    AI,
+    OPERATIONS,
+    ADMINISTRATION,
+}
+
 enum class UserRole(
     private val permissions: Set<CommandPermission>,
 ) {

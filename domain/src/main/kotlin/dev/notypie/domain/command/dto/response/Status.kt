@@ -8,7 +8,7 @@ enum class Status {
     ;
 
     companion object {
-        fun isOk(status: Status) =
+        fun isOk(status: Status): Boolean =
             when (status) {
                 IN_PROGRESSED -> true
                 SUCCESS -> true

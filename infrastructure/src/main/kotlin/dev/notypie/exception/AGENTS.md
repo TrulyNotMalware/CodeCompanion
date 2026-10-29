@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-28 | Updated: 2026-10-15 -->
+<!-- Generated: 2026-04-28 | Updated: 2026-10-27 -->
 
 # infrastructure/exception
 

@@ -11,7 +11,7 @@ import dev.notypie.domain.meet.createMeeting
 import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.createRescheduleMeetingEvent
 import dev.notypie.domain.meet.dto.MeetingDto
-import dev.notypie.impl.command.SlackOutboundStager
+import dev.notypie.impl.command.createSlackOutboundStager
 import dev.notypie.repository.calendar.GoogleCalendarConnectionRepository
 import dev.notypie.repository.calendar.schema.CalendarSyncStatus
 import dev.notypie.repository.createSnapshotIsolationFailure
@@ -45,8 +45,8 @@ class MeetingWriteJpaTransactionTest :
         }
 
         val publisher = CommitRecordingEventPublisher()
-        val stager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk())
         val clock = createFixedClock(now = LocalDateTime.of(2026, 6, 30, 12, 0))
+        val stager = createSlackOutboundStager(clock = clock)
         val host = "U_HOST_JPA"
 
         fun rescheduleService(

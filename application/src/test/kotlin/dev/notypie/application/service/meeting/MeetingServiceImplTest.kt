@@ -29,7 +29,7 @@ import dev.notypie.domain.meet.createMeetingDto
 import dev.notypie.domain.meet.createRequestMeetingContextResult
 import dev.notypie.domain.meet.createUpdateMeetingAttendanceEvent
 import dev.notypie.domain.meet.entity.RejectReason
-import dev.notypie.impl.command.SlackOutboundStager
+import dev.notypie.impl.command.createSlackOutboundStager
 import dev.notypie.impl.command.event.MessageType
 import dev.notypie.impl.command.event.createSendSlackMessageEvent
 import dev.notypie.logging.captureLogs
@@ -592,7 +592,8 @@ class MeetingServiceImplTest :
                 MeetingServiceImpl(
                     meetingRepository = conflictedRepository,
                     commandExecutor = commandExecutor,
-                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    outboundStager =
+                        createSlackOutboundStager(),
                     eventPublisher = recordingPublisher,
                     transactionManager = transactionManager,
                     calendarMirror = NoopMeetingCalendarMirror,
@@ -822,7 +823,8 @@ class MeetingServiceImplTest :
                 MeetingServiceImpl(
                     meetingRepository = listRepository,
                     commandExecutor = commandExecutor,
-                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    outboundStager =
+                        createSlackOutboundStager(),
                     eventPublisher = recordingPublisher,
                     transactionManager = transactionManager,
                     calendarMirror = NoopMeetingCalendarMirror,
@@ -1057,7 +1059,8 @@ class MeetingServiceImplTest :
                 MeetingServiceImpl(
                     meetingRepository = boundedRepository,
                     commandExecutor = commandExecutor,
-                    outboundStager = SlackOutboundStager(slackEventBuilder = mockk(), standupRepository = mockk()),
+                    outboundStager =
+                        createSlackOutboundStager(),
                     eventPublisher = recordingPublisher,
                     transactionManager = transactionManager,
                     calendarMirror = NoopMeetingCalendarMirror,

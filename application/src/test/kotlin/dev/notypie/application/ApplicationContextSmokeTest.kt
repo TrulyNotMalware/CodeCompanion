@@ -32,6 +32,7 @@ import dev.notypie.impl.agent.AgentGateway
 import dev.notypie.impl.agent.AgentTurnRequest
 import dev.notypie.impl.agent.AgentTurnResult
 import dev.notypie.impl.command.RestRequester
+import dev.notypie.impl.command.SlackOutboundStager
 import dev.notypie.impl.command.ViewOpenDeferral
 import dev.notypie.impl.command.dto.SlackUserProfileDto
 import dev.notypie.impl.command.dto.createUserProfileResponseJson
@@ -206,6 +207,7 @@ class ApplicationContextSmokeTest
                             StandupAnswerService::class.java,
                             OpsStatusService::class.java,
                             MeetingRepositoryImpl::class.java,
+                            SlackOutboundStager::class.java,
                         ).forEach { type ->
                             val bean = AopTestUtils.getUltimateTargetObject<Any>(context.getBean(type))
                             ReflectionTestUtils.getField(bean, "clock") shouldBeSameInstanceAs clock
