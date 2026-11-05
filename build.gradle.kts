@@ -25,7 +25,7 @@ extra["slackSdkVersion"] = "1.52.0"
 extra["mockkVersion"] = "1.14.11"
 extra["springMockkVersion"] = "5.0.1"
 extra["springBootVersion"] = "4.1.1"
-extra["jacksonVersion"] = "3.2.3"
+extra["jacksonVersion"] = "3.2.4"
 extra["kotlinLoggingVersion"] = "8.0.4"
 extra["springAiVersion"] = "2.0.1"
 
