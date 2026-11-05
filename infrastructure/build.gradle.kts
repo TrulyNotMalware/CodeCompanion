@@ -3,6 +3,7 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 val springBootVersion = rootProject.extra["springBootVersion"] as String
 val jacksonVersion = rootProject.extra["jacksonVersion"] as String
 val slackSdkVersion = rootProject.extra["slackSdkVersion"] as String
+val lz4JavaVersion = rootProject.extra["lz4JavaVersion"] as String
 
 tasks.named<BootJar>("bootJar") {
     enabled = false
@@ -24,6 +25,11 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     api("org.springframework.boot:spring-boot-starter-kafka")
+    constraints {
+        api("at.yawk.lz4:lz4-java:$lz4JavaVersion") {
+            because("kafka-clients 4.2.x brings lz4-java <= 1.11.3 (GHSA-mcr4-qmvw-px4g)")
+        }
+    }
     implementation("com.slack.api:slack-api-model:$slackSdkVersion")
     implementation("com.slack.api:slack-api-client:$slackSdkVersion")
     implementation("com.slack.api:slack-app-backend:$slackSdkVersion")

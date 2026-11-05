@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-28 | Updated: 2026-10-12 -->
+<!-- Generated: 2026-08-28 | Updated: 2026-11-05 -->
 
 # gradle
 
@@ -10,6 +10,6 @@ Container for the Gradle wrapper. No other Gradle inputs live here — shared `g
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `wrapper/` | Wrapper jar and distribution descriptor pinning Gradle 9.8.1 (see `wrapper/AGENTS.md`) |
+| `wrapper/` | Wrapper jar and distribution descriptor pinning Gradle 9.8.2 (see `wrapper/AGENTS.md`) |
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
