@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-08-25 | Updated: 2026-10-27 -->
+<!-- Generated: 2026-08-25 | Updated: 2026-11-05 -->
 
 # infrastructure
 
@@ -14,7 +14,7 @@ repository contracts) and is consumed by `:application`. Produces a plain `jar` 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `build.gradle.kts` | Slack SDK (model/client/app-backend), Spring Data JPA + Kafka (as `api`, so they propagate), Jackson 3, MariaDB + H2 runtime drivers |
+| `build.gradle.kts` | Slack SDK (model/client/app-backend), Spring Data JPA + Kafka (as `api`, so they propagate), Jackson 3, MariaDB + H2 runtime drivers, and an `api` constraint that floors `at.yawk.lz4:lz4-java` at the root `lz4JavaVersion` (kafka-clients 4.2.x brings a version under GHSA-mcr4-qmvw-px4g; a floor, not a pin — Gradle keeps a higher version Kafka asks for; decision #57 in `docs/wiki/decisions.md`) |
 
 ## Subdirectories
 | Directory | Purpose |

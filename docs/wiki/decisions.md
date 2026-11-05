@@ -1,6 +1,6 @@
 # 기술 결정 기록
 
-_type: decision · updated: 2026-10-27_
+_type: decision · updated: 2026-11-05_
 
 > 근거가 있는 결정과 2024-06부터의 연혁(마일스톤·설계 전환점)·폐기 목록을 남기며, 결정이 뒤집히면 항목을 지우지
 > 말고 상태를 바꾸고 이력을 덧붙인다.
@@ -767,17 +767,17 @@ _type: decision · updated: 2026-10-27_
     CGLIB 이유는 리포지토리 `Impl`에 그대로 남는다 — `JpaConfiguration`의 `@Bean`으로 등록돼 스테레오타입이 없으므로
     `@Transactional`을 단 13개는 `open class`이고, 없는 3개(`AgentSessionRepositoryImpl` 등)는 아니다. 리뷰 P-01(2026-10-23).
     → [coding-style.md](coding-style.md)의 트랜잭션 행
-25. **툴체인은 최신 GA를 따른다 — Java 25, Kotlin 2.4, Spring Boot 4.1, Gradle 9.8.1.** 이유: (근거 미기록 — 채워
+25. **툴체인은 최신 GA를 따른다 — Java 25, Kotlin 2.4, Spring Boot 4.1, Gradle 9.8.2.** 이유: (근거 미기록 — 채워
     넣을 것). 상태: 유지. 주의: 루트 `build.gradle.kts`의 `java { toolchain }` / `kotlin { compilerOptions }` 블록은
     `subprojects` 밖이라 세 모듈에 적용되지 않는다(2026-09-22 실측: 모듈 `freeCompilerArgs=[]`, 로컬 데몬 JDK 21로
     컴파일). `subprojects`로 옮기는 작업은 `-Xjsr305=strict` 활성화 파급 때문에 단독 PR로 남겨 둔다(review.md C6). 근거: `build.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`.
 26. **`gradle.properties`는 생성물(git-ignore). 공유 설정은 `gradle-config/` 프리셋을 고친다.** 상태: 유지.
     근거: `gradle-config/README.md`.
-35. **Jackson 버전은 Boot BOM이 아니라 루트 `extra["jacksonVersion"]`(3.2.3 — 2026-10-06 Dependabot #20, jackson-core·databind High 권고 GHSA-7hhh-6rmp-j9qf·GHSA-cxp5-3px4-pw24·GHSA-wv8q-qhhj-9h54 수정판)이 정한다.** Boot 4.1.1 BOM은 3.1.5를
+35. **Jackson 버전은 Boot BOM이 아니라 루트 `extra["jacksonVersion"]`(3.2.4 — 2026-11-05 Dependabot #58. 3.2.3은 2026-10-06 #20의 jackson-core·databind High 권고 GHSA-7hhh-6rmp-j9qf·GHSA-cxp5-3px4-pw24·GHSA-wv8q-qhhj-9h54 수정판)이 정한다.** Boot 4.1.2 BOM은 3.1.7을
     관리하지만 모듈의 `api(platform(jackson-bom))`가 그 위를 덮는다. Spring이 시험한 조합에서 벗어난다는 지적
     (`review_skill.md` 3.1)을 소유자가 2026-10-01에 보류하고 덮어쓰기를 유지하기로 했다. 이유: (근거 미기록 — 채워
     넣을 것). 상태: 유지. 주의: Boot를 올릴 때 BOM의 Jackson 버전과 이 값을 함께 비교한다. 근거: `build.gradle.kts`,
-    #20.
+    #20, #58.
 48. **경계는 `Exception`만 잡고 `Error`는 전파한다 — 행 단위 루프도 예외가 아니다 (2026-10-15).** 스케줄러 틱·행 루프·리스너와
     전송 가장자리·MCP 도구 본문과 감사 쓰기는 `containFailure` / `runCatchingExceptions`(`infrastructure/.../common`)를 쓰고,
     `runInTx`는 안쪽·바깥쪽 모두 `catch (Exception)`(액션의 `Error`를 기록해 롤백이 어떤 예외로 실패해도 그 `Error`를 다시 던짐; relay 상태 기록도 `runInTx` 경유),
@@ -901,6 +901,23 @@ _type: decision · updated: 2026-10-27_
     근거: `application/.../security/SlackRequestVerificationFilter.kt`, `application/.../security/AGENTS.md`,
     `application/.../security/SlackRetryDeduplicator.kt`, `application/src/main/resources/k8s/deployment.yaml`,
     `application/src/main/resources/k8s/AGENTS.md`.
+57. **Kafka 클라이언트가 끌고 오는 `lz4-java`에는 `infrastructure`의 `api` 제약으로 하한 1.11.4를 건다 (2026-11-05).**
+    Boot 4.1.1의 kafka-clients 4.2.1은 `at.yawk.lz4:lz4-java` 1.10.1을, Boot 4.1.2의 4.2.2는 1.11.2를 가져오는데 둘 다
+    GHSA-mcr4-qmvw-px4g(공유 임시 디렉터리에 푼 네이티브 라이브러리를 다른 로컬 사용자가 바꿔치기, 1.11.3 이하) 범위다. 이 권고는
+    GitHub 전역 DB가 High(의존성 검토 게이트 `fail-on-severity: high`가 이것으로 실패), 관리자 저장소 권고가 Low로 매긴다. 1.11.4는
+    같은 날 GHSA-gm45-99xc-r7wv(Medium)·GHSA-343h-94h5-c4wr(Low)도 고쳤다.
+    이 저장소는 Dependabot 보안 알림이 꺼져 있어(2026-11-05 API 확인) main의 1.10.1이 드러나지 않았고, Boot 4.1.2 Dependabot PR #57의
+    의존성 검토가 바뀐 패키지로 처음 잡았다. 1.11.4를 고른 이유: 이 권고의 수정판 중 Kafka가 빌드한 1.11 라인 그대로이고 kafka-clients
+    4.3.2도 1.11.4를 쓴다. 1.12.x·1.13.0은 고르지 않았다: 1.12.0은 입력 검증을 조인 마이너이고, 작성자는 릴리스 노트에서 1.12.0을
+    권하면서 깨지면 1.11.4를 쓰라고 했다. 그래서 1.12.1이 고친 GHSA-48mj-8f7c-7qfm(Low, 2026-11-05 기준 GitHub 전역 DB에 없음)은
+    남는다. `.github/dependabot.yml`의 gradle 항목이 lz4-java의 마이너·메이저 상향을 무시하므로 1.11 라인의 패치만 PR로 온다. 1.12
+    이상으로 올리는 것은 Boot가 관리하는 Kafka가 그 라인으로 옮길 때 이 결정과 함께 다시 본다.
+    제약은 고정이 아니라 하한이다 — Gradle은 높은 쪽을 고르므로 Kafka가 더 높은 버전을 요구하면 그쪽이 이긴다. 제거 조건: 제약 없이도
+    모든 classpath가 1.11.4 이상으로 해석될 때(최소 `:application`의 `runtimeClasspath`와 EmbeddedKafka가 들어오는
+    `:infrastructure`의 `testRuntimeClasspath` — 의존성 제출은 모든 구성을 올린다). 주의: kafka-clients 4.4.0은 다시 1.11.2를
+    가져온다 — Kafka를 올렸다고 확인 없이 지우지 않는다. 상태: 유지.
+    근거: `build.gradle.kts`(`lz4JavaVersion`), `infrastructure/build.gradle.kts`, Maven Central의 kafka-clients POM,
+    github.com/yawkat/lz4-java 릴리스 노트(v1.11.4·v1.12.0·v1.12.1).
 
 ## 연혁 — 마일스톤과 전환점
 
@@ -1131,6 +1148,10 @@ git-ignored 계획 문서 `Handoff.md`·`Refactor.md`·`CveBotPlan.md`·`review.
 - 빈 등록·스케줄 잡 규칙 정정(#56): `docs/wiki/coding-style.md`(빈 등록·스케줄 잡 행), `application/AGENTS.md`, `application/src/main/kotlin/dev/notypie/application/configurations/AGENTS.md`,
   `application/src/main/kotlin/dev/notypie/application/{configurations,service,security}/**`의 `@Bean`·`@Service`/`@Component`·`@Scheduled`(2026-10-26 grep),
   `infrastructure/src/main/kotlin/dev/notypie/configurations/JpaConfiguration.kt`, 리뷰 P-03·P-04(`.omc/handoffs/2026-10-23-full-review/findings-P.md`, git-ignored)
+- lz4-java 하한(#57): `build.gradle.kts`(`lz4JavaVersion`), `infrastructure/build.gradle.kts`(`constraints`), `.github/dependabot.yml`(gradle `ignore`),
+  kafka-clients 4.2.0~4.4.0 POM(Maven Central, 2026-11-05 조회), GitHub advisory API, Dependabot PR #57의 의존성 검토 로그,
+  `dependencies` 실측(application·infrastructure의 runtime·test·testFixtures classpath 모두 `1.11.2 -> 1.11.4`)과 boot jar의
+  `BOOT-INF/lib/lz4-java-1.11.4.jar`(2026-11-05)
 - 작업 트리: `.github/workflows/security_check.yaml`, `.github/dependabot.yml`, `.gitleaks.toml`,
   `build.gradle.kts` diff
 

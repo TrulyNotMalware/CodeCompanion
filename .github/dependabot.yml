@@ -12,6 +12,11 @@ updates:
       # Repository convention is "<type> : <subject>" (see .gitmessage). Ending the prefix with
       # the colon stops Dependabot from appending its own.
       prefix: "chore :"
+    ignore:
+      # The lz4-java floor stays on the 1.11 line kafka-clients is built against until Boot's Kafka moves past it
+      # (decision #57 in docs/wiki/decisions.md); patch releases of that line still arrive.
+      - dependency-name: "at.yawk.lz4:lz4-java"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       # The Kotlin compiler and its spring/jpa plugins must move in lockstep. Group patterns match the
       # dependency name Dependabot parses, and for the `kotlin("jvm")` plugin shorthand that name is the
