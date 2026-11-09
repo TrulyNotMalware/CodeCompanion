@@ -21,7 +21,7 @@ java {
 
 // Dependabot's Gradle parser only reads `extra["x"] = "…"` / `extra.set` declarations, not an `ext {}` block.
 extra["kotestVersion"] = "6.2.6"
-extra["slackSdkVersion"] = "1.52.0"
+extra["slackSdkVersion"] = "1.54.0"
 extra["mockkVersion"] = "1.14.11"
 extra["springMockkVersion"] = "5.0.1"
 extra["springBootVersion"] = "4.1.2"
