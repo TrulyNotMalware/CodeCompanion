@@ -26,7 +26,7 @@ extra["mockkVersion"] = "1.14.11"
 extra["springMockkVersion"] = "5.0.1"
 extra["springBootVersion"] = "4.1.2"
 extra["jacksonVersion"] = "3.2.4"
-extra["kotlinLoggingVersion"] = "8.0.4"
+extra["kotlinLoggingVersion"] = "8.0.7"
 extra["springAiVersion"] = "2.0.2"
 extra["lz4JavaVersion"] = "1.11.4"
 
